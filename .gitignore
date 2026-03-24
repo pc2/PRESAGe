@@ -1,0 +1,10 @@
+Vitis/build*
+oneAPI/build*
+generator/build*
+build_*
+*.out
+*.jou
+*.log
+*.str
+*.csv
+*.pdf

@@ -1,0 +1,159 @@
+/*
+ * Copyright (C) 2025-2026 Gerrit Pape (gerrit.pape@uni-paderborn.de)
+ *
+ * This file is part of PRESAGe.
+ *
+ * PRESAGe is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+ *
+ * PRESAGe is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with PRESAGe. If not, see <https://www.gnu.org/licenses/>.
+ */
+#include "binary.hpp"
+
+template <int Bits, bool Float, int Id>
+void Binary<Bits, Float, Id>::run(sycl::queue &q, uint64_t num,
+                          sycl::buffer<PipeType, 1> &a,
+                          sycl::buffer<PipeType, 1> &b,
+                          sycl::buffer<PipeType, 1> &c)
+{
+    q.submit([&](sycl::handler &h) {
+        sycl::accessor a_accessor(a, h, sycl::read_only);
+        sycl::accessor b_accessor(b, h, sycl::read_only);
+        h.single_task<ReadKernel<Bits, Float>>([=]() [[intel::kernel_args_restrict]] {
+            for (size_t i = 0; i < num; i++) {
+                ReadAPipe::write(a_accessor[i]);
+                ReadBPipe::write(b_accessor[i]);
+            }
+        });
+    });
+
+    q.submit([&](sycl::handler &h) {
+        h.single_task<OperationKernel<Bits, Float, Id>>([=]() [[intel::kernel_args_restrict]] {
+            for (size_t i = 0; i < num; i++) {
+                PipeType a_bits = ReadAPipe::read();
+                PipeType b_bits = ReadBPipe::read();
+                PipeType c_bits;
+                if constexpr (Float) {
+                    if constexpr (Bits == 16) {
+                        ihc::ap_float<5, 10> local_a = reinterpret_cast<ihc::ap_float<5, 10>&>(a_bits);
+                        ihc::ap_float<5, 10> local_b = reinterpret_cast<ihc::ap_float<5, 10>&>(b_bits);
+                        ihc::ap_float<5, 10> local_c = @operation@(local_a, local_b);
+                        c_bits = reinterpret_cast<PipeType&>(local_c);
+                    } else if constexpr (Bits == 32) {
+                        float local_a = reinterpret_cast<float&>(a_bits);
+                        float local_b = reinterpret_cast<float&>(b_bits);
+                        float local_c = @operation@(local_a, local_b);
+                        c_bits = reinterpret_cast<PipeType&>(local_c);
+                    } else {
+                        double local_a = reinterpret_cast<double&>(a_bits);
+                        double local_b = reinterpret_cast<double&>(b_bits);
+                        double local_c = @operation@(local_a, local_b);
+                        c_bits = reinterpret_cast<PipeType&>(local_c);
+                    }
+                } else {
+                    c_bits = @operation@<Bits>(a_bits, b_bits);
+                }
+                WritePipe::write(c_bits);
+                
+            }
+        });
+    });
+
+    q.submit([&](sycl::handler &h) {
+        sycl::accessor c_accessor(c, h, sycl::write_only, sycl::no_init);
+        h.single_task<WriteKernel<Bits, Float>>([=]() [[intel::kernel_args_restrict]] {
+            for (size_t i = 0; i < num; i++) {
+               c_accessor[i] = WritePipe::read();
+            }
+        });
+    });
+
+    q.wait();
+}
+
+template <int Bits, bool Float, int Id>
+std::string Binary<Bits, Float, Id>::get_name()
+{
+    return "@operation@";
+}
+
+#ifndef EMULATION
+template class Binary<16, true, -16>;
+#endif
+template class Binary<32, true, -32>;
+template class Binary<64, true, -64>;
+
+#ifdef REPORT
+template class Binary<1, false, 1>;
+template class Binary<2, false, 2>;
+template class Binary<3, false, 3>;
+template class Binary<4, false, 4>;
+template class Binary<5, false, 5>;
+template class Binary<6, false, 6>;
+template class Binary<7, false, 7>;
+template class Binary<8, false, 8>;
+template class Binary<9, false, 9>;
+template class Binary<10, false, 10>;
+template class Binary<11, false, 11>;
+template class Binary<12, false, 12>;
+template class Binary<13, false, 13>;
+template class Binary<14, false, 14>;
+template class Binary<15, false, 15>;
+template class Binary<16, false, 16>;
+template class Binary<17, false, 17>;
+template class Binary<18, false, 18>;
+template class Binary<19, false, 19>;
+template class Binary<20, false, 20>;
+template class Binary<21, false, 21>;
+template class Binary<22, false, 22>;
+template class Binary<23, false, 23>;
+template class Binary<24, false, 24>;
+template class Binary<25, false, 25>;
+template class Binary<26, false, 26>;
+template class Binary<27, false, 27>;
+template class Binary<28, false, 28>;
+template class Binary<29, false, 29>;
+template class Binary<30, false, 30>;
+template class Binary<31, false, 31>;
+template class Binary<32, false, 32>;
+template class Binary<33, false, 33>;
+template class Binary<34, false, 34>;
+template class Binary<35, false, 35>;
+template class Binary<36, false, 36>;
+template class Binary<37, false, 37>;
+template class Binary<38, false, 38>;
+template class Binary<39, false, 39>;
+template class Binary<40, false, 40>;
+template class Binary<41, false, 41>;
+template class Binary<42, false, 42>;
+template class Binary<43, false, 43>;
+template class Binary<44, false, 44>;
+template class Binary<45, false, 45>;
+template class Binary<46, false, 46>;
+template class Binary<47, false, 47>;
+template class Binary<48, false, 48>;
+template class Binary<49, false, 49>;
+template class Binary<50, false, 50>;
+template class Binary<51, false, 51>;
+template class Binary<52, false, 52>;
+template class Binary<53, false, 53>;
+template class Binary<54, false, 54>;
+template class Binary<55, false, 55>;
+template class Binary<56, false, 56>;
+template class Binary<57, false, 57>;
+template class Binary<58, false, 58>;
+template class Binary<59, false, 59>;
+template class Binary<60, false, 60>;
+template class Binary<61, false, 61>;
+template class Binary<62, false, 62>;
+template class Binary<63, false, 63>;
+template class Binary<64, false, 64>;
+#endif

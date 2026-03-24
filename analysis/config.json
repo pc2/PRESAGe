@@ -1,0 +1,575 @@
+{
+    "groups": [
+        {
+            "name": "additive",
+            "type": "binary",
+            "operations": [
+                "select",
+                "addition",
+                "subtraction"
+            ]
+        },
+        {
+            "name": "multiplicative",
+            "type": "binary",
+            "operations": [
+                "multiplication",
+                "division"
+            ]
+        },
+        {
+            "name": "trigonometric",
+            "type": "unitary",
+            "operations": [
+                "sin",
+                "cos",
+                "tan"
+            ]
+        },
+        {
+            "name": "arcus_trigonometric",
+            "type": "unitary",
+            "operations": [
+                "asin",
+                "acos",
+                "atan"
+            ]
+        },
+        {
+            "name": "trigonometric_pi",
+            "type": "unitary",
+            "operations": [
+                "sinpi",
+                "cospi",
+                "tanpi"
+            ]
+        },
+        {
+            "name": "arcus_trigonometric_pi",
+            "type": "unitary",
+            "operations": [
+                "asinpi",
+                "acospi",
+                "atanpi"
+            ]
+        },
+        {
+            "name": "hyperbolic",
+            "type": "unitary",
+            "operations": [
+                "cosh",
+                "sinh",
+                "tanh"
+            ]
+        },
+        {
+            "name": "arcus_hyperbolic",
+            "type": "unitary",
+            "operations": [
+                "acosh",
+                "asinh",
+                "atanh"
+            ]
+        },
+        {
+            "name": "exponential",
+            "type": "unitary",
+            "operations": [
+                "exp",
+                "exp10",
+                "exp2",
+                "expm1"
+            ]
+        },
+        {
+            "name": "logarithmic",
+            "type": "unitary",
+            "operations": [
+                "log",
+                "log10",
+                "log1p"
+            ]
+        },
+        {
+            "name": "power",
+            "type": "unitary",
+            "operations": [
+                "cbrt",
+                "rsqrt",
+                "sqrt",
+                "recip"
+            ]
+        },
+        {
+            "name": "special",
+            "type": "unitary",
+            "operations": [
+                "identity",
+                "erf",
+                "erfc",
+                "sun_erf"
+            ]
+        },
+        {
+            "name": "approximations",
+            "type": "unitary",
+            "toolchain": "Vitis",
+            "approximations": [
+                {
+                    "name": "cos_approximation_single",
+                    "operation": "cos",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::cos vitis single cos(x) 2^-23 --range -pi,pi ",
+                    "executable": "generator"
+                },
+                {
+                    "name": "sin_approximation_single",
+                    "operation": "sin",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::sin vitis single sin(x) 2^-23 --range -pi,pi ",
+                    "executable": "generator"
+                },
+                {
+                    "name": "atan_approximation_single",
+                    "operation": "atan",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::atan vitis single atan(x) 2^-23 --range -8,8",
+                    "executable": "generator"
+                },
+                {
+                    "name": "exp_approximation_single",
+                    "operation": "exp",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::exp vitis single exp(x) 2^-23",
+                    "executable": "generator"
+                },
+                {
+                    "name": "cosh_approximation_single",
+                    "operation": "cosh",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::cosh vitis single cosh(x) 2^-23",
+                    "executable": "generator"
+                },
+                {
+                    "name": "sinh_approximation_single",
+                    "operation": "sinh",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::sinh vitis single sinh(x) 2^-23",
+                    "executable": "generator"
+                },
+                {
+                    "name": "cos_approximation_double",
+                    "operation": "cos",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::cos vitis double cos(x) 2^-52 --range -pi,pi ",
+                    "executable": "generator"
+                },
+                {
+                    "name": "sin_approximation_double",
+                    "operation": "sin",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::sin vitis double sin(x) 2^-52 --range -pi,pi ",
+                    "executable": "generator"
+                },
+                {
+                    "name": "atan_approximation_double",
+                    "operation": "atan",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::atan vitis double atan(x) 2^-52 --range -8,8 ",
+                    "executable": "generator"
+                },
+                {
+                    "name": "exp_approximation_double",
+                    "operation": "exp",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::exp vitis double exp(x) 2^-52",
+                    "executable": "generator"
+                },
+                {
+                    "name": "cosh_approximation_double",
+                    "operation": "cosh",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::cosh vitis double cosh(x) 2^-52",
+                    "executable": "generator"
+                },
+                {
+                    "name": "sinh_approximation_double",
+                    "operation": "sinh",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::sinh vitis double sinh(x) 2^-52",
+                    "executable": "generator"
+                }
+            ]
+        },
+        {
+            "name": "erf_approximations",
+            "type": "unitary",
+            "toolchain": "Vitis",
+            "approximations": [
+                {
+                    "name": "erf_approximation_single_0",
+                    "operation": "erf",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erf vitis single erf(x) 2^-23 --range -3.92,3.92 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_single_1",
+                    "operation": "erf",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erf vitis single erf(x) 2^-21 --range -3.92,3.92 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_single_2",
+                    "operation": "erf",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erf vitis single erf(x) 2^-19 --range -3.92,3.92 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_single_3",
+                    "operation": "erf",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erf vitis single erf(x) 2^-17 --range -3.92,3.92 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_single_4",
+                    "operation": "erf",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erf vitis single erf(x) 2^-15 --range -3.92,3.92 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_single_5",
+                    "operation": "erf",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erf vitis single erf(x) 2^-13 --range -3.92,3.92 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_double_0",
+                    "operation": "erf",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erf vitis double erf(x) 2^-52 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_double_1",
+                    "operation": "erf",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erf vitis double erf(x) 2^-46 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_double_2",
+                    "operation": "erf",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erf vitis double erf(x) 2^-40 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_double_3",
+                    "operation": "erf",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erf vitis double erf(x) 2^-34 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_double_4",
+                    "operation": "erf",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erf vitis double erf(x) 2^-28 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_double_5",
+                    "operation": "erf",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erf vitis double erf(x) 2^-23 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                }
+            ]
+        },
+        {
+            "name": "erfc_approximations",
+            "type": "unitary",
+            "toolchain": "Vitis",
+            "approximations": [
+                {
+                    "name": "erfc_approximation_single_0",
+                    "operation": "erfc",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erfc vitis single erfc(x) 2^-23 --range -3.84,10.06 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_single_1",
+                    "operation": "erfc",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erfc vitis single erfc(x) 2^-21 --range -3.84,10.06 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_single_2",
+                    "operation": "erfc",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erfc vitis single erfc(x) 2^-19 --range -3.84,10.06 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_single_3",
+                    "operation": "erfc",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erfc vitis single erfc(x) 2^-17 --range -3.84,10.06 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_single_4",
+                    "operation": "erfc",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erfc vitis single erfc(x) 2^-15 --range -3.84,10.06 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_single_5",
+                    "operation": "erfc",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::erfc vitis single erfc(x) 2^-13 --range -3.84,10.06 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_double_0",
+                    "operation": "erfc",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erfc vitis double erfc(x) 2^-52 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_double_1",
+                    "operation": "erfc",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erfc vitis double erfc(x) 2^-46 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_double_2",
+                    "operation": "erfc",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erfc vitis double erfc(x) 2^-40 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_double_3",
+                    "operation": "erfc",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erfc vitis double erfc(x) 2^-34 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_double_4",
+                    "operation": "erfc",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erfc vitis double erfc(x) 2^-28 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_double_5",
+                    "operation": "erfc",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::erfc vitis double erfc(x) 2^-23 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                }
+            ]
+        },
+        {
+            "name": "local_mem_single",
+            "type": "unitary",
+            "toolchain": "Vitis",
+            "approximations": [
+                {
+                    "name": "local_mem_single",
+                    "operation": "identity",
+                    "precision": "float",
+                    "pragma": "#pragma approximate hls::identity vitis single 1+x 1",
+                    "executable": "generator"
+                }
+            ]
+        },
+        {
+            "name": "local_mem_double",
+            "type": "unitary",
+            "toolchain": "Vitis",
+            "approximations": [
+                {
+                    "name": "local_mem_double",
+                    "operation": "identity",
+                    "precision": "double",
+                    "pragma": "#pragma approximate hls::identity vitis double 1+x 1",
+                    "executable": "generator"
+                }
+            ]
+        },
+        {
+            "name": "all_oneAPI_approximations",
+            "type": "unitary",
+            "toolchain": "oneAPI",
+            "approximations":  [
+                {
+                    "name": "local_mem",
+                    "operation": "identity",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::identity oneapi single 1+x 1",
+                    "double_pragma": "#pragma approximate sycl::identity oneapi double 1+x 1",
+                    "executable": "generator"
+                },
+                {
+                    "name": "cos_approximation",
+                    "operation": "cos",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::cos oneapi single cos(x) 2^-23 --range -pi,pi",
+                    "double_pragma": "#pragma approximate sycl::cos oneapi double cos(x) 2^-52 --range -pi,pi",
+                    "executable": "generator"
+                },
+                {
+                    "name": "sin_approximation",
+                    "operation": "sin",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::sin oneapi single sin(x) 2^-23 --range -pi,pi",
+                    "double_pragma": "#pragma approximate sycl::sin oneapi double sin(x) 2^-52 --range -pi,pi",
+                    "executable": "generator"
+                },
+                {
+                    "name": "atan_approximation",
+                    "operation": "atan",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::atan oneapi single atan(x) 2^-23 --range -8,8",
+                    "double_pragma": "#pragma approximate sycl::atan oneapi double atan(x) 2^-52 --range -8,8",
+                    "executable": "generator"
+                },
+                {
+                    "name": "exp_approximation",
+                    "operation": "exp",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::exp oneapi single exp(x) 2^-23",
+                    "double_pragma": "#pragma approximate sycl::exp oneapi double exp(x) 2^-52",
+                    "executable": "generator"
+                },
+                {
+                    "name": "cosh_approximation",
+                    "operation": "cosh",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::cosh oneapi single cosh(x) 2^-23",
+                    "double_pragma": "#pragma approximate sycl::cosh oneapi double cosh(x) 2^-52",
+                    "executable": "generator"
+                },
+                {
+                    "name": "sinh_approximation",
+                    "operation": "sinh",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::sinh oneapi single sinh(x) 2^-23",
+                    "double_pragma": "#pragma approximate sycl::sinh oneapi double sinh(x) 2^-52",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_0",
+                    "operation": "erf",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erf oneapi single erf(x) 2^-23 --range -3.92,3.92 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erf oneapi double erf(x) 2^-52 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_1",
+                    "operation": "erf",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erf oneapi single erf(x) 2^-21 --range -3.92,3.92 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erf oneapi double erf(x) 2^-46 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_2",
+                    "operation": "erf",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erf oneapi single erf(x) 2^-19 --range -3.92,3.92 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erf oneapi double erf(x) 2^-40 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_3",
+                    "operation": "erf",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erf oneapi single erf(x) 2^-17 --range -3.92,3.92 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erf oneapi double erf(x) 2^-34 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_4",
+                    "operation": "erf",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erf oneapi single erf(x) 2^-15 --range -3.92,3.92 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erf oneapi double erf(x) 2^-28 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erf_approximation_5",
+                    "operation": "erf",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erf oneapi single erf(x) 2^-13 --range -3.92,3.92 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erf oneapi double erf(x) 2^-23 --range -5.93,5.93 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_0",
+                    "operation": "erfc",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erfc oneapi single erfc(x) 2^-23 --range -3.84,10.06 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erfc oneapi double erfc(x) 2^-52 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_1",
+                    "operation": "erfc",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erfc oneapi single erfc(x) 2^-21 --range -3.84,10.06 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erfc oneapi double erfc(x) 2^-46 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_2",
+                    "operation": "erfc",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erfc oneapi single erfc(x) 2^-19 --range -3.84,10.06 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erfc oneapi double erfc(x) 2^-40 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_3",
+                    "operation": "erfc",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erfc oneapi single erfc(x) 2^-17 --range -3.84,10.06 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erfc oneapi double erfc(x) 2^-34 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_4",
+                    "operation": "erfc",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erfc oneapi single erfc(x) 2^-15 --range -3.84,10.06 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erfc oneapi double erfc(x) 2^-28 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                },
+                {
+                    "name": "erfc_approximation_5",
+                    "operation": "erfc",
+                    "half_pragma": " ",
+                    "single_pragma": "#pragma approximate sycl::erfc oneapi single erfc(x) 2^-13 --range -3.84,10.06 --boundary const",
+                    "double_pragma": "#pragma approximate sycl::erfc oneapi double erfc(x) 2^-23 --range -5.87,27.25 --boundary const",
+                    "executable": "generator"
+                }
+            ]
+        }
+    ],
+    "unsupported_by_ap_float": ["tan", "tanpi", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh", "erfc", "erf", "sun_erf"]
+}

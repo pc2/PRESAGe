@@ -1,0 +1,85 @@
+/*
+ * Copyright (C) 2025-2026 Gerrit Pape (gerrit.pape@uni-paderborn.de)
+ *
+ * This file is part of PRESAGe.
+ *
+ * PRESAGe is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+ *
+ * PRESAGe is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with PRESAGe. If not, see <https://www.gnu.org/licenses/>.
+ */
+#include "unitary.hpp"
+
+template <typename T>
+void Unitary<T>::run(sycl::queue &q, uint64_t num,
+                          sycl::buffer<T, 1> &input,
+                          sycl::buffer<T, 1> &output)
+{
+    q.submit([&](sycl::handler &h) {
+        sycl::accessor input_accessor(input, h, sycl::read_only);
+        h.single_task<ReadKernel<T>>([=]() [[intel::kernel_args_restrict]] {
+            for (size_t i = 0; i < num; i++) {
+                ReadPipe::write(input_accessor[i]);
+            }
+        });
+    });
+
+    q.submit([&](sycl::handler &h) {
+        h.single_task<OperationKernel<T>>([=]() [[intel::kernel_args_restrict]] {
+            for (size_t i = 0; i < num; i++) {
+                T bits = ReadPipe::read();
+                if constexpr (sizeof(T) == 2) {
+#ifndef DISABLE_HALF
+                    ihc::ap_float<5, 10> local_input = reinterpret_cast<ihc::ap_float<5, 10>&>(bits);
+@half_pragma@
+                    ihc::ap_float<5, 10> local_output = ihc::ihc_@operation@(local_input);
+                    bits = reinterpret_cast<T&>(local_output);
+#endif
+                } else if constexpr (sizeof(T) == 4) {
+                    float local_input = reinterpret_cast<float&>(bits);
+@single_pragma@
+                    float local_output = sycl::@operation@(local_input);
+                    bits = reinterpret_cast<T&>(local_output);
+                } else {
+                    double local_input = reinterpret_cast<double&>(bits);
+@double_pragma@
+                    double local_output = sycl::@operation@(local_input);
+                    bits = reinterpret_cast<T&>(local_output);
+                }
+                
+                WritePipe::write(bits);
+            }
+        });
+    });
+
+    q.submit([&](sycl::handler &h) {
+        sycl::accessor output_accessor(output, h, sycl::write_only, sycl::no_init);
+        h.single_task<WriteKernel<T>>([=]() [[intel::kernel_args_restrict]] {
+            for (size_t i = 0; i < num; i++) {
+                output_accessor[i] = WritePipe::read();
+            }
+        });
+    });
+
+    q.wait();
+}
+
+template <typename T>
+std::string Unitary<T>::get_name()
+{
+    return "@operation@";
+}
+
+#ifndef DISABLE_HALF
+template class Unitary<uint16_t>;
+#endif
+template class Unitary<uint32_t>;
+template class Unitary<uint64_t>;
