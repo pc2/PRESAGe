@@ -1,0 +1,31 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "cpu-macos",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/cpu-macos",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++"
+      }
+    },
+    {
+      "name": "cpu-linux",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/cpu-linux",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    }
+  ],
+  "buildPresets": [
+    {"name": "cpu-macos", "configurePreset": "cpu-macos"},
+    {"name": "cpu-linux", "configurePreset": "cpu-linux"}
+  ],
+  "testPresets": [
+    {"name": "cpu-macos", "configurePreset": "cpu-macos", "output": {"outputOnFailure": true}},
+    {"name": "cpu-linux", "configurePreset": "cpu-linux", "output": {"outputOnFailure": true}}
+  ]
+}

@@ -1,4 +1,4 @@
-const _SCHEMA_VERSION = 1
+const _SCHEMA_VERSION = 2
 _rational_text(q::Rational) = "$(numerator(q))/$(denominator(q))"
 function _parse_rational(text::AbstractString)
     occursin(r"^-?\d+/[1-9]\d*$", text) || throw(ArgumentError("expected numerator/positive-denominator string"))
@@ -30,9 +30,10 @@ function _spec_data(s::FunctionSpec)
 end
 
 function _plan_data(p::PlanArtifact)
-    d = Dict{String,Any}("schema" => "presage-plan", "schema_version" => _SCHEMA_VERSION,
+    d = Dict{String,Any}("schema" => "presage-plan", "schema_version" => p.program === nothing ? 1 : 2,
         "status" => string(p.status), "spec" => _spec_data(p.spec))
     isempty(p.settings) || (d["settings"] = p.settings)
+    p.program === nothing || (d["program"] = _program_data(p.program))
     if !isempty(p.segments)
         d["segments"] = [Dict("lower" => _rational_text(t.lower), "upper" => _rational_text(t.upper),
                               "coefficients" => _rational_text.(t.coefficients)) for t in p.segments]
@@ -54,7 +55,8 @@ write_plan(path::AbstractString, p::PlanArtifact) = open(io -> write_plan(io, p)
 function _read_plan(d)
     d["schema"] == "presage-plan" || throw(ArgumentError("unknown plan schema"))
     d["schema_version"] isa Integer && !(d["schema_version"] isa Bool) &&
-        d["schema_version"] == _SCHEMA_VERSION || throw(ArgumentError("unsupported plan schema version"))
+        1 <= d["schema_version"] <= _SCHEMA_VERSION || throw(ArgumentError("unsupported plan schema version"))
+    haskey(d,"program") && d["schema_version"] < 2 && throw(ArgumentError("arithmetic programs require schema v2"))
     s = d["spec"]
     domain = if haskey(s, "domain")
         length(s["domain"]) == 2 || throw(ArgumentError("need two domain bounds"))
@@ -81,7 +83,8 @@ function _read_plan(d)
                                _parse_rational.(t["coefficients"])))
     end
     return PlanArtifact(spec; status=Symbol(d["status"]), dispatch, segments,
-                        settings=get(d, "settings", Dict{String,String}()))
+                        settings=get(d, "settings", Dict{String,String}()),
+                        program=haskey(d,"program") ? _read_program(d["program"]) : nothing)
 end
 read_plan(io::IO) = _read_plan(TOML.parse(read(io, String)))
 read_plan(path::AbstractString) = _read_plan(TOML.parsefile(path))

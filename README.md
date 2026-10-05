@@ -1,19 +1,21 @@
 # PRESAGe
 
 Julia planning and verification core for systematic function approximation on
-FPGAs. Generated evaluators will be portable C++ with optional vendor backends.
+FPGAs. Generated evaluators use portable C++; vendor backends will follow.
 Development and numerical verification currently run locally without an FPGA.
 
 The package provides exact IEEE formats and rounding, `FunctionSpec`, versioned
-contract/candidate artifacts, adaptive reference enclosures and bounded binary
-reference generation. Arithmetic IR, code generation and complete evaluator
-certificates are planned. The development plan is maintained at
+contract/candidate artifacts, adaptive references, a typed arithmetic IR,
+an exact interpreter and a C++ CPU emitter. Fresh IEEE32 `erf` candidates and
+polynomial kernels run locally. Complete evaluator certificates are next.
+The development plan is maintained at
 [`../plan/DEVELOPMENT_PLAN.md`](../plan/DEVELOPMENT_PLAN.md).
 
 ## Local setup
 
 Requires Julia 1.10 or newer, a local [Sollya.jl](../Sollya.jl/README.md) checkout
-and installed Sollya/MPFR/GMP libraries. The expected workspace is:
+and installed Sollya/MPFR/GMP libraries. CPU tests also require a C++20 compiler
+(Clang or GCC); set `CXX` to select it. The expected workspace is:
 
 ```text
 workspace/
@@ -56,10 +58,48 @@ reference(FunctionSpec("exp(x)"), 0xc2af0001; backend=:mpfr)
 write_plan("erf-contract.toml", PlanArtifact(spec))
 ```
 
-The `erf` accuracy target is a contract, **not an implemented evaluator
-certificate**. Version 1 artifacts explicitly cannot claim certification.
-See [schema](docs/schema.md), [oracle semantics](docs/oracle.md) and
-[local verification](docs/verification.md).
+The `erf` accuracy target is a contract. Generated candidates are checked against
+references on selected inputs and do **not** yet have a uniform error certificate.
+See [schema](docs/schema.md), [arithmetic](docs/arithmetic.md),
+[oracle semantics](docs/oracle.md) and [local verification](docs/verification.md).
+
+## Generate and run a CPU evaluator
+
+```sh
+julia --startup-file=no --project=. scripts/generate.jl erf build/erf
+clang++ -std=c++20 -O2 -ffp-contract=off -fno-fast-math -frounding-math \
+  build/erf/evaluate.cpp -o build/erf/evaluate
+julia --startup-file=no --project=. scripts/verify_cpu.jl \
+  build/erf/plan.toml build/erf/evaluate
+build/erf/evaluate < inputs.bin > outputs.bin
+```
+
+The command writes `plan.toml`, `evaluator.hpp` and a binary harness. Its defaults
+are four segments on `[0,4]`, degree nine, explicit IEEE64 internal arithmetic
+and separate multiply/add operations, with IEEE32 input/output. Options include
+`--internal=single`, `--evaluation=fma`, `--degree=N` and `--segments=N` (a power
+of two). Options change the candidate; they do not guarantee its error target.
+Pass an existing `plan.toml` instead of `erf` to emit its stored program again.
+
+The header exposes `presage_evaluator::evaluate(float)` and `evaluate_bits`.
+The harness reads and writes little-endian words. `verify_cpu.jl` checks output
+bits and the first table index against the exact interpreter, including boundary
+neighbours and special values. Strict compiler flags above are required.
+
+CMake 3.24 or newer provides the same generation, build and CTest workflow:
+
+```sh
+cmake --preset cpu-macos
+cmake --build --preset cpu-macos
+ctest --preset cpu-macos
+```
+
+Use `cpu-linux` on Linux. `-DPRESAGE_PLAN=/path/to/plan.toml` selects an existing
+evaluator; `-DPRESAGE_EVALUATION=fma` selects FMA for fresh `erf` generation.
+
+Julia also supports `erf_candidate()` and
+`polynomial_plan(spec, ascending_coefficients; evaluation=:separate)`.
+`evaluate_bits(plan, input_bits)` executes either program with exact rounding.
 
 ## Reference CLI
 

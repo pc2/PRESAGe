@@ -52,8 +52,8 @@ struct Segment
 end
 
 """
-Version 1 contract/candidate artifact. No evaluator semantics or certificate is
-implied; certified plans need the arithmetic IR and a later schema revision.
+Exact contract/candidate artifact. An optional arithmetic program defines an
+evaluator, while certification remains separate.
 """
 struct PlanArtifact
     spec::FunctionSpec
@@ -61,10 +61,17 @@ struct PlanArtifact
     dispatch::Union{Nothing,Dispatch}
     segments::Vector{Segment}
     settings::Dict{String,String}
-    function PlanArtifact(spec::FunctionSpec; status::Symbol=:contract,
+    program::Union{Nothing,IR.Program}
+    function PlanArtifact(spec::FunctionSpec; program::Union{Nothing,IR.Program}=nothing,
+                          status::Symbol=program === nothing ? :contract : :candidate,
                           dispatch::Union{Nothing,Dispatch}=nothing, segments=Segment[],
                           settings=Dict{String,String}())
-        status in (:contract, :candidate) || throw(ArgumentError("schema v1 cannot claim certification"))
+        status in (:contract, :candidate) || throw(ArgumentError("artifact cannot claim certification"))
+        if program !== nothing
+            status == :candidate || throw(ArgumentError("an evaluator program is a candidate"))
+            IR.format(program,program.input) == spec.input_format && IR.format(program) == spec.output_format ||
+                throw(ArgumentError("program formats differ from the function specification"))
+        end
         if dispatch !== nothing
             t = decode_ieee(dispatch.magnitude_threshold, spec.input_format)
             t.kind == :finite && !t.negative && t.value > 0 ||
@@ -73,6 +80,6 @@ struct PlanArtifact
         ss = collect(Segment, segments)
         all(i -> ss[i-1].upper <= ss[i].lower, 2:length(ss)) ||
             throw(ArgumentError("segments must be ordered and nonoverlapping"))
-        new(spec, status, dispatch, ss, Dict{String,String}(settings))
+        new(spec, status, dispatch, ss, Dict{String,String}(settings),program)
     end
 end

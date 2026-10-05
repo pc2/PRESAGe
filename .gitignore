@@ -11,3 +11,4 @@ build_*
 /Manifest*.toml
 *.cov
 *.mem
+/build/
