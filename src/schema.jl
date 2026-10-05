@@ -1,4 +1,5 @@
-const _SCHEMA_VERSION = 2
+const _SCHEMA_VERSION = 3
+_has_fixed(p::IR.Program) = any(f -> f isa FixedFormat,p.types) || any(t -> t.format isa FixedFormat,p.tables)
 _rational_text(q::Rational) = "$(numerator(q))/$(denominator(q))"
 function _parse_rational(text::AbstractString)
     occursin(r"^-?\d+/[1-9]\d*$", text) || throw(ArgumentError("expected numerator/positive-denominator string"))
@@ -30,7 +31,8 @@ function _spec_data(s::FunctionSpec)
 end
 
 function _plan_data(p::PlanArtifact)
-    d = Dict{String,Any}("schema" => "presage-plan", "schema_version" => p.program === nothing ? 1 : 2,
+    version = p.program === nothing ? 1 : _has_fixed(p.program) ? 3 : 2
+    d = Dict{String,Any}("schema" => "presage-plan", "schema_version" => version,
         "status" => string(p.status), "spec" => _spec_data(p.spec))
     isempty(p.settings) || (d["settings"] = p.settings)
     p.program === nothing || (d["program"] = _program_data(p.program))
@@ -82,9 +84,12 @@ function _read_plan(d)
         push!(segments, Segment(_parse_rational(t["lower"]), _parse_rational(t["upper"]),
                                _parse_rational.(t["coefficients"])))
     end
+    program = haskey(d,"program") ? _read_program(d["program"]) : nothing
+    program !== nothing && _has_fixed(program) && d["schema_version"] < 3 &&
+        throw(ArgumentError("fixed arithmetic requires schema v3"))
     return PlanArtifact(spec; status=Symbol(d["status"]), dispatch, segments,
                         settings=get(d, "settings", Dict{String,String}()),
-                        program=haskey(d,"program") ? _read_program(d["program"]) : nothing)
+                        program)
 end
 read_plan(io::IO) = _read_plan(TOML.parse(read(io, String)))
 read_plan(path::AbstractString) = _read_plan(TOML.parsefile(path))

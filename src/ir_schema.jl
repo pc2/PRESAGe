@@ -1,4 +1,6 @@
 _type_data(f::FloatFormat) = _format_data(f)
+_type_data(f::FixedFormat) = Dict("kind"=>"fixed","width"=>f.width,"integer_bits"=>f.integer_bits,
+    "signed"=>f.signed,"rounding"=>string(f.rounding),"overflow"=>string(f.overflow))
 _type_data(f::IR.UIntFormat) = "uint($(f.width))"
 _type_data(::Type{Bool}) = "bool"
 function _read_ir_type(text::AbstractString)
@@ -6,10 +8,16 @@ function _read_ir_type(text::AbstractString)
     parts = match(r"^uint\((\d+)\)$",text)
     return parts === nothing ? _read_format(text) : IR.UIntFormat(parse(Int,parts[1]))
 end
-_ir_hex(bits) = "0x"*string(UInt64(bits);base=16)
+function _read_ir_type(d::AbstractDict)
+    d["kind"] == "fixed" || throw(ArgumentError("unsupported arithmetic format"))
+    return FixedFormat(d["width"],d["integer_bits"];signed=d["signed"],
+        rounding=Symbol(d["rounding"]),overflow=Symbol(d["overflow"]))
+end
+_ir_hex(bits) = "0x"*string(bits;base=16)
 function _read_ir_bits(text::AbstractString)
     occursin(r"^0x[0-9a-fA-F]+$",text) || throw(ArgumentError("expected hexadecimal bits"))
-    return parse(UInt64,text[3:end];base=16)
+    bits = parse(BigInt,text[3:end];base=16)
+    return bits <= typemax(UInt64) ? UInt64(bits) : bits
 end
 function _node_data(n::IR.Node)
     d = Dict{String,Any}("op"=>string(nameof(typeof(n))))

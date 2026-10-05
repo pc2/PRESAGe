@@ -9,7 +9,7 @@ struct FloatFormat
     end
 end
 
-"""Fixed format metadata; I includes the sign bit. Arithmetic operations are not yet provided."""
+"""Binary fixed format; I includes the sign bit, and W-I is the fractional width."""
 struct FixedFormat
     width::Int
     integer_bits::Int

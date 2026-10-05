@@ -1,15 +1,32 @@
 include(joinpath(@__DIR__,"..","scripts","verify_cpu.jl"))
-function cpu_check(plan,words=verification_inputs(plan))
+function cpu_check(plan,words=verification_inputs(plan);expected_error=nothing)
     compiler = get(ENV,"CXX",Sys.isapple() && isfile("/opt/homebrew/opt/llvm/bin/clang++") ?
                    "/opt/homebrew/opt/llvm/bin/clang++" : "c++")
     mktempdir() do directory
         header,source,exe = joinpath.(Ref(directory),("evaluator.hpp","evaluate.cpp","evaluate"))
         emit_cpp(header,plan)
         emit_harness(source,plan.program)
-        run(`$compiler -std=c++20 -O2 -ffp-contract=off -fno-fast-math -frounding-math -Wall -Wextra -Werror $source -o $exe`)
+        gmp = if PRESAGe._has_fixed(plan.program)
+            prefix = get(ENV,"GMP_PREFIX",isdir("/opt/homebrew/opt/gmp") ? "/opt/homebrew/opt/gmp" : "")
+            isempty(prefix) ? ["-lgmpxx","-lgmp"] : ["-isystem",joinpath(prefix,"include"),"-L"*joinpath(prefix,"lib"),"-lgmpxx","-lgmp"]
+        else
+            String[]
+        end
+        run(`$compiler -std=c++20 -O2 -ffp-contract=off -fno-fast-math -frounding-math -Wall -Wextra -Werror $source $gmp -o $exe`)
         # Check serialized programs, not just the in-memory generator state.
         path = joinpath(directory,"plan.toml")
         write_plan(path,plan)
+        if expected_error !== nothing
+            input = IOBuffer()
+            for word in words
+                PRESAGe._write_word(input,word,div(PRESAGe._width(plan.spec.input_format),8),:little)
+            end
+            seekstart(input)
+            output,errors = IOBuffer(),IOBuffer()
+            process = run(pipeline(ignorestatus(`$exe`);stdin=input,stdout=output,stderr=errors))
+            process.exitcode == 1 && occursin(expected_error,String(take!(errors))) || error("CPU did not report the expected failure")
+            return length(words)
+        end
         return verify_cpu(read_plan(path),exe;words)
     end
 end

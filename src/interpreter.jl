@@ -2,6 +2,34 @@ struct _FloatValue
     format::FloatFormat
     bits::UInt64
 end
+struct _FixedValue
+    format::FixedFormat
+    bits::BigInt
+end
+_fixed(bits,f) = _FixedValue(f,BigInt(bits))
+_value(v::_FixedValue) = decode_fixed(v.bits,v.format)
+_stored(bits,f) = f isa FixedFormat ? _fixed(bits,f) : _float(bits,f)
+_add(a::_FixedValue,b::_FixedValue,f::FixedFormat,mode) =
+    _fixed(round_fixed(_value(a)+_value(b),f;mode),f)
+_mul(a::_FixedValue,b::_FixedValue,f::FixedFormat,mode) =
+    _fixed(round_fixed(_value(a)*_value(b),f;mode),f)
+_fma(a::_FixedValue,b::_FixedValue,c::_FixedValue,f::FixedFormat,mode) =
+    _fixed(round_fixed(_value(a)*_value(b)+_value(c),f;mode),f)
+function _convert(v::_FloatValue,f::FixedFormat,mode)
+    x = decode_ieee(v.bits,v.format)
+    x.kind in (:zero,:finite) || throw(DomainError(v.bits,"fixed conversion requires a finite value"))
+    return _fixed(round_fixed(x.value,f;mode),f)
+end
+_convert(v::_FixedValue,f::FixedFormat,mode) = _fixed(round_fixed(_value(v),f;mode),f)
+_convert(v::_FixedValue,f::FloatFormat,mode) = _float(round_ieee(_value(v),f;mode),f)
+_scale(v::_FixedValue,e,f::FixedFormat,mode) =
+    _fixed(_round_fixed_dyadic(_fixed_units(v.bits,v.format),BigInt(e)-_fraction(v.format),f,mode),f)
+function _scale(v::_FloatValue,e,f::FixedFormat,mode)
+    x = decode_ieee(v.bits,v.format)
+    x.kind in (:zero,:finite) || throw(DomainError(v.bits,"fixed scaling requires a finite value"))
+    q = x.value
+    return _fixed(_round_fixed_dyadic(numerator(q),BigInt(e)-(ndigits(denominator(q);base=2)-1),f,mode),f)
+end
 _decoded(v::_FloatValue) = decode_ieee(v.bits,v.format)
 _float(bits,f) = _FloatValue(f,UInt64(bits))
 _invalid(f) = _float(_nan(f),f)
@@ -56,7 +84,9 @@ function _scale(v::_FloatValue,e,f,mode)
     return _float(round_dyadic(numerator(q),power,f;mode,zero_sign=x.negative),f)
 end
 function _compare(predicate,a,b)
-    if a isa _FloatValue
+    if a isa _FixedValue
+        a,b = _value(a),_value(b)
+    elseif a isa _FloatValue
         x,y = _decoded(a),_decoded(b)
         (x.kind == :nan || y.kind == :nan) && return predicate == :ne
         a = x.kind == :infinity ? (x.negative ? -Inf : Inf) : x.value
@@ -86,13 +116,13 @@ function _interpret(p::IR.Program,bits::Integer,trace::Bool)
         v = if n isa IR.Input
             _float(bits,f)
         elseif n isa IR.Const
-            f isa FloatFormat ? _float(n.bits,f) : f == Bool ? n.bits != 0 : n.bits
+            f isa Union{FloatFormat,FixedFormat} ? _stored(n.bits,f) : f == Bool ? n.bits != 0 : n.bits
         elseif n isa IR.TableLoad
             row = visit(n.index)
             table = p.tables[n.table]
             row < length(table.values) || throw(BoundsError(table.values,row))
             word = table.values[Int(row)+1]
-            f isa FloatFormat ? _float(word,f) : word
+            f isa Union{FloatFormat,FixedFormat} ? _stored(word,f) : word
         elseif n isa IR.Mul
             _mul(visit(n.a),visit(n.b),f,n.rounding)
         elseif n isa IR.Add
@@ -119,8 +149,14 @@ function _interpret(p::IR.Program,bits::Integer,trace::Bool)
                 n.operation == :shiftleft ? a << Int(b) : a >> Int(b)
             result & IR.mask(f)
         elseif n isa IR.Classify
-            x = _decoded(visit(n.source))
-            n.kind == :negative ? x.negative : n.kind == :finite ? x.kind in (:zero,:finite) : x.kind == n.kind
+            source = visit(n.source)
+            if source isa _FixedValue
+                n.kind == :negative ? _value(source)<0 : n.kind == :finite ? true :
+                    n.kind == :zero ? iszero(source.bits) : false
+            else
+                x = _decoded(source)
+                n.kind == :negative ? x.negative : n.kind == :finite ? x.kind in (:zero,:finite) : x.kind == n.kind
+            end
         else
             throw(ArgumentError("unsupported interpreter node"))
         end

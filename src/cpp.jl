@@ -11,6 +11,7 @@ function _cpp_name(name::AbstractString)
     return "presage_"*name
 end
 function _cpp_constant(bits,f)
+    f isa FixedFormat && return _cpp_fixed_constant(bits,f)
     f isa FloatFormat && return "std::bit_cast<$(_cpp_type(f))>(static_cast<$(_cpp_storage(f))>($(_cpp_hex(bits))))"
     f == Bool && return bits == 0 ? "false" : "true"
     return _cpp_hex(bits)
@@ -19,6 +20,10 @@ end
 function _cpp_expr(p,i)
     n,f = p.nodes[i],IR.format(p,i)
     call(j) = "n$j()"
+    if n isa Union{IR.Mul,IR.Add,IR.FMA,IR.Convert,IR.Quantize,IR.ScalePow2} &&
+        (f isa FixedFormat || n isa Union{IR.Convert,IR.Quantize} && IR.format(p,n.source) isa FixedFormat)
+        return _cpp_fixed_expr(p,i)
+    end
     if n isa IR.Input
         return "std::bit_cast<$(_cpp_type(f))>(input)"
     elseif n isa IR.Const
@@ -53,6 +58,11 @@ function _cpp_expr(p,i)
         return n.operation in (:shiftleft,:shiftright) ? "($(call(n.b)) >= $(f.width) ? 0ULL : $expr)" : expr
     elseif n isa IR.Classify
         source = call(n.source)
+        if IR.format(p,n.source) isa FixedFormat
+            expression = n.kind == :finite ? "true" : n.kind == :negative ? "(value < 0)" :
+                n.kind == :zero ? "(value == 0)" : "false"
+            return "([&]() { [[maybe_unused]] auto value = $source; return $expression; }())"
+        end
         return n.kind == :nan ? "std::isnan($source)" : n.kind == :infinity ? "std::isinf($source)" :
             n.kind == :finite ? "std::isfinite($source)" : n.kind == :negative ? "std::signbit($source)" :
             "($source == 0)"
@@ -66,9 +76,12 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator")
     foreach(_cpp_type,p.types)
     foreach(t -> _cpp_type(t.format),p.tables)
     for n in p.nodes
-        hasfield(typeof(n),:rounding) && n.rounding != :nearest_even &&
+        hasfield(typeof(n),:rounding) && n.rounding != :nearest_even && n.format isa FloatFormat &&
+            !(n isa Union{IR.Convert,IR.Quantize} && IR.format(p,n.source) isa FixedFormat) &&
             throw(ArgumentError("CPU emitter currently supports nearest-even rounding only"))
     end
+    all(f -> !(f isa FixedFormat) || f.width <= typemax(Cint),p.types) ||
+        throw(ArgumentError("fixed format exceeds CPU index range"))
     inputformat,outputformat = IR.format(p,p.input),IR.format(p)
     inputtype,outputtype = _cpp_storage(inputformat),_cpp_storage(outputformat)
     println(io,"""
@@ -80,6 +93,7 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator")
     #include <cfenv>
     #include <limits>
     #include <stdexcept>
+    $(_has_fixed(p) ? "#include <gmpxx.h>\n#include <type_traits>\n#include <algorithm>" : "")
     namespace $ns {
     static_assert(std::numeric_limits<float>::is_iec559 && std::numeric_limits<float>::digits == 24);
     static_assert(std::numeric_limits<double>::is_iec559 && std::numeric_limits<double>::digits == 53);
@@ -92,8 +106,9 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator")
     inline double canonical(double x) {
         return std::isnan(x) ? std::bit_cast<double>(std::uint64_t{0x7ff8000000000000ULL}) : x;
     }
-    template<std::size_t N>
-    inline std::uint64_t load(const std::uint64_t (&table)[N],std::uint64_t index) {
+    $(_has_fixed(p) ? read(joinpath(@__DIR__,"cpp_fixed.hpp"),String) : "")
+    template<class T,std::size_t N>
+    inline T load(const T (&table)[N],std::uint64_t index) {
         if (index >= N) throw std::out_of_range("PRESAGe table index");
         return table[index];
     }
@@ -101,7 +116,13 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator")
         $inputtype input;
     """)
     for (i,t) in enumerate(p.tables)
-        println(io,"    inline static constexpr std::uint64_t table$i[] = {",join(_cpp_hex.(t.values),","),"};")
+        if t.format isa FixedFormat
+            qualifier = t.format.width > 126 ? "const" : "constexpr"
+            println(io,"    inline static $qualifier $(_cpp_type(t.format)) table$i[] = {",
+                join((_cpp_fixed_constant(v,t.format) for v in t.values),","),"};")
+        else
+            println(io,"    inline static constexpr std::uint64_t table$i[] = {",join(_cpp_hex.(t.values),","),"};")
+        end
     end
     for (i,f) in enumerate(p.types)
         println(io,"    bool ready$i = false; $(_cpp_type(f)) value$i{};")

@@ -1,6 +1,6 @@
 """Typed arithmetic DAG. References are one-based node/table indices."""
 module IR
-using ..PRESAGe: FloatFormat, _wordmask, round_ieee
+using ..PRESAGe: FloatFormat, FixedFormat, _wordmask, round_ieee, round_fixed, _fixed_mask
 
 export UIntFormat, Node, Input, Const, Table, TableLoad, Mul, Add, FMA, Convert,
        Quantize, Compare, Select, BitCast, ExtractBits, BitOp, ScalePow2,
@@ -13,10 +13,16 @@ struct UIntFormat
         new(Int(width))
     end
 end
-const Type = Union{FloatFormat,UIntFormat,Core.Type{Bool}}
+const ArithmeticFormat = Union{FloatFormat,FixedFormat}
+const Type = Union{ArithmeticFormat,UIntFormat,Core.Type{Bool}}
+const Word = Union{UInt64,BigInt}
 mask(f::UIntFormat) = typemax(UInt64) >> (64-f.width)
 mask(f::FloatFormat) = _wordmask(f)
+mask(f::FixedFormat) = _fixed_mask(f)
 mask(::Core.Type{Bool}) = UInt64(1)
+_default_rounding(::FloatFormat) = :nearest_even
+_default_rounding(f::FixedFormat) = f.rounding
+_word(bits,f) = f isa FixedFormat ? BigInt(bits) : UInt64(bits)
 _rounding(mode) = mode in (:nearest_even,:toward_zero,:up,:down) ? mode :
     throw(ArgumentError("unsupported rounding mode"))
 
@@ -26,26 +32,28 @@ struct Input <: Node
 end
 struct Const <: Node
     format::Type
-    bits::UInt64
+    bits::Word
     function Const(f::Type, bits::Integer)
         0 <= bits <= mask(f) || throw(ArgumentError("constant exceeds format width"))
-        new(f,UInt64(bits))
+        new(f,_word(bits,f))
     end
 end
 constant(value::Union{Integer,Rational}, f::FloatFormat; rounding::Symbol=:nearest_even) =
     Const(f,round_ieee(value,f;mode=rounding))
+constant(value::Union{Integer,Rational},f::FixedFormat;rounding::Symbol=f.rounding) =
+    Const(f,round_fixed(value,f;mode=rounding))
 
 """Stored bit payloads. Banks/unroll describe future table implementation choices."""
 struct Table
-    format::Union{FloatFormat,UIntFormat}
-    values::Tuple{Vararg{UInt64}}
+    format::Union{ArithmeticFormat,UIntFormat}
+    values::Tuple{Vararg{Word}}
     banks::Int
     unroll::Bool
-    function Table(f::Union{FloatFormat,UIntFormat}, values; banks::Integer=1,unroll::Bool=false)
+    function Table(f::Union{ArithmeticFormat,UIntFormat}, values; banks::Integer=1,unroll::Bool=false)
         isempty(values) && throw(ArgumentError("empty table"))
         banks >= 1 || throw(ArgumentError("banks must be positive"))
         all(v -> v isa Integer && 0 <= v <= mask(f),values) || throw(ArgumentError("invalid table bits"))
-        new(f,Tuple(UInt64.(values)),Int(banks),unroll)
+        new(f,Tuple(_word(v,f) for v in values),Int(banks),unroll)
     end
 end
 struct TableLoad <: Node
@@ -56,9 +64,9 @@ for name in (:Mul,:Add)
     @eval struct $name <: Node
         a::Int
         b::Int
-        format::FloatFormat
+        format::ArithmeticFormat
         rounding::Symbol
-        $name(a::Integer,b::Integer,f::FloatFormat;rounding::Symbol=:nearest_even) =
+        $name(a::Integer,b::Integer,f::ArithmeticFormat;rounding::Symbol=_default_rounding(f)) =
             new(Int(a),Int(b),f,_rounding(rounding))
     end
 end
@@ -66,17 +74,17 @@ struct FMA <: Node
     a::Int
     b::Int
     c::Int
-    format::FloatFormat
+    format::ArithmeticFormat
     rounding::Symbol
-    FMA(a::Integer,b::Integer,c::Integer,f::FloatFormat;rounding::Symbol=:nearest_even) =
+    FMA(a::Integer,b::Integer,c::Integer,f::ArithmeticFormat;rounding::Symbol=_default_rounding(f)) =
         new(Int(a),Int(b),Int(c),f,_rounding(rounding))
 end
 for name in (:Convert,:Quantize)
     @eval struct $name <: Node
         source::Int
-        format::FloatFormat
+        format::ArithmeticFormat
         rounding::Symbol
-        $name(source::Integer,f::FloatFormat;rounding::Symbol=:nearest_even) =
+        $name(source::Integer,f::ArithmeticFormat;rounding::Symbol=_default_rounding(f)) =
             new(Int(source),f,_rounding(rounding))
     end
 end
@@ -107,9 +115,9 @@ end
 struct ScalePow2 <: Node
     source::Int
     exponent::Int
-    format::FloatFormat
+    format::ArithmeticFormat
     rounding::Symbol
-    function ScalePow2(source::Integer,exponent::Integer,f::FloatFormat;rounding::Symbol=:nearest_even)
+    function ScalePow2(source::Integer,exponent::Integer,f::ArithmeticFormat;rounding::Symbol=_default_rounding(f))
         typemin(Cint) <= exponent <= typemax(Cint) || throw(ArgumentError("scale exponent exceeds C int range"))
         new(Int(source),Int(exponent),f,_rounding(rounding))
     end
@@ -120,6 +128,7 @@ struct Classify <: Node
 end
 
 _width(f::FloatFormat) = 1+f.exponent_bits+f.fraction_bits
+_width(f::FixedFormat) = f.width
 _width(f::UIntFormat) = f.width
 refs(::Union{Input,Const}) = ()
 refs(n::Union{Mul,Add,Compare,BitOp}) = (n.a,n.b)
@@ -135,11 +144,18 @@ function _type(n::Node, types, tables)
         types[n.index] isa UIntFormat || throw(ArgumentError("table index must be unsigned"))
         return tables[n.table].format
     elseif n isa Union{Mul,Add,FMA}
-        all(i -> types[i] == n.format,refs(n)) || throw(ArgumentError("arithmetic needs explicit operand conversions"))
+        if n.format isa FixedFormat
+            all(i -> types[i] isa FixedFormat,refs(n)) || throw(ArgumentError("fixed operands required"))
+            n.rounding == n.format.rounding || throw(ArgumentError("fixed rounding must match its format"))
+        else
+            all(i -> types[i] == n.format,refs(n)) || throw(ArgumentError("arithmetic needs explicit operand conversions"))
+        end
         return n.format
     elseif n isa Union{Convert,Quantize,ScalePow2}
-        types[n.source] isa FloatFormat || throw(ArgumentError("floating source required"))
-        n isa ScalePow2 && types[n.source] != n.format &&
+        types[n.source] isa ArithmeticFormat || throw(ArgumentError("arithmetic source required"))
+        n.format isa FixedFormat && n.rounding != n.format.rounding &&
+            throw(ArgumentError("fixed rounding must match its format"))
+        n isa ScalePow2 && n.format isa FloatFormat && types[n.source] != n.format &&
             throw(ArgumentError("scale needs an explicit format conversion"))
         return n.format
     elseif n isa Compare
@@ -153,7 +169,7 @@ function _type(n::Node, types, tables)
         return types[n.yes]
     elseif n isa BitCast
         source = types[n.source]
-        source != Bool && _width(source) == _width(n.format) || throw(ArgumentError("bitcast widths differ"))
+        source isa Union{FloatFormat,UIntFormat} && _width(source) == _width(n.format) || throw(ArgumentError("bitcast widths differ"))
         (source isa FloatFormat) != (n.format isa FloatFormat) || throw(ArgumentError("bitcast needs float/unsigned types"))
         return n.format
     elseif n isa ExtractBits
@@ -168,7 +184,7 @@ function _type(n::Node, types, tables)
         n.operation in (:shiftleft,:shiftright) || a == b || throw(ArgumentError("bit operand widths differ"))
         return a
     elseif n isa Classify
-        types[n.source] isa FloatFormat || throw(ArgumentError("classification needs a float"))
+        types[n.source] isa ArithmeticFormat || throw(ArgumentError("classification needs an arithmetic value"))
         n.kind in (:nan,:infinity,:finite,:zero,:negative) || throw(ArgumentError("invalid classification"))
         return Bool
     end
