@@ -63,6 +63,23 @@ git clone --depth 1 https://github.com/hlslibs/ac_types.git ../ac_types
 git clone --depth 1 https://github.com/Xilinx/HLS_arbitrary_Precision_Types.git ../HLS_arbitrary_Precision_Types
 ```
 
+## Formatting
+
+JuliaFormatter uses the repository's [configuration](.JuliaFormatter.toml),
+with four-space indentation and a 92-column margin. Its version is pinned in a
+separate development environment. From the repository root:
+
+```sh
+julia --startup-file=no --project=tools/format -e 'using Pkg; Pkg.instantiate()'
+julia --startup-file=no --project=tools/format scripts/format.jl
+julia --startup-file=no --project=tools/format scripts/format.jl --check
+```
+
+The check command exits with status 1 when formatting is required and does not
+write files. The command formats Julia files in `src`, `scripts`, `test` and
+`examples`. For offline setup, reuse a resolved formatter manifest and cached
+dependencies, and call `Pkg.offline(true)` before `Pkg.instantiate()`.
+
 ## API
 
 ```julia

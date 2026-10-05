@@ -6,14 +6,17 @@ encoding; their format declares rounding and overflow behavior.
 """
 struct FunctionSpec
     expression::String
-    input_format::Union{FloatFormat,FixedFormat}
-    output_format::Union{FloatFormat,FixedFormat}
+    input_format::Union{FloatFormat, FixedFormat}
+    output_format::Union{FloatFormat, FixedFormat}
     absolute_error::Rational{BigInt}
-    domain::Union{Nothing,Tuple{Rational{BigInt},Rational{BigInt}}}
-    function FunctionSpec(expression::AbstractString; input_format::Union{FloatFormat,FixedFormat}=IEEE32,
-                          output_format::Union{FloatFormat,FixedFormat}=input_format,
-                          absolute_error::Union{Integer,Rational}=1//(1 << 23),
-                          domain=nothing)
+    domain::Union{Nothing, Tuple{Rational{BigInt}, Rational{BigInt}}}
+    function FunctionSpec(
+        expression::AbstractString;
+        input_format::Union{FloatFormat, FixedFormat} = IEEE32,
+        output_format::Union{FloatFormat, FixedFormat} = input_format,
+        absolute_error::Union{Integer, Rational} = 1 // (1 << 23),
+        domain = nothing,
+    )
         isempty(strip(expression)) && throw(ArgumentError("empty function expression"))
         absolute_error > 0 || throw(ArgumentError("absolute error must be positive"))
         d = domain === nothing ? nothing : (_q(domain[1]), _q(domain[2]))
@@ -31,10 +34,14 @@ struct Dispatch
     comparison::Symbol
     positive_tail::Rational{BigInt}
     negative_tail::Rational{BigInt}
-    function Dispatch(threshold::Integer; comparison::Symbol=:greater,
-                      positive_tail::Union{Integer,Rational}=1,
-                      negative_tail::Union{Integer,Rational}=-1)
-        comparison in (:greater, :greater_equal) || throw(ArgumentError("invalid dispatch comparison"))
+    function Dispatch(
+        threshold::Integer;
+        comparison::Symbol = :greater,
+        positive_tail::Union{Integer, Rational} = 1,
+        negative_tail::Union{Integer, Rational} = -1,
+    )
+        comparison in (:greater, :greater_equal) ||
+            throw(ArgumentError("invalid dispatch comparison"))
         new(UInt64(threshold), comparison, _q(positive_tail), _q(negative_tail))
     end
 end
@@ -44,7 +51,11 @@ struct Segment
     lower::Rational{BigInt}
     upper::Rational{BigInt}
     coefficients::Vector{Rational{BigInt}}
-    function Segment(lower::Union{Integer,Rational}, upper::Union{Integer,Rational}, coefficients)
+    function Segment(
+        lower::Union{Integer, Rational},
+        upper::Union{Integer, Rational},
+        coefficients,
+    )
         lower < upper || throw(ArgumentError("segment must have positive width"))
         c = _q.(collect(coefficients))
         isempty(c) && throw(ArgumentError("segment needs coefficients"))
@@ -59,29 +70,38 @@ evaluator, while certification remains separate.
 struct PlanArtifact
     spec::FunctionSpec
     status::Symbol
-    dispatch::Union{Nothing,Dispatch}
+    dispatch::Union{Nothing, Dispatch}
     segments::Vector{Segment}
-    settings::Dict{String,String}
-    program::Union{Nothing,IR.Program}
-    function PlanArtifact(spec::FunctionSpec; program::Union{Nothing,IR.Program}=nothing,
-                          status::Symbol=program === nothing ? :contract : :candidate,
-                          dispatch::Union{Nothing,Dispatch}=nothing, segments=Segment[],
-                          settings=Dict{String,String}())
-        status in (:contract, :candidate) || throw(ArgumentError("artifact cannot claim certification"))
+    settings::Dict{String, String}
+    program::Union{Nothing, IR.Program}
+    function PlanArtifact(
+        spec::FunctionSpec;
+        program::Union{Nothing, IR.Program} = nothing,
+        status::Symbol = program === nothing ? :contract : :candidate,
+        dispatch::Union{Nothing, Dispatch} = nothing,
+        segments = Segment[],
+        settings = Dict{String, String}(),
+    )
+        status in (:contract, :candidate) ||
+            throw(ArgumentError("artifact cannot claim certification"))
         if program !== nothing
-            status == :candidate || throw(ArgumentError("an evaluator program is a candidate"))
-            IR.format(program,program.input) == spec.input_format && IR.format(program) == spec.output_format ||
-                throw(ArgumentError("program formats differ from the function specification"))
+            status == :candidate ||
+                throw(ArgumentError("an evaluator program is a candidate"))
+            IR.format(program, program.input) == spec.input_format &&
+                IR.format(program) == spec.output_format || throw(
+                ArgumentError("program formats differ from the function specification"),
+            )
         end
         if dispatch !== nothing
-            spec.input_format isa FloatFormat || throw(ArgumentError("magnitude-tail metadata requires a floating input"))
+            spec.input_format isa FloatFormat ||
+                throw(ArgumentError("magnitude-tail metadata requires a floating input"))
             t = decode_ieee(dispatch.magnitude_threshold, spec.input_format)
             t.kind == :finite && !t.negative && t.value > 0 ||
                 throw(ArgumentError("dispatch needs a positive finite threshold"))
         end
         ss = collect(Segment, segments)
-        all(i -> ss[i-1].upper <= ss[i].lower, 2:length(ss)) ||
+        all(i -> ss[i - 1].upper <= ss[i].lower, 2:length(ss)) ||
             throw(ArgumentError("segments must be ordered and nonoverlapping"))
-        new(spec, status, dispatch, ss, Dict{String,String}(settings),program)
+        new(spec, status, dispatch, ss, Dict{String, String}(settings), program)
     end
 end
