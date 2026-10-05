@@ -4,8 +4,8 @@
     @test result.total_bound <= result.plan.spec.absolute_error
     @test length(result.paths) == 4
     @test result.tail_bound < 1//(1<<25)
-    @test first(result.paths).magnitude_domain[1] == 0
-    @test last(result.paths).magnitude_domain[2] == 4
+    @test first(result.paths).domain[1] == 0
+    @test last(result.paths).domain[2] == 4
     for path in result.paths
         @test path.approximation[1] <= path.approximation[2]
         @test path.total == path.approximation[2]+path.coordinate_error+path.arithmetic_error+path.output_rounding

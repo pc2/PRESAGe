@@ -8,7 +8,7 @@ use each Julia installation's own MPFR/GMP runtime.
 ## Results
 
 The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **161,034 checks on both Julia 1.10.12 and Julia 1.13.1**, with four
+passes **172,262 checks on Julia 1.13.1**, with four
 threads. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
@@ -29,7 +29,8 @@ coverage or numerical certificates.
 | Fixed I/O CPU conformance | 78 | All three backends; exhaustive small fixed interfaces; signed/unsigned widths through 137 bits; raw and typed public APIs; pure fixed execution with FE_DOWNWARD; output policies; mixed interfaces; guarded domains; invalid padding even with unused input; empty/truncated streams; fixed tables and index traces. |
 | Native vendor fixed arithmetic | 48 | Both `ap_fixed` and `ac_fixed` compiled with ordinary LLVM C++20; 16,384 matrix cases per library; mixed signedness/scales; all rounding modes, wrap/saturation and rejection after rounding; every visited fixed payload; 31/80-bit separate/FMA erf; finite IEEE32/64 range and lazy specials; scaling and width limits. |
 | Uniform fixed erf certificates | 2,346 | Every fixed node's range; complete graph audit; uniform error contributions/tails; CPU bits/rows; sampled MPFR checks against the certified bound; rejected graph/metadata changes; width-search failure; wide separate/FMA certificates. |
-| Certified generation commands | 26 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal, option validation; fixed-interface candidates and refusal of unsupported certification. |
+| Uniform fixed polynomial certificates | 11,222 | Exhaustive bounded erf/exp in separate/FMA modes against mathematical enclosures and all three C++ backends; every visited fixed node's certified range; exact affine and constant kernels, coarse coordinates and amplification, inward/clipped/singleton domains, unsigned/wide formats, changed coefficients/graphs, overflow, singularities and schema v2 reports. |
+| Certified generation commands | 32 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal and option validation; automatic fixed polynomial proofs with or without a kernel label, standalone recertification and unsupported graphs. |
 
 In particular, `exp` at IEEE32 input `0xc2af0001` resolves to output
 **`0x006cb285`** through both backends at 256 bits. Exact rational midpoint
@@ -97,9 +98,40 @@ even when the graph does not use the input.
 The [fixed polynomial example](../examples/fixed_polynomial.jl) was generated,
 compiled through CMake and checked through CTest with both vendor backends.
 Each build matches output bits and fixed intermediates on all **512 inputs**.
-These are exact/exhaustive conformance checks for selected kernels. The uniform
-Sollya evaluator certificate still covers the canonical IEEE32 erf graph;
-generic fixed-interface polynomial certification remains separate work.
+These are exact/exhaustive conformance checks for selected kernels. The affine
+example now also has a zero-error numerical certificate.
+
+## Bounded fixed polynomial certificates
+
+Degree-nine erf and exp kernels use fixed input/output on `[-1,1]`, with
+`Fixed(9,3)` input, `Fixed(32,6)` internals and `Fixed(24,4)` output. Separate
+multiply/add and FMA are both certified and compiled through all three CPU
+backends. Every one of the **129 accepted inputs** is checked against a direct
+MPFR mathematical enclosure; every visited fixed node is inside its certified
+range. The interpreter rejects all remaining input words.
+
+| Kernel | Uniform absolute bound | Exhaustive enclosed maximum |
+| --- | ---: | ---: |
+| erf, separate and FMA | `1.082233e-6` | `9.252514e-7` |
+| exp, separate and FMA | `5.519426e-7` | `4.834759e-7` |
+
+Both bounds meet `2^-18`. The proof checks the entire graph and actual stored
+coefficients, input conversion, each arithmetic quantizer, final rounding and
+possible overflow. Additional exhaustive cases cover exact affine arithmetic,
+coarse internal input conversion, domains larger than one, unsigned formats,
+inward/clipped/singleton domains and constants. A tie regression distinguishes
+separate multiplication/addition from FMA. Constant kernels with unused narrow
+input conversions remain exact and pass all three CPU backends. Wide 137-bit
+inputs are certified without enumeration. Changed operations/guards, rounding
+and overflow policies outside the supported scope, output overflow and singular
+function domains are explicitly refused.
+
+The [bounded example](../examples/bounded_polynomial.jl) was executed locally.
+Its stored exp plan was then regenerated with certification, compiled and
+checked through CMake/CTest in `build/bounded-demo-ac` and
+`build/bounded-demo-ap`. Both builds pass CTest on all 129 accepted inputs,
+including output words, fixed-node visitation and exact payloads. Sollya.jl is
+unchanged.
 
 ## Floating candidate checks
 
@@ -129,9 +161,9 @@ JULIA_DEPOT_PATH=/tmp/presage-depot: JULIA_PKG_SERVER='' PRESAGE_REQUIRE_VENDOR_
 
 Select the desired installed Julia executable and rerun `dev.jl` before testing
 a different version. The ignored local manifest is version-specific. The
-bootstrap and check runner use a temporary empty local registry to avoid Julia
-1.10's default-registry fetch in an empty depot. Successful verification runs
-resolve only standard libraries and the local development dependency.
+bootstrap and check runner use Julia 1.13's offline package mode, including
+with an empty depot. Successful verification runs resolve only standard
+libraries and the local development dependency.
 
 After bootstrap, with LLVM/Clang and CMake installed:
 
@@ -154,9 +186,10 @@ without it, unavailable vendor test groups are explicitly skipped.
 
 ## Limits
 
-Uniform certification currently covers the canonical fixed IEEE32 erf graph.
-Floating candidates and other functions do not have complete evaluator
-certificates. The [compact contract](../examples/erf-contract.toml) remains
+Uniform certification covers the canonical fixed IEEE32 erf graph and supported
+degree 0–32 fixed polynomial kernels with nearest-even rounding and rejected
+overflow. Floating arithmetic, mixed interfaces and general transformations
+remain outside the certificates. The [compact contract](../examples/erf-contract.toml) remains
 unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces;
 a separate report records the
 numerical proof. Floating CPU arithmetic supports binary32/binary64 with

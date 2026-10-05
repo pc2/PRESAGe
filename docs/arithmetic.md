@@ -133,6 +133,16 @@ one visitation byte and `ceil(W/8)` little-endian payload bytes, with zero paddi
 Unvisited nodes have zero payload and are not evaluated. The CPU checker uses
 this mode for fixed programs to detect differences hidden by final IEEE rounding.
 
+## Fixed polynomial certification
+
+`polynomial_plan` stores the rounded coefficients and the exact Horner graph.
+`certify_polynomial` audits that graph and proves a uniform absolute bound for
+fixed input/output and internals with nearest-even rounding and rejected
+overflow. It covers conversions, each arithmetic quantizer, output rounding
+and every fixed node's range. Coefficients and internal widths remain explicit
+choices; an inadequate width or conservative interval can refuse a proof.
+See [the numerical proof](certification.md#fixed-polynomial-kernels).
+
 ## Fresh erf candidate
 
 `erf_candidate()` approximates `erf(t+center)` with Sollya `fpminimax` in four

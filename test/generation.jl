@@ -35,8 +35,22 @@ include(joinpath(@__DIR__,"..","scripts","certify.jl"))
         write_plan(fixedpath,fixed)
         generate_main([fixedpath,generated])
         @test read_plan(joinpath(generated,"plan.toml")).spec.input_format == fixed.spec.input_format
-        @test !isfile(joinpath(generated,"certificate.toml"))
+        @test TOML.parsefile(joinpath(generated,"certificate.toml"))["status"] == "certified"
         @test occursin("#include <ac_fixed.h>",read(joinpath(generated,"evaluator.hpp"),String))
+        @test certify_main([fixedpath,report]).total_bound == 0
+        # Older canonical artifacts need no kernel label to select their proof.
+        write_plan(fixedpath,PlanArtifact(fixed.spec;program=fixed.program,settings=Dict("evaluation"=>"separate")))
+        generate_main([fixedpath,generated])
+        @test TOML.parsefile(joinpath(generated,"certificate.toml"))["total_bound"] == "0/1"
+        generate_main([fixedpath,generated,"--certify=false"])
+        @test !isfile(joinpath(generated,"certificate.toml"))
+        bad = polynomial_plan(FunctionSpec("x+1";input_format=FixedFormat(9,4)),[0,1])
+        write_plan(fixedpath,bad)
+        @test_throws ErrorException generate_main([fixedpath,generated])
+        @test TOML.parsefile(joinpath(generated,"certificate-failure.toml"))["status"] == "bound_exceeds_budget"
+        @test read_plan(joinpath(generated,"plan.toml")).spec.expression == "x"
+        unsupported = polynomial_plan(FunctionSpec("x"),[0,1])
+        write_plan(fixedpath,unsupported)
         @test_throws ErrorException generate_main([fixedpath,generated,"--certify"])
         @test TOML.parsefile(joinpath(generated,"certificate-failure.toml"))["status"] == "unsupported_domain"
     end

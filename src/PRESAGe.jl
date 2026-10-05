@@ -11,7 +11,8 @@ export FloatFormat, FixedFormat, IEEE16, IEEE32, IEEE64, DecodedFloat,
        reference, with_oracle, generate_references, ReferenceFailure,
        IR, evaluate_bits, interpret_trace, EvaluationTrace, emit_cpp, emit_harness,
        polynomial_plan, erf_candidate, erf_fixed_candidate,
-       CertificationResult, PathCertificate, FixedNodeBound, certify_erf, certified_erf, write_certificate
+       CertificationResult, PathCertificate, FixedNodeBound,
+       certify_polynomial, certify_plan, certify_erf, certified_erf, write_certificate
 
 include("formats.jl")
 include("fixed.jl")
@@ -28,5 +29,6 @@ include("cpp.jl")
 include("kernels.jl")
 include("fixed_kernels.jl")
 include("certificates.jl")
+include("polynomial_certificates.jl")
 
 end

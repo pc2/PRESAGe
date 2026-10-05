@@ -9,15 +9,15 @@ The package provides exact IEEE formats and rounding, `FunctionSpec`, versioned
 contract/candidate artifacts, adaptive references, a typed arithmetic IR,
 an exact interpreter and a C++ CPU emitter. Inputs, outputs, coefficients and
 intermediates can use fixed formats; mixed fixed/floating interfaces are supported.
-The fixed IEEE32 `erf` evaluator has
-a uniform absolute-error certificate covering every finite input. Floating
-candidates and polynomial kernels also run locally.
+The fixed IEEE32 `erf` evaluator has a uniform absolute-error certificate
+covering every finite input. Fixed polynomial kernels can also be certified on
+bounded domains. Floating candidates run locally.
 The development plan is maintained at
 [`../plan/DEVELOPMENT_PLAN.md`](../plan/DEVELOPMENT_PLAN.md).
 
 ## Local setup
 
-Requires Julia 1.10 or newer, a local [Sollya.jl](../Sollya.jl/README.md) checkout
+Requires Julia 1.13 or newer, a local [Sollya.jl](../Sollya.jl/README.md) checkout
 and installed Sollya/MPFR/GMP libraries. CPU tests also require a C++20 compiler
 (Clang or GCC with native 128-bit integers), plus GMP C++ headers/libraries;
 set `CXX` and optionally `GMP_PREFIX` for the package tests. The expected workspace is:
@@ -39,10 +39,10 @@ julia --startup-file=no --threads=4 scripts/check.jl
 
 `dev.jl` develops the sibling Sollya package and creates an ignored local
 manifest. Set `PRESAGE_SOLLYA_PATH` for another local checkout. Both scripts use
-offline package operations and a temporary local registry, including on Julia
-1.10 with an empty depot. They do not download dependencies or change your
-registries. Rerun `dev.jl` when switching Julia versions. For an isolated cache,
-prefix commands with `JULIA_DEPOT_PATH=/tmp/presage-depot:`.
+offline package operations, including with an empty depot. They do not download
+dependencies or change your registries. Rerun `dev.jl` when switching Julia
+versions. For an isolated cache, prefix commands with
+`JULIA_DEPOT_PATH=/tmp/presage-depot:`.
 
 Sollya.jl discovers the installed library. Set `SOLLYA_LIBRARY` to an explicit
 shared-library path before the first native call when necessary. Direct MPFR
@@ -156,7 +156,11 @@ spec = FunctionSpec("x/2+1/4";
     input_format=FixedFormat(9,4), output_format=FixedFormat(13,5))
 plan = polynomial_plan(spec, [1//4,1//2]; internal_format=FixedFormat(24,8))
 evaluate_bits(plan, round_fixed(1//2, spec.input_format)) # Encoded fixed output
+result = certify_polynomial(plan)
+@assert result.status == :certified
+@assert result.total_bound == 0 # This affine kernel is exact on the input grid.
 write_plan("fixed-plan.toml", plan)
+write_certificate("fixed-certificate.toml", result)
 emit_cpp("evaluator.hpp", plan; backend=:ac_fixed)
 ```
 
@@ -173,15 +177,29 @@ julia --startup-file=no --project=. scripts/generate.jl \
   build/fixed-plan.toml build/fixed --backend=ac_fixed
 ```
 
-Polynomial plans are candidates. Stored plans automatically rerun certification
-only for the supported canonical IEEE32 `erf` graph; `--certify=true` explicitly
-requires that proof and rejects unsupported graphs. Fixed I/O is also supported
-by the reference oracle and binary reference CLI.
+Numerical reports are separate from candidate plans. Stored fixed polynomial
+plans and the canonical IEEE32 `erf` graph automatically rerun certification
+during generation; `--certify=false` emits an unchecked candidate.
+`--certify=true` requires a successful proof and rejects unsupported graphs.
+Polynomial certification initially supports degree 0–32, fixed input/output
+and internals, nearest-even rounding and rejected overflow. Fixed I/O is also
+supported by the reference oracle and binary reference CLI.
+
+The [bounded polynomial example](examples/bounded_polynomial.jl) generates and
+certifies `erf` and `exp` on `[-1,1]`, using fixed input/output:
+
+```sh
+julia --startup-file=no --project=. examples/bounded_polynomial.jl
+julia --startup-file=no --project=. scripts/generate.jl \
+  build/bounded/exp-plan.toml build/bounded/exp --backend=ac_fixed
+```
 
 In Julia, `result = certified_erf()` returns the plan, status and uniform bounds.
 `certify_erf(plan)` checks a stored fixed evaluator. Julia also supports
 `erf_fixed_candidate()`, `erf_candidate()` and
 `polynomial_plan(spec, ascending_coefficients; evaluation=:separate)`.
+`certify_polynomial(plan)` proves a supported fixed polynomial;
+`certify_plan(plan)` selects the supported proof for a stored evaluator.
 `evaluate_bits(plan, input_bits)` executes either program with exact rounding.
 
 ## Reference CLI

@@ -38,7 +38,7 @@ exponents retain bounded-work handling; unresolved wrap cases remain explicit.
 
 Direct MPFR references use Julia's MPFR/GMP ABI. Sollya objects use the native
 library's own runtime. These are never interchanged. No global BigFloat rounding
-or precision is modified, including on Julia 1.10. Sollya calls are scoped and
+or precision is modified. Sollya calls are scoped and
 serialized within a process; use separate processes for concurrent Sollya jobs.
 The precision limit bounds PRESAGe refinement, not every internal Sollya
 algorithm's working precision or wall time. Worker supervision is a later step.

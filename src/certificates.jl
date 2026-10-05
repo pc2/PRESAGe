@@ -4,7 +4,7 @@ struct FixedNodeBound
     range::_Interval
 end
 struct PathCertificate
-    magnitude_domain::_Interval
+    domain::_Interval
     upper_inclusive::Bool
     approximation::_Interval
     coordinate_error::Rational{BigInt}
@@ -121,7 +121,7 @@ function certify_erf(plan::PlanArtifact;precision::Integer=256,accuracy::Union{I
     precision >= 64 || throw(ArgumentError("proof precision must be at least 64"))
     0 < accuracy < 1 || throw(ArgumentError("norm accuracy must be between zero and one"))
     0 <= max_refinements <= 8 || throw(ArgumentError("refinements must be in 0:8"))
-    settings = Dict("precision"=>string(precision),"norm_accuracy"=>_rational_text(_q(accuracy)))
+    settings = Dict("method"=>"erf_fixed_horner","precision"=>string(precision),"norm_accuracy"=>_rational_text(_q(accuracy)))
     layout = try
         _erf_audit(plan)
     catch err
@@ -217,21 +217,28 @@ function certified_erf(;degree::Integer=9,segments::Integer=4,initial_fraction_b
 end
 
 function _certificate_data(result::CertificationResult)
-    d = Dict{String,Any}("schema"=>"presage-certificate","schema_version"=>1,"status"=>string(result.status),
+    d = Dict{String,Any}("schema"=>"presage-certificate","schema_version"=>2,"status"=>string(result.status),
         "expression"=>result.plan.spec.expression,"input_format"=>_format_data(result.plan.spec.input_format),
         "output_format"=>_format_data(result.plan.spec.output_format),"absolute_error"=>_rational_text(result.plan.spec.absolute_error),
         "reason"=>result.reason,"settings"=>result.settings)
     result.total_bound === nothing || (d["total_bound"] = _rational_text(result.total_bound))
     if !isempty(result.paths)
-        d["paths"] = [Dict("magnitude_domain"=>_rational_text.(collect(p.magnitude_domain)),
+        d["paths"] = [Dict("domain"=>_rational_text.(collect(p.domain)),
             "upper_inclusive"=>p.upper_inclusive,"approximation"=>_rational_text.(collect(p.approximation)),
             "coordinate_error"=>_rational_text(p.coordinate_error),"arithmetic_error"=>_rational_text(p.arithmetic_error),
             "output_rounding"=>_rational_text(p.output_rounding),"total"=>_rational_text(p.total),
             "ranges"=>[Dict("node"=>b.node,"format"=>_type_data(b.format),
                 "bounds"=>_rational_text.(collect(b.range))) for b in p.ranges]) for p in result.paths]
-        d["coverage"] = Dict("central_magnitude"=>["0/1","4/1"],"negative_inputs"=>"exact odd sign restoration",
-            "zeros"=>"both signed zeros preserved","infinities"=>"signed unit values","nan"=>"canonical quiet NaN",
-            "overflow"=>"all fixed nodes and output conversions bounded")
+        d["coverage"] = if get(result.settings,"method","") == "fixed_polynomial_horner"
+            Dict("input_domain"=>_rational_text.(collect(only(result.paths).domain)),
+                "inputs"=>"all representable fixed inputs in the interval",
+                "outside_domain"=>"rejected before polynomial evaluation",
+                "overflow"=>"all reachable fixed nodes and output conversions bounded")
+        else
+            Dict("central_magnitude"=>["0/1","4/1"],"negative_inputs"=>"exact odd sign restoration",
+                "zeros"=>"both signed zeros preserved","infinities"=>"signed unit values","nan"=>"canonical quiet NaN",
+                "overflow"=>"all fixed nodes and output conversions bounded")
+        end
     end
     result.tail_bound === nothing || (d["tail"] = Dict("magnitude_lower"=>"4/1","comparison"=>"greater",
         "absolute_error"=>_rational_text(result.tail_bound),"argument"=>"erf is monotone and bounded above by one"))

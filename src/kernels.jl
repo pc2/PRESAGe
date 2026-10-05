@@ -57,8 +57,11 @@ function polynomial_plan(spec::FunctionSpec,coefficients;internal_format::Union{
     else
         output = _nan_guard!(nodes,output,1,spec.output_format)
     end
-    return PlanArtifact(spec;program=IR.Program(nodes;output),
-                        settings=Dict("evaluation"=>string(evaluation)))
+    settings = Dict("evaluation"=>string(evaluation))
+    if f isa FixedFormat && spec.input_format isa FixedFormat && spec.output_format isa FixedFormat
+        settings["kernel"] = "fixed_polynomial_horner"
+    end
+    return PlanArtifact(spec;program=IR.Program(nodes;output),settings)
 end
 
 function _erf_coefficients(center,width,degree,f,precision)

@@ -11,7 +11,7 @@ function certify_main(args)
         haskey(options,key) && error("duplicate option $key")
         options[key] = value
     end
-    result = certify_erf(read_plan(args[1]);precision=parse(Int,get(options,"precision","256")),
+    result = certify_plan(read_plan(args[1]);precision=parse(Int,get(options,"precision","256")),
         accuracy=PRESAGe._parse_rational(get(options,"accuracy","1/1024")))
     write_certificate(args[2],result)
     result.status == :certified || error("$(result.status): $(result.reason)")
