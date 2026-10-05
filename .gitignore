@@ -8,3 +8,6 @@ build_*
 *.str
 *.csv
 *.pdf
+/Manifest*.toml
+*.cov
+*.mem

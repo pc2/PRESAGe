@@ -1,0 +1,10 @@
+using Test
+using PRESAGe
+using TOML
+import Sollya
+
+include("formats.jl")
+include("schema.jl")
+include("oracle.jl")
+include("streams.jl")
+include("cli.jl")

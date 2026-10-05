@@ -1,0 +1,87 @@
+const _SCHEMA_VERSION = 1
+_rational_text(q::Rational) = "$(numerator(q))/$(denominator(q))"
+function _parse_rational(text::AbstractString)
+    occursin(r"^-?\d+/[1-9]\d*$", text) || throw(ArgumentError("expected numerator/positive-denominator string"))
+    n, d = split(text, '/')
+    return parse(BigInt, n) // parse(BigInt, d)
+end
+function _format_data(f::FloatFormat)
+    f == IEEE16 && return "binary16"
+    f == IEEE32 && return "binary32"
+    f == IEEE64 && return "binary64"
+    return "float($(f.exponent_bits),$(f.fraction_bits))"
+end
+function _read_format(text::AbstractString)
+    text == "binary16" && return IEEE16
+    text == "binary32" && return IEEE32
+    text == "binary64" && return IEEE64
+    parts = match(r"^float\((\d+),(\d+)\)$", text)
+    parts === nothing && throw(ArgumentError("unsupported floating format: $text"))
+    return FloatFormat(parse(Int, parts[1]), parse(Int, parts[2]))
+end
+_read_format(value) = throw(ArgumentError("expected a floating format name"))
+
+function _spec_data(s::FunctionSpec)
+    spec = Dict{String,Any}("expression" => s.expression,
+        "input_format" => _format_data(s.input_format), "absolute_error" => _rational_text(s.absolute_error))
+    s.output_format == s.input_format || (spec["output_format"] = _format_data(s.output_format))
+    s.domain === nothing || (spec["domain"] = _rational_text.(collect(s.domain)))
+    return spec
+end
+
+function _plan_data(p::PlanArtifact)
+    d = Dict{String,Any}("schema" => "presage-plan", "schema_version" => _SCHEMA_VERSION,
+        "status" => string(p.status), "spec" => _spec_data(p.spec))
+    isempty(p.settings) || (d["settings"] = p.settings)
+    if !isempty(p.segments)
+        d["segments"] = [Dict("lower" => _rational_text(t.lower), "upper" => _rational_text(t.upper),
+                              "coefficients" => _rational_text.(t.coefficients)) for t in p.segments]
+    end
+    if p.dispatch !== nothing
+        b = p.dispatch
+        d["dispatch"] = Dict("kind" => "magnitude_tail", "comparison" => string(b.comparison),
+            "threshold_bits" => hex_bits(b.magnitude_threshold, p.spec.input_format),
+            "positive_tail" => _rational_text(b.positive_tail),
+            "negative_tail" => _rational_text(b.negative_tail))
+    end
+    return d
+end
+
+"""Write versioned TOML; numerical payloads are exact rational strings or IEEE bits."""
+write_plan(io::IO, p::PlanArtifact) = TOML.print(io, _plan_data(p); sorted=true)
+write_plan(path::AbstractString, p::PlanArtifact) = open(io -> write_plan(io, p), path, "w")
+
+function _read_plan(d)
+    d["schema"] == "presage-plan" || throw(ArgumentError("unknown plan schema"))
+    d["schema_version"] isa Integer && !(d["schema_version"] isa Bool) &&
+        d["schema_version"] == _SCHEMA_VERSION || throw(ArgumentError("unsupported plan schema version"))
+    s = d["spec"]
+    domain = if haskey(s, "domain")
+        length(s["domain"]) == 2 || throw(ArgumentError("need two domain bounds"))
+        Tuple(_parse_rational.(s["domain"]))
+    else
+        nothing
+    end
+    spec = FunctionSpec(s["expression"]; input_format=_read_format(s["input_format"]),
+        output_format=_read_format(get(s, "output_format", s["input_format"])),
+        absolute_error=_parse_rational(s["absolute_error"]), domain)
+    dispatch = if haskey(d, "dispatch")
+        b = d["dispatch"]
+        b["kind"] == "magnitude_tail" || throw(ArgumentError("unsupported dispatch"))
+        occursin(r"^0x[0-9a-fA-F]+$", b["threshold_bits"]) || throw(ArgumentError("invalid threshold bits"))
+        Dispatch(parse(UInt64, b["threshold_bits"][3:end]; base=16);
+            comparison=Symbol(b["comparison"]), positive_tail=_parse_rational(b["positive_tail"]),
+            negative_tail=_parse_rational(b["negative_tail"]))
+    else
+        nothing
+    end
+    segments = Segment[]
+    for t in get(d, "segments", [])
+        push!(segments, Segment(_parse_rational(t["lower"]), _parse_rational(t["upper"]),
+                               _parse_rational.(t["coefficients"])))
+    end
+    return PlanArtifact(spec; status=Symbol(d["status"]), dispatch, segments,
+                        settings=get(d, "settings", Dict{String,String}()))
+end
+read_plan(io::IO) = _read_plan(TOML.parse(read(io, String)))
+read_plan(path::AbstractString) = _read_plan(TOML.parsefile(path))

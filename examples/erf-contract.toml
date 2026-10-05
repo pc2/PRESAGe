@@ -1,0 +1,8 @@
+schema = "presage-plan"
+schema_version = 1
+status = "contract"
+
+[spec]
+expression = "erf(x)"
+input_format = "binary32"
+absolute_error = "1/8388608"
