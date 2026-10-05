@@ -7,14 +7,14 @@ Base.showerror(io::IO, e::ReferenceFailure) = print(io, "reference ", e.index, "
     e.result.status, " (", e.result.detail, ")")
 
 function _read_word(bytes, offset::Int, size::Int, order::Symbol)
-    value = UInt64(0)
+    value = size <= 8 ? UInt64(0) : BigInt(0)
     for k in 0:size-1
         shift = order == :little ? 8k : 8(size-1-k)
-        value |= UInt64(bytes[offset+k]) << shift
+        value |= (size <= 8 ? UInt64(bytes[offset+k]) : BigInt(bytes[offset+k])) << shift
     end
     return value
 end
-function _write_word(io::IO, value::UInt64, size::Int, order::Symbol)
+function _write_word(io::IO, value::Integer, size::Int, order::Symbol)
     for k in 0:size-1
         shift = order == :little ? 8k : 8(size-1-k)
         write(io, UInt8((value >> shift) & 0xff))
@@ -24,7 +24,7 @@ end
 function _reference_stream(input::IO, output::IO, statuses::IO, oracle::ReferenceOracle;
                            chunk_elements::Int, byteorder::Symbol, summary::Dict)
     infmt, outfmt = oracle.spec.input_format, oracle.spec.output_format
-    insize, outsize = div(_width(infmt), 8), div(_width(outfmt), 8)
+    insize, outsize = _word_bytes(infmt), _word_bytes(outfmt)
     println(statuses, "index\tinput_bits\toutput_bits\tstatus\tprecision\tdetail")
     while true
         bytes = read(input, chunk_elements * insize)
@@ -63,10 +63,9 @@ An existing output is refused. No process-global BigFloat settings are changed.
 function generate_references(spec::FunctionSpec, input_path::AbstractString, output_path::AbstractString;
                              chunk_elements::Integer=4096, byteorder::Symbol=:little,
                              backend::Symbol=:sollya, config::OracleConfig=OracleConfig())
-    1 <= chunk_elements <= typemax(Int) ÷ 8 || throw(ArgumentError("invalid chunk size"))
+    insize,outsize = _word_bytes(spec.input_format),_word_bytes(spec.output_format)
+    1 <= chunk_elements <= typemax(Int) ÷ insize || throw(ArgumentError("invalid chunk size"))
     byteorder in (:little, :big) || throw(ArgumentError("byteorder must be :little or :big"))
-    _width(spec.input_format) % 8 == 0 && _width(spec.output_format) % 8 == 0 ||
-        throw(ArgumentError("binary streams require byte-aligned formats"))
     input, output = abspath(input_path), abspath(output_path)
     input == output && throw(ArgumentError("input and output must differ"))
     isfile(input) || throw(ArgumentError("input file not found"))
@@ -75,7 +74,8 @@ function generate_references(spec::FunctionSpec, input_path::AbstractString, out
     end
     mkpath(dirname(output))
     summary = Dict{String,Any}(
-        "schema" => "presage-reference-stream", "schema_version" => 1, "complete" => false,
+        "schema" => "presage-reference-stream", "schema_version" =>
+            (spec.input_format isa FixedFormat || spec.output_format isa FixedFormat ? 2 : 1), "complete" => false,
         "input_path" => input, "output_path" => output, "byteorder" => string(byteorder),
         "input_format" => _format_data(spec.input_format), "output_format" => _format_data(spec.output_format),
         "expression" => spec.expression,
@@ -84,6 +84,10 @@ function generate_references(spec::FunctionSpec, input_path::AbstractString, out
         "chunk_elements" => Int(chunk_elements), "maximum_chunk_elements" => 0,
         "inputs_read" => 0, "outputs_written" => 0, "maximum_precision" => 0,
         "status_counts" => Dict{String,Int}())
+    if spec.input_format isa FixedFormat || spec.output_format isa FixedFormat
+        summary["input_word_bytes"],summary["output_word_bytes"] = insize,outsize
+        summary["padding"] = "zero_high_bits"
+    end
     spec.domain === nothing || (summary["domain"] = _rational_text.(collect(spec.domain)))
     temporary, tmpio = mktemp(dirname(output))
     try

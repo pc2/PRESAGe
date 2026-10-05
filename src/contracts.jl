@@ -1,16 +1,17 @@
 """
 Function, formats, finite-input domain and exact absolute error target.
 The output format defaults to the input format; `domain=nothing` means all
-finite inputs. Standard special-value behavior is shared by all specifications.
+finite inputs, including every fixed encoding. Fixed outputs have no nonfinite
+encoding; their format declares rounding and overflow behavior.
 """
 struct FunctionSpec
     expression::String
-    input_format::FloatFormat
-    output_format::FloatFormat
+    input_format::Union{FloatFormat,FixedFormat}
+    output_format::Union{FloatFormat,FixedFormat}
     absolute_error::Rational{BigInt}
     domain::Union{Nothing,Tuple{Rational{BigInt},Rational{BigInt}}}
-    function FunctionSpec(expression::AbstractString; input_format::FloatFormat=IEEE32,
-                          output_format::FloatFormat=input_format,
+    function FunctionSpec(expression::AbstractString; input_format::Union{FloatFormat,FixedFormat}=IEEE32,
+                          output_format::Union{FloatFormat,FixedFormat}=input_format,
                           absolute_error::Union{Integer,Rational}=1//(1 << 23),
                           domain=nothing)
         isempty(strip(expression)) && throw(ArgumentError("empty function expression"))
@@ -73,6 +74,7 @@ struct PlanArtifact
                 throw(ArgumentError("program formats differ from the function specification"))
         end
         if dispatch !== nothing
+            spec.input_format isa FloatFormat || throw(ArgumentError("magnitude-tail metadata requires a floating input"))
             t = decode_ieee(dispatch.magnitude_threshold, spec.input_format)
             t.kind == :finite && !t.negative && t.value > 0 ||
                 throw(ArgumentError("dispatch needs a positive finite threshold"))

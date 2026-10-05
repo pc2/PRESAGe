@@ -1,5 +1,12 @@
-// Native ap_fixed/ac_fixed arithmetic and quantization. GMP is used only by
-// the exact fixed-to-IEEE bridge, after extracting the native result's bits.
+// Native ap_fixed/ac_fixed arithmetic and quantization. GMP handles host raw
+// word transport, tracing and exact IEEE conversion; it does not evaluate the
+// native fixed operations.
+template<class T,int Width,class Word> T hls_from_bits(const Word& bits) {
+    Big raw = checked_fixed_bits(bits,Width);
+    T result = 0;
+    for (int bit=0;bit<Width;++bit) result[bit] = mpz_tstbit(raw.get_mpz_t(),bit);
+    return result;
+}
 template<class T,int Width> T hls_bits(const char* hex) {
     T result = 0;
     std::size_t length = 0;

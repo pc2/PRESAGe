@@ -15,21 +15,26 @@ function _nan_guard!(nodes,result,input,f)
     return _push!(nodes,IR.Select(condition,nan,result))
 end
 
-"""Build an uncertified Horner evaluator. Bounded-domain inputs outside the domain return NaN."""
-function polynomial_plan(spec::FunctionSpec,coefficients;internal_format::FloatFormat=spec.output_format,
+"""Uncertified Horner evaluator. Invalid domains return float NaN or reject fixed output."""
+function polynomial_plan(spec::FunctionSpec,coefficients;internal_format::Union{FloatFormat,FixedFormat}=spec.output_format,
                          evaluation::Symbol=:separate)
     f = internal_format
     nodes = IR.Node[IR.Input(spec.input_format)]
     coordinate = f == spec.input_format ? 1 : _push!(nodes,IR.Convert(1,f))
-    words = round_ieee.(_q.(coefficients),Ref(f))
-    cs = [_push!(nodes,IR.Const(f,b)) for b in words]
+    cs = [_push!(nodes,IR.constant(_q(c),f)) for c in coefficients]
     output = _horner!(nodes,coordinate,cs,f,evaluation)
     f == spec.output_format || (output = _push!(nodes,IR.Convert(output,spec.output_format)))
     if spec.domain !== nothing
         lo,hi = spec.domain
-        lower = round_ieee(lo,spec.input_format;mode=:up)
-        upper = round_ieee(hi,spec.input_format;mode=:down)
-        dl,du = decode_ieee(lower,spec.input_format),decode_ieee(upper,spec.input_format)
+        input = spec.input_format
+        if input isa FixedFormat
+            a,b = _fixed_limits(input)
+            lo,hi = max(lo,a*_pow2(-_fraction(input))),min(hi,b*_pow2(-_fraction(input)))
+        end
+        lo <= hi || throw(ArgumentError("domain has no supported representable interval"))
+        lower = input isa FixedFormat ? round_fixed(lo,input;mode=:up) : round_ieee(lo,input;mode=:up)
+        upper = input isa FixedFormat ? round_fixed(hi,input;mode=:down) : round_ieee(hi,input;mode=:down)
+        dl,du = _decode_input(lower,input),_decode_input(upper,input)
         dl.kind in (:zero,:finite) && du.kind in (:zero,:finite) && dl.value <= du.value ||
             throw(ArgumentError("domain has no supported representable interval"))
         l = _push!(nodes,IR.Const(spec.input_format,lower))
@@ -40,8 +45,15 @@ function polynomial_plan(spec::FunctionSpec,coefficients;internal_format::FloatF
         both = _push!(nodes,IR.Select(above,below,falsevalue))
         finite = _push!(nodes,IR.Classify(:finite,1))
         valid = _push!(nodes,IR.Select(finite,both,falsevalue))
-        nan = _push!(nodes,IR.Const(spec.output_format,_nan(spec.output_format)))
-        output = _push!(nodes,IR.Select(valid,output,nan))
+        if spec.output_format isa FixedFormat
+            output = _push!(nodes,IR.Guard(valid,output))
+        else
+            nan = _push!(nodes,IR.Const(spec.output_format,_nan(spec.output_format)))
+            output = _push!(nodes,IR.Select(valid,output,nan))
+        end
+    elseif spec.output_format isa FixedFormat
+        finite = _push!(nodes,IR.Classify(:finite,1))
+        output = _push!(nodes,IR.Guard(finite,output))
     else
         output = _nan_guard!(nodes,output,1,spec.output_format)
     end

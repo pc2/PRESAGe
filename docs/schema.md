@@ -54,7 +54,7 @@ executable definition. In the fresh `erf` candidate, segment coefficients are
 polynomials in the local coordinate encoded by the program. Reading version 1
 artifacts remains supported; a version 1 artifact cannot contain a program.
 
-## Version 3 fixed arithmetic
+## Version 3 internal fixed arithmetic
 
 Programs containing fixed formats use `schema_version = 3`. A fixed format is
 a table containing `kind = "fixed"`, `width`, `integer_bits`, `signed`,
@@ -62,6 +62,22 @@ a table containing `kind = "fixed"`, `width`, `integer_bits`, `signed`,
 Signed words use two's complement. Constants and tables retain exact hexadecimal
 words, including widths beyond 64 bits. Widened products/sums and narrowing
 quantizers are explicit nodes. Versions 1 and 2 remain readable.
+
+## Version 4 fixed interfaces
+
+Fixed input/output contracts and programs use `schema_version = 4`. Their
+`spec.input_format` and optional `spec.output_format` use the same fixed-format
+table as the IR, carrying width, integer bits, signedness, rounding and overflow.
+An omitted output format still means the complete input format. `domain` omitted
+means every representable fixed input. Versions 1–3 retain their meanings.
+
+The input node and selected output may be fixed independently, including mixed
+float/fixed interfaces and arbitrary-width fixed words. Version 4 also adds
+`Guard`, which rejects a false domain condition before evaluating its source;
+fixed output cannot encode an outside-domain NaN. Fixed binary words use
+`ceil(width/8)` bytes with zero high padding, never sign extension beyond the
+declared width. References with fixed interfaces use stream schema version 2
+and record word sizes and padding alongside the format tables.
 
 `certificate.toml` uses `schema = "presage-certificate"`, version 1. It records
 the numerical status, target, uniform bound, per-path contributions, exact node

@@ -1,4 +1,4 @@
-const _SCHEMA_VERSION = 3
+const _SCHEMA_VERSION = 4
 _has_fixed(p::IR.Program) = any(f -> f isa FixedFormat,p.types) || any(t -> t.format isa FixedFormat,p.tables)
 _rational_text(q::Rational) = "$(numerator(q))/$(denominator(q))"
 function _parse_rational(text::AbstractString)
@@ -21,6 +21,13 @@ function _read_format(text::AbstractString)
     return FloatFormat(parse(Int, parts[1]), parse(Int, parts[2]))
 end
 _read_format(value) = throw(ArgumentError("expected a floating format name"))
+_format_data(f::FixedFormat) = Dict("kind"=>"fixed","width"=>f.width,"integer_bits"=>f.integer_bits,
+    "signed"=>f.signed,"rounding"=>string(f.rounding),"overflow"=>string(f.overflow))
+function _read_format(d::AbstractDict)
+    d["kind"] == "fixed" || throw(ArgumentError("unsupported arithmetic format"))
+    return FixedFormat(d["width"],d["integer_bits"];signed=d["signed"],
+        rounding=Symbol(d["rounding"]),overflow=Symbol(d["overflow"]))
+end
 
 function _spec_data(s::FunctionSpec)
     spec = Dict{String,Any}("expression" => s.expression,
@@ -31,7 +38,9 @@ function _spec_data(s::FunctionSpec)
 end
 
 function _plan_data(p::PlanArtifact)
-    version = p.program === nothing ? 1 : _has_fixed(p.program) ? 3 : 2
+    fixedio = p.spec.input_format isa FixedFormat || p.spec.output_format isa FixedFormat
+    guarded = p.program !== nothing && any(n -> n isa IR.Guard,p.program.nodes)
+    version = fixedio || guarded ? 4 : p.program === nothing ? 1 : _has_fixed(p.program) ? 3 : 2
     d = Dict{String,Any}("schema" => "presage-plan", "schema_version" => version,
         "status" => string(p.status), "spec" => _spec_data(p.spec))
     isempty(p.settings) || (d["settings"] = p.settings)
@@ -69,6 +78,8 @@ function _read_plan(d)
     spec = FunctionSpec(s["expression"]; input_format=_read_format(s["input_format"]),
         output_format=_read_format(get(s, "output_format", s["input_format"])),
         absolute_error=_parse_rational(s["absolute_error"]), domain)
+    d["schema_version"] < 4 && (spec.input_format isa FixedFormat || spec.output_format isa FixedFormat) &&
+        throw(ArgumentError("fixed input/output requires schema v4"))
     dispatch = if haskey(d, "dispatch")
         b = d["dispatch"]
         b["kind"] == "magnitude_tail" || throw(ArgumentError("unsupported dispatch"))
@@ -87,6 +98,8 @@ function _read_plan(d)
     program = haskey(d,"program") ? _read_program(d["program"]) : nothing
     program !== nothing && _has_fixed(program) && d["schema_version"] < 3 &&
         throw(ArgumentError("fixed arithmetic requires schema v3"))
+    program !== nothing && any(n -> n isa IR.Guard,program.nodes) && d["schema_version"] < 4 &&
+        throw(ArgumentError("domain guards require schema v4"))
     return PlanArtifact(spec; status=Symbol(d["status"]), dispatch, segments,
                         settings=get(d, "settings", Dict{String,String}()),
                         program)

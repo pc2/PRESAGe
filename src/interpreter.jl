@@ -102,19 +102,19 @@ end
 
 """Output bits and the values of nodes actually executed, including table indices."""
 struct EvaluationTrace
-    bits::UInt64
+    bits::Union{UInt64,BigInt}
     values::Dict{Int,Any}
 end
 
 function _interpret(p::IR.Program,bits::Integer,trace::Bool)
     inputformat = IR.format(p,p.input)
-    decode_ieee(bits,inputformat) # Validate width before executing anything.
+    _decode_input(bits,inputformat) # Validate width before executing anything.
     values = Dict{Int,Any}()
     function visit(index::Int)
         haskey(values,index) && return values[index]
         n,f = p.nodes[index],IR.format(p,index)
         v = if n isa IR.Input
-            _float(bits,f)
+            _stored(bits,f)
         elseif n isa IR.Const
             f isa Union{FloatFormat,FixedFormat} ? _stored(n.bits,f) : f == Bool ? n.bits != 0 : n.bits
         elseif n isa IR.TableLoad
@@ -137,6 +137,9 @@ function _interpret(p::IR.Program,bits::Integer,trace::Bool)
             _compare(n.predicate,visit(n.a),visit(n.b))
         elseif n isa IR.Select
             visit(visit(n.condition) ? n.yes : n.no)
+        elseif n isa IR.Guard
+            visit(n.condition) || throw(DomainError(bits,"input outside declared domain"))
+            visit(n.source)
         elseif n isa IR.BitCast
             source = visit(n.source)
             f isa FloatFormat ? _float(source,f) : source.bits

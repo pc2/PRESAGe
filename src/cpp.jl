@@ -4,6 +4,17 @@ _cpp_type(::IR.UIntFormat) = "std::uint64_t"
 _cpp_type(::Type{Bool}) = "bool"
 _cpp_storage(f::FloatFormat) = f == IEEE32 ? "std::uint32_t" : f == IEEE64 ? "std::uint64_t" :
     throw(ArgumentError("unsupported CPU format"))
+_cpp_storage(f::FixedFormat) = f.width <= 64 ? "std::uint64_t" : "Big"
+function _cpp_decode_bits(expression,f,backend)
+    f isa FloatFormat && return "std::bit_cast<$(_cpp_type(f))>($expression)"
+    backend != :portable && return "hls_from_bits<$(_cpp_type(f,backend)),$(f.width)>($expression)"
+    return "integer_cast<$(_cpp_type(f))>(fixed_units_from_bits($expression,$(f.width),$(f.signed)))"
+end
+function _cpp_encode_bits(expression,f,backend)
+    f isa FloatFormat && return "std::bit_cast<$(_cpp_storage(f))>($expression)"
+    units = backend == :portable ? "integer($expression)" : "hls_units<$(f.width),$(f.signed)>($expression)"
+    return "fixed_bits_from_units<$(_cpp_storage(f))>($units,$(f.width),$(f.signed))"
+end
 _cpp_hex(bits) = "0x"*string(UInt64(bits);base=16)*"ULL"
 function _cpp_name(name::AbstractString)
     occursin(r"^[A-Za-z][A-Za-z_0-9]*$",name) || throw(ArgumentError("name must be a simple identifier"))
@@ -25,7 +36,7 @@ function _cpp_expr(p,i,backend=:portable)
         return backend == :portable ? _cpp_fixed_expr(p,i) : _cpp_vendor_expr(p,i,backend)
     end
     if n isa IR.Input
-        return "std::bit_cast<$(_cpp_type(f))>(input)"
+        return _cpp_decode_bits("input",f,backend)
     elseif n isa IR.Const
         return _cpp_constant(n.bits,f,backend)
     elseif n isa IR.TableLoad
@@ -45,6 +56,8 @@ function _cpp_expr(p,i,backend=:portable)
         return "($(call(n.a)) $op $(call(n.b)))"
     elseif n isa IR.Select
         return "($(call(n.condition)) ? $(call(n.yes)) : $(call(n.no)))"
+    elseif n isa IR.Guard
+        return "([&]() { if (!$(call(n.condition))) throw std::domain_error(\"input outside declared domain\"); return $(call(n.source)); }())"
     elseif n isa IR.BitCast
         if f isa FloatFormat
             return "std::bit_cast<$(_cpp_type(f))>(static_cast<$(_cpp_storage(f))>($(call(n.source))))"
@@ -87,6 +100,8 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator",backend:
         throw(ArgumentError("fixed format exceeds CPU index range"))
     inputformat,outputformat = IR.format(p,p.input),IR.format(p)
     inputtype,outputtype = _cpp_storage(inputformat),_cpp_storage(outputformat)
+    rounding_check = any(f -> f isa FloatFormat,p.types) ?
+        "if (std::fegetround() != FE_TONEAREST) throw std::runtime_error(\"PRESAGe requires FE_TONEAREST\");" : ""
     println(io,"""
     #pragma once
     #include <bit>
@@ -119,6 +134,9 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator",backend:
     }
     struct Context {
         $inputtype input;
+        explicit Context($inputtype bits) : input(bits) {
+            $(inputformat isa FixedFormat ? "checked_fixed_bits(input,$(inputformat.width));" : "")
+        }
     """)
     for (i,t) in enumerate(p.tables)
         if t.format isa FixedFormat
@@ -132,6 +150,7 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator",backend:
     for (i,f) in enumerate(p.types)
         println(io,"    bool ready$i = false; $(_cpp_type(f,backend)) value$i{};")
     end
+    println(io,"    $outputtype output_bits() { return $(_cpp_encode_bits("n$(p.output)()",outputformat,backend)); }")
     for (i,f) in enumerate(p.types)
         println(io,"    $(_cpp_type(f,backend)) n$i() {\n        if (!ready$i) { value$i = $(expressions[i]); ready$i = true; }\n        return value$i;\n    }")
         if f isa FixedFormat
@@ -142,12 +161,14 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator",backend:
     println(io,"""
     };
     inline $outputtype evaluate_bits($inputtype bits) {
-        if (std::fegetround() != FE_TONEAREST) throw std::runtime_error("PRESAGe requires FE_TONEAREST");
+        $rounding_check
         Context context{bits};
-        return std::bit_cast<$outputtype>(context.n$(p.output)());
+        return context.output_bits();
     }
-    inline $(_cpp_type(outputformat)) evaluate($(_cpp_type(inputformat)) x) {
-        return std::bit_cast<$(_cpp_type(outputformat))>(evaluate_bits(std::bit_cast<$inputtype>(x)));
+    inline $(_cpp_type(outputformat,backend)) evaluate($(_cpp_type(inputformat,backend)) x) {
+        $rounding_check
+        Context context{$(_cpp_encode_bits("x",inputformat,backend))};
+        return context.n$(p.output)();
     }
     } // namespace $ns
     """)
@@ -159,8 +180,13 @@ emit_cpp(path::AbstractString,p::IR.Program;kwargs...) = open(io -> emit_cpp(io,
 function emit_harness(io::IO,p::IR.Program;name::AbstractString="evaluator",header::AbstractString="evaluator.hpp")
     occursin(r"^[A-Za-z0-9_.-]+$",header) || throw(ArgumentError("header must be a simple filename"))
     ns = _cpp_name(name)
-    inbytes,outbytes = div(_width(IR.format(p,p.input)),8),div(_width(IR.format(p)),8)
-    intype = _cpp_storage(IR.format(p,p.input))
+    infmt,outfmt = IR.format(p,p.input),IR.format(p)
+    inbytes,outbytes = _word_bytes(infmt),_word_bytes(outfmt)
+    intype = _cpp_storage(infmt)
+    inputword = infmt isa FixedFormat && infmt.width > 64 ? "$(ns)::Big" : intype
+    outputbyte = outfmt isa FixedFormat && outfmt.width > 64 ?
+        "static_cast<char>($(ns)::Big((result >> (8*k)) & 0xff).get_ui())" :
+        "static_cast<char>((result >> (8*k)) & 0xff)"
     firstload = findfirst(n -> n isa IR.TableLoad,p.nodes)
     index = firstload === nothing ? nothing : p.nodes[firstload].index
     observed = index === nothing ? "std::numeric_limits<std::uint64_t>::max()" :
@@ -192,7 +218,7 @@ function emit_harness(io::IO,p::IR.Program;name::AbstractString="evaluator",head
         std::fesetround(FE_TONEAREST);
         try {
             while (true) {
-                std::uint64_t word = 0;
+                $inputword word = 0;
                 for (int k=0;k<$inbytes;++k) {
                     int byte = std::cin.get();
                     if (byte == EOF) {
@@ -203,11 +229,11 @@ function emit_harness(io::IO,p::IR.Program;name::AbstractString="evaluator",head
                         }
                         throw std::runtime_error("truncated input word");
                     }
-                    word |= std::uint64_t(static_cast<unsigned char>(byte)) << (8*k);
+                    word |= static_cast<$inputword>(static_cast<unsigned int>(byte)) << (8*k);
                 }
-                $(ns)::Context context{static_cast<$intype>(word)};
-                auto result = std::bit_cast<$(_cpp_storage(IR.format(p)))>(context.n$(p.output)());
-                for (int k=0;k<$outbytes;++k) std::cout.put(static_cast<char>((result >> (8*k)) & 0xff));
+                $(ns)::Context context{word};
+                auto result = context.output_bits();
+                for (int k=0;k<$outbytes;++k) std::cout.put($outputbyte);
                 if (trace || fixed_trace) {
                     std::uint64_t index = $observed;
                     for (int k=0;k<8;++k) std::cout.put(static_cast<char>((index >> (8*k)) & 0xff));

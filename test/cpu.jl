@@ -1,11 +1,27 @@
 include(joinpath(@__DIR__,"..","scripts","verify_cpu.jl"))
-function cpu_check(plan,words=verification_inputs(plan);expected_error=nothing,backend=:portable)
+function cpu_check(plan,words=verification_inputs(plan);expected_error=nothing,backend=:portable,public_api=false,input_bytes=nothing)
     compiler = get(ENV,"CXX",Sys.isapple() && isfile("/opt/homebrew/opt/llvm/bin/clang++") ?
                    "/opt/homebrew/opt/llvm/bin/clang++" : "c++")
     mktempdir() do directory
         header,source,exe = joinpath.(Ref(directory),("evaluator.hpp","evaluate.cpp","evaluate"))
         emit_cpp(header,plan;backend)
         emit_harness(source,plan.program)
+        if public_api
+            infmt,outfmt = plan.spec.input_format,plan.spec.output_format
+            decode = PRESAGe._cpp_decode_bits("word",infmt,backend)
+            encode = PRESAGe._cpp_encode_bits("typed",outfmt,backend)
+            replacement = """
+            using namespace presage_evaluator;
+            $(!any(f -> f isa FloatFormat,plan.program.types) ? "std::fesetround(FE_DOWNWARD);" : "")
+            auto result = evaluate_bits(word);
+            auto typed = evaluate($decode);
+            if ($encode != result || context.output_bits() != result)
+                throw std::runtime_error("public evaluator API mismatch");
+            """
+            text = read(source,String)
+            occursin("auto result = context.output_bits();",text) || error("missing harness output call")
+            write(source,replace(text,"auto result = context.output_bits();"=>replacement))
+        end
         gmp = if PRESAGe._has_fixed(plan.program)
             prefix = get(ENV,"GMP_PREFIX",isdir("/opt/homebrew/opt/gmp") ? "/opt/homebrew/opt/gmp" : "")
             isempty(prefix) ? ["-lgmpxx","-lgmp"] : ["-isystem",joinpath(prefix,"include"),"-L"*joinpath(prefix,"lib"),"-lgmpxx","-lgmp"]
@@ -19,8 +35,12 @@ function cpu_check(plan,words=verification_inputs(plan);expected_error=nothing,b
         write_plan(path,plan)
         if expected_error !== nothing
             input = IOBuffer()
-            for word in words
-                PRESAGe._write_word(input,word,div(PRESAGe._width(plan.spec.input_format),8),:little)
+            if input_bytes === nothing
+                for word in words
+                    PRESAGe._write_word(input,word,PRESAGe._word_bytes(plan.spec.input_format),:little)
+                end
+            else
+                write(input,input_bytes)
             end
             seekstart(input)
             output,errors = IOBuffer(),IOBuffer()

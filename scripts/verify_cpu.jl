@@ -3,26 +3,44 @@ using PRESAGe
 
 function verification_inputs(plan;random_count=2048)
     f = plan.spec.input_format
-    sign = PRESAGe._sign(f)
-    words = UInt64[0,sign,1,sign|1,PRESAGe._inf(f),sign|PRESAGe._inf(f),
+    sign = f isa FixedFormat ? BigInt(1)<<(f.width-1) : PRESAGe._sign(f)
+    mask = f isa FixedFormat ? PRESAGe._fixed_mask(f) : PRESAGe._wordmask(f)
+    words = f isa FixedFormat ? BigInt[0,1,mask,sign,sign-1,sign+1] : UInt64[0,sign,1,sign|1,PRESAGe._inf(f),sign|PRESAGe._inf(f),
                    PRESAGe._inf(f)-1,sign|(PRESAGe._inf(f)-1),PRESAGe._nan(f),sign|PRESAGe._nan(f)]
+    filter!(x -> 0 <= x <= mask,words)
     points = Rational{BigInt}[0,1//2,1,2,4,-1//2,-1,-2,-4]
     for s in plan.segments
         append!(points,[s.lower,s.upper,(s.lower+s.upper)/2])
     end
     plan.spec.domain === nothing || append!(points,collect(plan.spec.domain))
     for point in points
-        word = round_ieee(point,f)
-        for b in (word,xor(word,sign))
+        word = if f isa FixedFormat
+            sample = FixedFormat(f.width,f.integer_bits;signed=f.signed,rounding=f.rounding,overflow=:saturate)
+            round_fixed(point,sample)
+        else
+            round_ieee(point,f)
+        end
+        for b in (f isa FixedFormat ? (word,) : (word,xor(word,sign)))
             push!(words,b)
             b > 0 && push!(words,b-1)
-            b < PRESAGe._wordmask(f) && push!(words,b+1)
+            b < mask && push!(words,b+1)
         end
     end
     state = UInt64(0x8baf672eb17227d9)
     for _ in 1:random_count
-        state = state*UInt64(6364136223846793005)+UInt64(1442695040888963407)
-        push!(words,state & PRESAGe._wordmask(f))
+        word = f isa FixedFormat ? BigInt(0) : UInt64(0)
+        for _ in 1:cld(PRESAGe._width(f),64)
+            state = state*UInt64(6364136223846793005)+UInt64(1442695040888963407)
+            word = f isa FixedFormat ? (word<<64)|state : state
+        end
+        push!(words,word & mask)
+    end
+    f isa FixedFormat && f.width <= 12 && append!(words,BigInt.(0:Int(mask)))
+    if plan.spec.output_format isa FixedFormat
+        filter!(words) do word
+            x = PRESAGe._decode_input(word,f)
+            x.kind in (:finite,:zero) && (plan.spec.domain === nothing || plan.spec.domain[1] <= x.value <= plan.spec.domain[2])
+        end
     end
     return unique(words)
 end
@@ -33,14 +51,14 @@ function verify_cpu(plan,executable;words=verification_inputs(plan),
     p === nothing && error("plan has no evaluator")
     firstload = findfirst(n -> n isa IR.TableLoad,p.nodes)
     index = firstload === nothing ? nothing : p.nodes[firstload].index
-    outsize = div(PRESAGe._width(plan.spec.output_format),8)
+    outsize = PRESAGe._word_bytes(plan.spec.output_format)
     fixed = trace_fixed ? [(i,f) for (i,f) in enumerate(p.types) if f isa FixedFormat] : []
     stride = outsize+8+sum((1+cld(f.width,8) for (_,f) in fixed);init=0)
     mktempdir() do directory
         input,output = joinpath(directory,"input.bin"),joinpath(directory,"output.bin")
         open(input,"w") do io
             for word in words
-                PRESAGe._write_word(io,word,div(PRESAGe._width(plan.spec.input_format),8),:little)
+                PRESAGe._write_word(io,word,PRESAGe._word_bytes(plan.spec.input_format),:little)
             end
         end
         option = trace_fixed ? "--trace-fixed" : "--trace-index"

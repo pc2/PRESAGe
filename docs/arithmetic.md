@@ -1,7 +1,7 @@
 # Arithmetic and CPU evaluators
 
-An `IR.Program` is a validated, immutable arithmetic graph with one floating
-input and one floating output. Nodes reference earlier nodes by one-based
+An `IR.Program` is a validated, immutable arithmetic graph with one float/fixed
+input and one float/fixed output. Nodes reference earlier nodes by one-based
 indices. Tables contain exact bit payloads and use zero-based row indices.
 
 ```julia
@@ -29,7 +29,8 @@ endpoints are rounded inward for input comparisons.
 | `FMA` | Exact product plus sum, followed by one rounding. |
 | `Convert`, `Quantize` | Explicit float/fixed conversions, fractional quantisation and overflow policy. |
 | `ScalePow2` | Multiply by an exact power of two, then round once. |
-| `Compare`, `Classify`, `Select` | IEEE comparisons and classification; only the selected branch executes. |
+| `Compare`, `Classify`, `Select` | Arithmetic comparisons and classification; only the selected branch executes. |
+| `Guard` | Reject a false domain condition before evaluating its arithmetic source. |
 | `BitCast`, `ExtractBits`, `BitOp` | Equal-width float/unsigned bit casts, field extraction, masked unsigned operations. Shifts at or above the operand width return zero. |
 
 Floating arithmetic operands must have the node's format; insert conversions explicitly.
@@ -40,6 +41,15 @@ modes and reject/saturate/wrap overflow. Fixed values have no signed zero or
 nonfinite encodings; converting NaN/infinity to fixed raises an error.
 Unsigned values use `IR.UIntFormat(W)` for widths 1–64; conditions use `Bool`.
 Table `banks` and `unroll` are implementation metadata and do not alter values.
+
+`FunctionSpec` supports either format independently for input and output; output
+defaults to input. `domain=nothing` covers every fixed encoding. `IR.Input` loads
+fixed bits exactly, without quantization. Fixed output bits use the declared
+result format. Invalid input widths are rejected even if the graph does not use
+the input. `polynomial_plan` supports fixed internal arithmetic as well; users
+must select sufficient widths. It derives inward domain thresholds from the
+representable grid. Floating output returns NaN outside a bounded domain; fixed
+output uses `Guard` to reject those inputs. Fixed outputs never invent a NaN word.
 
 The interpreter uses exact integer/rational arithmetic with nearest-even,
 toward-zero, upward or downward rounding. It supports binary16/32/64 and the
@@ -55,10 +65,18 @@ table-index nodes can be inspected to check dispatch.
 The C++20 emitter supports binary32/binary64 floating arithmetic with nearest-even
 rounding, plus exact fixed arithmetic and directed fixed conversions. Compile with
 `-ffp-contract=off -fno-fast-math -frounding-math`, retain gradual underflow and
-use `FE_TONEAREST`. The public evaluator checks the rounding mode. `std::fma`
+use `FE_TONEAREST` when floating nodes are present. `std::fma`
 implements explicit FMA; separate nodes retain separate rounding. Bit conversion
 uses `std::bit_cast`. Per-call cached nodes preserve shared computations and lazy
 branches without process-global state.
+
+The raw `evaluate_bits` interface accepts/returns `std::uint64_t` for fixed widths
+up to 64, and `mpz_class` for wider fixed words. Fixed high padding bits are zero
+and checked on input. The typed `evaluate` interface accepts/returns the selected
+library's fixed types. In the portable backend, fixed values are scaled integer
+units in native integers or GMP. A typed portable input must fit its declared
+format. Programs containing floating nodes require `FE_TONEAREST`; pure fixed
+programs are independent of host floating rounding.
 
 Fixed fields use native 64/128-bit integers where their widths fit. Products,
 aligned sums and FMA use widened native temporaries when their complete ranges

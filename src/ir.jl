@@ -4,7 +4,7 @@ using ..PRESAGe: FloatFormat, FixedFormat, _wordmask, round_ieee, round_fixed, _
 
 export UIntFormat, Node, Input, Const, Table, TableLoad, Mul, Add, FMA, Convert,
        Quantize, Compare, Select, BitCast, ExtractBits, BitOp, ScalePow2,
-       Classify, Program, constant, format
+       Classify, Guard, Program, constant, format
 
 struct UIntFormat
     width::Int
@@ -28,7 +28,7 @@ _rounding(mode) = mode in (:nearest_even,:toward_zero,:up,:down) ? mode :
 
 abstract type Node end
 struct Input <: Node
-    format::FloatFormat
+    format::ArithmeticFormat
 end
 struct Const <: Node
     format::Type
@@ -98,6 +98,11 @@ struct Select <: Node
     yes::Int
     no::Int
 end
+"""Reject a false domain condition; evaluate the source only when true."""
+struct Guard <: Node
+    condition::Int
+    source::Int
+end
 struct BitCast <: Node
     source::Int
     format::Union{FloatFormat,UIntFormat}
@@ -134,6 +139,7 @@ refs(::Union{Input,Const}) = ()
 refs(n::Union{Mul,Add,Compare,BitOp}) = (n.a,n.b)
 refs(n::FMA) = (n.a,n.b,n.c)
 refs(n::Select) = (n.condition,n.yes,n.no)
+refs(n::Guard) = (n.condition,n.source)
 refs(n::Union{Convert,Quantize,BitCast,ExtractBits,ScalePow2,Classify}) = (n.source,)
 refs(n::TableLoad) = (n.index,)
 
@@ -167,6 +173,10 @@ function _type(n::Node, types, tables)
         types[n.condition] == Bool || throw(ArgumentError("select condition must be Boolean"))
         types[n.yes] == types[n.no] || throw(ArgumentError("select branch types differ"))
         return types[n.yes]
+    elseif n isa Guard
+        types[n.condition] == Bool || throw(ArgumentError("guard condition must be Boolean"))
+        types[n.source] isa ArithmeticFormat || throw(ArgumentError("guard needs an arithmetic source"))
+        return types[n.source]
     elseif n isa BitCast
         source = types[n.source]
         source isa Union{FloatFormat,UIntFormat} && _width(source) == _width(n.format) || throw(ArgumentError("bitcast widths differ"))
@@ -191,7 +201,7 @@ function _type(n::Node, types, tables)
     throw(ArgumentError("unsupported IR node"))
 end
 
-"""Validated immutable DAG with one floating input and a floating output."""
+"""Validated immutable DAG with one float/fixed input and float/fixed output."""
 struct Program
     nodes::Tuple{Vararg{Node}}
     tables::Tuple{Vararg{Table}}
@@ -210,7 +220,7 @@ struct Program
             push!(types,_type(n,types,ts))
         end
         length(inputs) == 1 || throw(ArgumentError("program needs exactly one input"))
-        types[output] isa FloatFormat || throw(ArgumentError("output must be floating"))
+        types[output] isa ArithmeticFormat || throw(ArgumentError("output must be floating or fixed"))
         new(ns,ts,Int(output),only(inputs),Tuple(types))
     end
 end

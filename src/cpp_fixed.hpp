@@ -25,6 +25,27 @@ template<class T> T integer_cast(const Big& x) {
         return static_cast<T>(x < 0 ? -value : value);
     }
 }
+template<class T> Big checked_fixed_bits(const T& bits,int width) {
+    Big raw = integer(bits);
+    if (raw < 0 || raw >= (Big(1) << width))
+        throw std::invalid_argument("bits exceed fixed format width");
+    return raw;
+}
+template<class T> Big fixed_units_from_bits(const T& bits,int width,bool is_signed) {
+    Big raw = checked_fixed_bits(bits,width);
+    if (is_signed && mpz_tstbit(raw.get_mpz_t(),width-1)) raw -= Big(1) << width;
+    return raw;
+}
+template<class Word,class T> Word fixed_bits_from_units(const T& value,int width,bool is_signed) {
+    Big units = integer(value);
+    Big modulus = Big(1) << width;
+    Big lower = is_signed ? -(modulus >> 1) : Big(0);
+    Big upper = is_signed ? Big((modulus >> 1)-1) : Big(modulus-1);
+    if (units < lower || units > upper)
+        throw std::invalid_argument("fixed input value exceeds declared format");
+    if (units < 0) units += modulus;
+    return integer_cast<Word>(units);
+}
 inline Big rounded_shift(Big x,std::int64_t shift,int mode) {
     if (x == 0) return x;
     if (shift >= 0) return x << static_cast<mp_bitcnt_t>(shift);

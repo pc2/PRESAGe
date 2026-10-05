@@ -30,5 +30,14 @@ include(joinpath(@__DIR__,"..","scripts","certify.jl"))
             @test occursin("#include <$backend.h>",read(joinpath(generated,"evaluator.hpp"),String))
             @test TOML.parsefile(joinpath(generated,"certificate.toml"))["status"] == "certified"
         end
+        fixed = polynomial_plan(FunctionSpec("x";input_format=FixedFormat(9,4)),[0,1])
+        fixedpath = joinpath(directory,"fixed.toml")
+        write_plan(fixedpath,fixed)
+        generate_main([fixedpath,generated])
+        @test read_plan(joinpath(generated,"plan.toml")).spec.input_format == fixed.spec.input_format
+        @test !isfile(joinpath(generated,"certificate.toml"))
+        @test occursin("#include <ac_fixed.h>",read(joinpath(generated,"evaluator.hpp"),String))
+        @test_throws ErrorException generate_main([fixedpath,generated,"--certify"])
+        @test TOML.parsefile(joinpath(generated,"certificate-failure.toml"))["status"] == "unsupported_domain"
     end
 end

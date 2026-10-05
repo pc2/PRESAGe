@@ -8,7 +8,7 @@ use each Julia installation's own MPFR/GMP runtime.
 ## Results
 
 The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **135,762 checks on both Julia 1.10.12 and Julia 1.13.1**, with four
+passes **161,034 checks on both Julia 1.10.12 and Julia 1.13.1**, with four
 threads. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
@@ -24,9 +24,12 @@ coverage or numerical certificates.
 | Fresh erf candidate | 2,125 | Exact stored coefficients; bit/table conformance; boundary rows and neighbours; special branches; enclosed sampled accuracy; IEEE32 internal FMA variant conformance. |
 | Exact fixed arithmetic | 1,568 | Exhaustive small-format encoding round trips and widened arithmetic; signed/unsigned quantization; ties; all rounding/overflow policies; huge scaling; arbitrary-width schema v3 words. |
 | Fixed CPU conformance | 37 | Exact IEEE32/64 conversions; native/GMP products, sums and FMA; directed rounding; actual wrap/saturate/reject cases; classification evaluation; scale extremes; binary64 subnormal/midpoint conversions. Every visited fixed payload is checked. |
+| Fixed I/O contracts, execution and references | 25,143 | Fixed/mixed schema v4 round trips; exhaustive small input words against exact affine mathematics under every output policy; domain guards; exact-input precision limits; 512 fixed erf inputs through Sollya/MPFR; explicit domain/pole/overflow failures; wrap enclosure aliasing and enormous exponents. |
+| Fixed I/O binary streams and commands | 46 | Both byte orders; 9/137-bit fixed words; padding/word metadata; CLI mixed widths; rejection of invalid padding, truncated words and nonfinite/overflow references without publishing binary output. |
+| Fixed I/O CPU conformance | 78 | All three backends; exhaustive small fixed interfaces; signed/unsigned widths through 137 bits; raw and typed public APIs; pure fixed execution with FE_DOWNWARD; output policies; mixed interfaces; guarded domains; invalid padding even with unused input; empty/truncated streams; fixed tables and index traces. |
 | Native vendor fixed arithmetic | 48 | Both `ap_fixed` and `ac_fixed` compiled with ordinary LLVM C++20; 16,384 matrix cases per library; mixed signedness/scales; all rounding modes, wrap/saturation and rejection after rounding; every visited fixed payload; 31/80-bit separate/FMA erf; finite IEEE32/64 range and lazy specials; scaling and width limits. |
 | Uniform fixed erf certificates | 2,346 | Every fixed node's range; complete graph audit; uniform error contributions/tails; CPU bits/rows; sampled MPFR checks against the certified bound; rejected graph/metadata changes; width-search failure; wide separate/FMA certificates. |
-| Certified generation commands | 21 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal, option validation. |
+| Certified generation commands | 26 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal, option validation; fixed-interface candidates and refusal of unsupported certification. |
 
 In particular, `exp` at IEEE32 input `0xc2af0001` resolves to output
 **`0x006cb285`** through both backends at 256 bits. Exact rational midpoint
@@ -80,6 +83,23 @@ unused, conflicting legacy `std::complex` specializations. Upstream files remain
 unchanged. This repository supplies simulation code and excludes synthesis
 support. These checks establish local conformance for the tested public headers;
 installed HLS headers and generated synthesis code require their own gate.
+
+## Fixed interfaces
+
+Contracts, IR input/output, the exact interpreter, oracle, streams and C++ now
+support independent float/fixed input and output formats. Signed and unsigned
+words are tested at widths 1, 7, 64, 65 and 137 in the portable, `ap_fixed` and
+`ac_fixed` backends. Fixed affine kernels exhaust 9-bit inputs. Public typed and
+raw APIs match the interpreter, including arithmetic under host `FE_DOWNWARD`
+for pure fixed graphs. Domain rejection is lazy, and width validation executes
+even when the graph does not use the input.
+
+The [fixed polynomial example](../examples/fixed_polynomial.jl) was generated,
+compiled through CMake and checked through CTest with both vendor backends.
+Each build matches output bits and fixed intermediates on all **512 inputs**.
+These are exact/exhaustive conformance checks for selected kernels. The uniform
+Sollya evaluator certificate still covers the canonical IEEE32 erf graph;
+generic fixed-interface polynomial certification remains separate work.
 
 ## Floating candidate checks
 
@@ -137,7 +157,8 @@ without it, unavailable vendor test groups are explicitly skipped.
 Uniform certification currently covers the canonical fixed IEEE32 erf graph.
 Floating candidates and other functions do not have complete evaluator
 certificates. The [compact contract](../examples/erf-contract.toml) remains
-unchanged; schema v3 stores fixed programs, and a separate report records the
+unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces;
+a separate report records the
 numerical proof. Floating CPU arithmetic supports binary32/binary64 with
 nearest-even rounding; fixed helpers also support directed conversions.
 Binary16 **encoding and rounding** were exhausted; binary16 transcendental

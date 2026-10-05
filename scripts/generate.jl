@@ -53,7 +53,7 @@ function generate_main(args)
         read_plan(source)
     end
     if !haskey(options,"certify") && source != "erf"
-        certify = plan.program !== nothing && PRESAGe._has_fixed(plan.program)
+        certify = plan.program !== nothing && get(plan.settings,"kernel","") == "erf_fixed_horner"
     end
     if !certify && any(k -> k in ("proof-precision","norm-accuracy"),keys(options))
         error("proof options require certification")

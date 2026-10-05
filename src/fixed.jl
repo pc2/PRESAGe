@@ -1,4 +1,10 @@
 _fraction(f::FixedFormat) = f.width-f.integer_bits
+_width(f::FixedFormat) = f.width
+_input_precision(f::FloatFormat) = f.fraction_bits+1
+_input_precision(f::FixedFormat) = f.width
+_word_bytes(f::FloatFormat) = _width(f)%8 == 0 ? div(_width(f),8) :
+    throw(ArgumentError("floating binary streams require byte-aligned formats"))
+_word_bytes(f::FixedFormat) = cld(f.width,8)
 _fixed_mask(f::FixedFormat) = (BigInt(1)<<f.width)-1
 function _fixed_limits(f::FixedFormat)
     f.signed && return (-(BigInt(1)<<(f.width-1)),(BigInt(1)<<(f.width-1))-1)
@@ -11,6 +17,13 @@ function _fixed_units(bits::Integer,f::FixedFormat)
 end
 """Decode a two's-complement (or unsigned) fixed word to an exact rational."""
 decode_fixed(bits::Integer,f::FixedFormat) = _fixed_units(bits,f)*_pow2(-_fraction(f))
+_decode_input(bits,f::FloatFormat) = decode_ieee(bits,f)
+function _decode_input(bits,f::FixedFormat)
+    q = decode_fixed(bits,f)
+    return DecodedFloat(iszero(q) ? :zero : :finite,q<0,q)
+end
+_round_output(q,f::FloatFormat) = round_ieee(q,f)
+_round_output(q,f::FixedFormat) = round_fixed(q,f)
 function _fixed_pack(units::Integer,f::FixedFormat)
     lo,hi = _fixed_limits(f)
     q = BigInt(units)

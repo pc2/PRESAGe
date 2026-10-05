@@ -7,7 +7,9 @@ Development and numerical verification currently run locally without an FPGA.
 
 The package provides exact IEEE formats and rounding, `FunctionSpec`, versioned
 contract/candidate artifacts, adaptive references, a typed arithmetic IR,
-an exact interpreter and a C++ CPU emitter. The fixed IEEE32 `erf` evaluator has
+an exact interpreter and a C++ CPU emitter. Inputs, outputs, coefficients and
+intermediates can use fixed formats; mixed fixed/floating interfaces are supported.
+The fixed IEEE32 `erf` evaluator has
 a uniform absolute-error certificate covering every finite input. Floating
 candidates and polynomial kernels also run locally.
 The development plan is maintained at
@@ -145,6 +147,37 @@ certifies by default; `--certify=false` emits an unchecked candidate. Pass an
 existing `plan.toml` instead of `erf` to emit its stored program again and rerun
 the supported fixed certificate.
 
+## Fixed input and output
+
+```julia
+using PRESAGe
+
+spec = FunctionSpec("x/2+1/4";
+    input_format=FixedFormat(9,4), output_format=FixedFormat(13,5))
+plan = polynomial_plan(spec, [1//4,1//2]; internal_format=FixedFormat(24,8))
+evaluate_bits(plan, round_fixed(1//2, spec.input_format)) # Encoded fixed output
+write_plan("fixed-plan.toml", plan)
+emit_cpp("evaluator.hpp", plan; backend=:ac_fixed)
+```
+
+Fixed words use two's complement when signed and occupy `ceil(W/8)` bytes.
+Unused high bits must be zero, including for negative values. Words beyond 64
+bits are supported. Output rounding and reject/saturate/wrap behavior come from
+the output format. Outside a bounded domain, a fixed evaluator raises an error.
+
+Run the [complete example](examples/fixed_polynomial.jl):
+
+```sh
+julia --startup-file=no --project=. examples/fixed_polynomial.jl
+julia --startup-file=no --project=. scripts/generate.jl \
+  build/fixed-plan.toml build/fixed --backend=ac_fixed
+```
+
+Polynomial plans are candidates. Stored plans automatically rerun certification
+only for the supported canonical IEEE32 `erf` graph; `--certify=true` explicitly
+requires that proof and rejects unsupported graphs. Fixed I/O is also supported
+by the reference oracle and binary reference CLI.
+
 In Julia, `result = certified_erf()` returns the plan, status and uniform bounds.
 `certify_erf(plan)` checks a stored fixed evaluator. Julia also supports
 `erf_fixed_candidate()`, `erf_candidate()` and
@@ -160,9 +193,16 @@ julia --startup-file=no --project=. scripts/reference.jl \
 
 julia --startup-file=no --project=. scripts/reference.jl \
   exp inputs.bin exp.bin --backend=mpfr --max-precision=4096
+
+julia --startup-file=no --project=. scripts/reference.jl \
+  'erf(x)' fixed-inputs.bin fixed-references.bin \
+  '--input-format=fixed(9,3)' '--output-format=fixed(10,2)'
 ```
 
-Formats are `half`, `single` and `double`. Expressions use Sollya syntax;
+Formats are `half`, `single`, `double`, `fixed(W,I)` and `ufixed(W,I)`.
+`--output-format` defaults to the input format; `--format` remains an input-format
+alias. Fixed output also accepts `--rounding=nearest_even|toward_zero|up|down`
+and `--overflow=reject|saturate|wrap`. Expressions use Sollya syntax;
 primitive names and `recip`, `rsqrt`, `asinpi`, `acospi`, `atanpi` aliases are
 also accepted. Compositions need `--backend=sollya` (the default).
 Outputs have completion metadata and per-input statuses. Unresolved references

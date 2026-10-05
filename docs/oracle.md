@@ -25,7 +25,16 @@ it does not loosen the oracle's rounding decision.
 The rounder supports subnormal outputs, signed zero, ties to even and IEEE
 overflow. Large native exponents are kept as `(significand, exponent)` pairs;
 there is no enormous rational allocation merely to discover underflow or
-overflow. The default output rounding is nearest with ties to even.
+overflow. Floating output rounds nearest with ties to even. Fixed output follows
+its format's rounding and overflow policy. Every fixed input is an exact dyadic
+rational, with one zero encoding and no NaN/infinity; the precision limit must be
+at least its width so direct MPFR receives the input exactly.
+
+For reject overflow, a bound crossing the output range triggers refinement;
+overflow is reported only when proved. Saturation uses monotone endpoint bounds.
+Wrap requires agreement of the unbounded quantized integers before applying the
+modulus: equal wrapped endpoints alone can conceal a whole period. Huge native
+exponents retain bounded-work handling; unresolved wrap cases remain explicit.
 
 Direct MPFR references use Julia's MPFR/GMP ABI. Sollya objects use the native
 library's own runtime. These are never interchanged. No global BigFloat rounding
@@ -40,7 +49,9 @@ algorithm's working precision or wall time. Worker supervision is a later step.
 | --- | --- | --- |
 | `resolved` | Yes | Exact rational value or enclosure endpoints agree. |
 | `special` | Yes | Established exact value, signed zero, infinity or NaN policy. |
-| `domain_error` | Canonical NaN | Known primitive argument is mathematically invalid. |
+| `domain_error` | Float NaN; none for fixed | Known primitive argument is mathematically invalid. |
+| `overflow` | No | The mathematically rounded value exceeds a fixed output using reject overflow. |
+| `nonfinite_output` | No | A known NaN/infinity/pole cannot be encoded by fixed output. |
 | `outside_domain` | No | Input violates the declared finite-input domain. |
 | `unresolved` | No | Precision exhausted or an exceptional identity is unsupported. |
 | `evaluation_failed` | No | Sollya could not obtain usable mathematical bounds. |
@@ -53,11 +64,18 @@ That is a valid outcome, not a reference value.
 
 ## Binary streams
 
-`generate_references` accepts byte-aligned IEEE formats, an explicit `:little`
+`generate_references` accepts byte-aligned floating formats and fixed formats, an explicit `:little`
 or `:big` byte order and a configurable chunk size (default 4096 input words).
 The last chunk may contain fewer complete words. A trailing incomplete word is
 an error. Input buffer storage is bounded by the chunk size, independently of
 dataset length; reference computations are sequential and reuse an oracle.
+
+Fixed words occupy `ceil(W/8)` bytes and use zero high padding. Signed words carry
+two's complement within exactly `W` bits. Invalid padding is rejected, and wide
+words retain all bits. Fixed stream metadata uses schema version 2 and records
+word sizes/padding. Floating stream metadata remains version 1. The CLI accepts
+`--input-format=fixed(W,I)` or `ufixed(W,I)`, `--output-format`, and fixed output
+`--rounding`/`--overflow` controls. Quote parenthesized formats in shell commands.
 
 Alongside `OUTPUT.bin`, it writes:
 
@@ -71,4 +89,5 @@ abort the stream; partial binary scratch data are removed while diagnostic
 sidecars remain with `complete = false`. Known domain-error NaNs are emitted with
 their explicit status. Existing output/sidecars are refused. Readers should
 require a complete manifest and inspect status counts before using a dataset.
-Datasets must remain unchanged during reference generation.
+Fixed domain/overflow/nonfinite failures also abort publication and retain their
+statuses. Datasets must remain unchanged during reference generation.
