@@ -18,14 +18,30 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_COMPILER": "clang++"
       }
+    },
+    {
+      "name": "cpu-macos-ap",
+      "inherits": "cpu-macos",
+      "binaryDir": "${sourceDir}/build/cpu-macos-ap",
+      "cacheVariables": {"PRESAGE_BACKEND": "ap_fixed"}
+    },
+    {
+      "name": "cpu-macos-ac",
+      "inherits": "cpu-macos",
+      "binaryDir": "${sourceDir}/build/cpu-macos-ac",
+      "cacheVariables": {"PRESAGE_BACKEND": "ac_fixed"}
     }
   ],
   "buildPresets": [
     {"name": "cpu-macos", "configurePreset": "cpu-macos"},
-    {"name": "cpu-linux", "configurePreset": "cpu-linux"}
+    {"name": "cpu-linux", "configurePreset": "cpu-linux"},
+    {"name": "cpu-macos-ap", "configurePreset": "cpu-macos-ap"},
+    {"name": "cpu-macos-ac", "configurePreset": "cpu-macos-ac"}
   ],
   "testPresets": [
     {"name": "cpu-macos", "configurePreset": "cpu-macos", "output": {"outputOnFailure": true}},
-    {"name": "cpu-linux", "configurePreset": "cpu-linux", "output": {"outputOnFailure": true}}
+    {"name": "cpu-linux", "configurePreset": "cpu-linux", "output": {"outputOnFailure": true}},
+    {"name": "cpu-macos-ap", "configurePreset": "cpu-macos-ap", "output": {"outputOnFailure": true}},
+    {"name": "cpu-macos-ac", "configurePreset": "cpu-macos-ac", "output": {"outputOnFailure": true}}
   ]
 }

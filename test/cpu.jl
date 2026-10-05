@@ -1,10 +1,10 @@
 include(joinpath(@__DIR__,"..","scripts","verify_cpu.jl"))
-function cpu_check(plan,words=verification_inputs(plan);expected_error=nothing)
+function cpu_check(plan,words=verification_inputs(plan);expected_error=nothing,backend=:portable)
     compiler = get(ENV,"CXX",Sys.isapple() && isfile("/opt/homebrew/opt/llvm/bin/clang++") ?
                    "/opt/homebrew/opt/llvm/bin/clang++" : "c++")
     mktempdir() do directory
         header,source,exe = joinpath.(Ref(directory),("evaluator.hpp","evaluate.cpp","evaluate"))
-        emit_cpp(header,plan)
+        emit_cpp(header,plan;backend)
         emit_harness(source,plan.program)
         gmp = if PRESAGe._has_fixed(plan.program)
             prefix = get(ENV,"GMP_PREFIX",isdir("/opt/homebrew/opt/gmp") ? "/opt/homebrew/opt/gmp" : "")
@@ -12,7 +12,8 @@ function cpu_check(plan,words=verification_inputs(plan);expected_error=nothing)
         else
             String[]
         end
-        run(`$compiler -std=c++20 -O2 -ffp-contract=off -fno-fast-math -frounding-math -Wall -Wextra -Werror $source $gmp -o $exe`)
+        vendor = backend == :portable ? String[] : ["-isystem",vendor_include(backend)]
+        run(`$compiler -std=c++20 -O2 -ffp-contract=off -fno-fast-math -frounding-math -Wall -Wextra -Werror $source $vendor $gmp -o $exe`)
         # Check serialized programs, not just the in-memory generator state.
         path = joinpath(directory,"plan.toml")
         write_plan(path,plan)
@@ -29,6 +30,15 @@ function cpu_check(plan,words=verification_inputs(plan);expected_error=nothing)
         end
         return verify_cpu(read_plan(path),exe;words)
     end
+end
+
+function vendor_include(backend)
+    variable,repository,header = backend == :ap_fixed ?
+        ("PRESAGE_AP_INCLUDE_DIR","HLS_arbitrary_Precision_Types","ap_fixed.h") :
+        ("PRESAGE_AC_INCLUDE_DIR","ac_types","ac_fixed.h")
+    path = get(ENV,variable,normpath(joinpath(@__DIR__,"..","..",repository,"include")))
+    isfile(joinpath(path,header)) || error("$header not found; set $variable to its include directory")
+    return path
 end
 
 @testset "Portable CPU conformance" begin

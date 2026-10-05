@@ -23,5 +23,12 @@ include(joinpath(@__DIR__,"..","scripts","certify.jl"))
         @test_throws ErrorException generate_main(["erf",generated,"--internal=double","--fraction-bits=30"])
         @test_throws ErrorException generate_main(["erf",generated,"--certify=maybe"])
         @test_throws ErrorException generate_main(["erf",generated,"--certify=false","--proof-precision=128"])
+        @test_throws ErrorException generate_main(["erf",generated,"--backend=unknown"])
+        for backend in ("ap_fixed","ac_fixed")
+            generate_main([joinpath(repeated,"plan.toml"),generated,"--backend=$backend"])
+            @test read(joinpath(repeated,"plan.toml")) == read(joinpath(generated,"plan.toml"))
+            @test occursin("#include <$backend.h>",read(joinpath(generated,"evaluator.hpp"),String))
+            @test TOML.parsefile(joinpath(generated,"certificate.toml"))["status"] == "certified"
+        end
     end
 end

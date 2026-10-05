@@ -10,24 +10,24 @@ function _cpp_name(name::AbstractString)
     occursin("__",name) && throw(ArgumentError("reserved identifier"))
     return "presage_"*name
 end
-function _cpp_constant(bits,f)
-    f isa FixedFormat && return _cpp_fixed_constant(bits,f)
+function _cpp_constant(bits,f,backend=:portable)
+    f isa FixedFormat && return backend == :portable ? _cpp_fixed_constant(bits,f) : _cpp_vendor_constant(bits,f,backend)
     f isa FloatFormat && return "std::bit_cast<$(_cpp_type(f))>(static_cast<$(_cpp_storage(f))>($(_cpp_hex(bits))))"
     f == Bool && return bits == 0 ? "false" : "true"
     return _cpp_hex(bits)
 end
 
-function _cpp_expr(p,i)
+function _cpp_expr(p,i,backend=:portable)
     n,f = p.nodes[i],IR.format(p,i)
     call(j) = "n$j()"
     if n isa Union{IR.Mul,IR.Add,IR.FMA,IR.Convert,IR.Quantize,IR.ScalePow2} &&
         (f isa FixedFormat || n isa Union{IR.Convert,IR.Quantize} && IR.format(p,n.source) isa FixedFormat)
-        return _cpp_fixed_expr(p,i)
+        return backend == :portable ? _cpp_fixed_expr(p,i) : _cpp_vendor_expr(p,i,backend)
     end
     if n isa IR.Input
         return "std::bit_cast<$(_cpp_type(f))>(input)"
     elseif n isa IR.Const
-        return _cpp_constant(n.bits,f)
+        return _cpp_constant(n.bits,f,backend)
     elseif n isa IR.TableLoad
         word = "load(table$(n.table),$(call(n.index)))"
         return f isa FloatFormat ? "std::bit_cast<$(_cpp_type(f))>(static_cast<$(_cpp_storage(f))>($word))" : word
@@ -70,11 +70,14 @@ function _cpp_expr(p,i)
     throw(ArgumentError("unsupported emitter node"))
 end
 
-"""Emit a portable C++20 header, preserving explicit separate operations and FMA."""
-function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator")
+"""Emit C++20 with portable, ap_fixed or ac_fixed arithmetic and explicit rounding."""
+function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator",backend::Symbol=:portable)
+    backend in _CPP_BACKENDS || throw(ArgumentError("backend must be portable, ap_fixed or ac_fixed"))
     ns = _cpp_name(name)
-    foreach(_cpp_type,p.types)
-    foreach(t -> _cpp_type(t.format),p.tables)
+    foreach(f -> _cpp_type(f,backend),p.types)
+    foreach(t -> _cpp_type(t.format,backend),p.tables)
+    # Validate all expressions before writing the header, including native widths.
+    expressions = [_cpp_expr(p,i,backend) for i in eachindex(p.nodes)]
     for n in p.nodes
         hasfield(typeof(n),:rounding) && n.rounding != :nearest_even && n.format isa FloatFormat &&
             !(n isa Union{IR.Convert,IR.Quantize} && IR.format(p,n.source) isa FixedFormat) &&
@@ -94,6 +97,7 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator")
     #include <limits>
     #include <stdexcept>
     $(_has_fixed(p) ? "#include <gmpxx.h>\n#include <type_traits>\n#include <algorithm>" : "")
+    $(_has_fixed(p) && backend != :portable ? _cpp_vendor_include(backend) : "")
     namespace $ns {
     static_assert(std::numeric_limits<float>::is_iec559 && std::numeric_limits<float>::digits == 24);
     static_assert(std::numeric_limits<double>::is_iec559 && std::numeric_limits<double>::digits == 53);
@@ -107,6 +111,7 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator")
         return std::isnan(x) ? std::bit_cast<double>(std::uint64_t{0x7ff8000000000000ULL}) : x;
     }
     $(_has_fixed(p) ? read(joinpath(@__DIR__,"cpp_fixed.hpp"),String) : "")
+    $(_has_fixed(p) && backend != :portable ? read(joinpath(@__DIR__,"cpp_vendor.hpp"),String) : "")
     template<class T,std::size_t N>
     inline T load(const T (&table)[N],std::uint64_t index) {
         if (index >= N) throw std::out_of_range("PRESAGe table index");
@@ -117,18 +122,22 @@ function emit_cpp(io::IO,p::IR.Program;name::AbstractString="evaluator")
     """)
     for (i,t) in enumerate(p.tables)
         if t.format isa FixedFormat
-            qualifier = t.format.width > 126 ? "const" : "constexpr"
-            println(io,"    inline static $qualifier $(_cpp_type(t.format)) table$i[] = {",
-                join((_cpp_fixed_constant(v,t.format) for v in t.values),","),"};")
+            qualifier = backend != :portable || t.format.width > 126 ? "const" : "constexpr"
+            println(io,"    inline static $qualifier $(_cpp_type(t.format,backend)) table$i[] = {",
+                join((_cpp_constant(v,t.format,backend) for v in t.values),","),"};")
         else
             println(io,"    inline static constexpr std::uint64_t table$i[] = {",join(_cpp_hex.(t.values),","),"};")
         end
     end
     for (i,f) in enumerate(p.types)
-        println(io,"    bool ready$i = false; $(_cpp_type(f)) value$i{};")
+        println(io,"    bool ready$i = false; $(_cpp_type(f,backend)) value$i{};")
     end
     for (i,f) in enumerate(p.types)
-        println(io,"    $(_cpp_type(f)) n$i() {\n        if (!ready$i) { value$i = $(_cpp_expr(p,i)); ready$i = true; }\n        return value$i;\n    }")
+        println(io,"    $(_cpp_type(f,backend)) n$i() {\n        if (!ready$i) { value$i = $(expressions[i]); ready$i = true; }\n        return value$i;\n    }")
+        if f isa FixedFormat
+            units = backend == :portable ? "integer(value$i)" : "hls_units<$(f.width),$(f.signed)>(value$i)"
+            println(io,"    Big bits$i() const {\n        if (!ready$i) return Big(0);\n        Big raw = $units;\n        if (raw < 0) raw += Big(1) << $(f.width);\n        return raw;\n    }")
+        end
     end
     println(io,"""
     };
@@ -156,13 +165,30 @@ function emit_harness(io::IO,p::IR.Program;name::AbstractString="evaluator",head
     index = firstload === nothing ? nothing : p.nodes[firstload].index
     observed = index === nothing ? "std::numeric_limits<std::uint64_t>::max()" :
         "(context.ready$index ? context.value$index : std::numeric_limits<std::uint64_t>::max())"
+    fixed_trace = IOBuffer()
+    for (i,f) in enumerate(p.types)
+        f isa FixedFormat || continue
+        println(fixed_trace,"""
+        {
+            std::cout.put(context.ready$i ? 1 : 0);
+            auto raw = context.bits$i();
+            for (int byte=0;byte<$(cld(f.width,8));++byte) {
+                unsigned value = 0;
+                for (int bit=0;bit<8;++bit)
+                    if (mpz_tstbit(raw.get_mpz_t(),8*byte+bit)) value |= 1U << bit;
+                std::cout.put(static_cast<char>(value));
+            }
+        }
+        """)
+    end
     println(io,"""
     #include "$header"
     #include <iostream>
     #include <string>
     int main(int argc,char** argv) {
         const bool trace = argc == 2 && std::string(argv[1]) == "--trace-index";
-        if (argc > 1 && !trace) { std::cerr << "expected --trace-index\\n"; return 1; }
+        const bool fixed_trace = argc == 2 && std::string(argv[1]) == "--trace-fixed";
+        if (argc > 1 && !trace && !fixed_trace) { std::cerr << "expected --trace-index or --trace-fixed\\n"; return 1; }
         std::fesetround(FE_TONEAREST);
         try {
             while (true) {
@@ -182,9 +208,12 @@ function emit_harness(io::IO,p::IR.Program;name::AbstractString="evaluator",head
                 $(ns)::Context context{static_cast<$intype>(word)};
                 auto result = std::bit_cast<$(_cpp_storage(IR.format(p)))>(context.n$(p.output)());
                 for (int k=0;k<$outbytes;++k) std::cout.put(static_cast<char>((result >> (8*k)) & 0xff));
-                if (trace) {
+                if (trace || fixed_trace) {
                     std::uint64_t index = $observed;
                     for (int k=0;k<8;++k) std::cout.put(static_cast<char>((index >> (8*k)) & 0xff));
+                }
+                if (fixed_trace) {
+                    $(String(take!(fixed_trace)))
                 }
                 if (!std::cout) throw std::runtime_error("output write failed");
             }

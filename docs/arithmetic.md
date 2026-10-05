@@ -65,11 +65,55 @@ aligned sums and FMA use widened native temporaries when their complete ranges
 fit; wider operations use GMP. Exact quantization and float/fixed conversion
 helpers also use GMP integers. Fixed headers need `gmpxx.h` and linkage with
 `-lgmpxx -lgmp`. The supported CPU compilers are Clang/GCC with native 128-bit
-integers. These helpers model CPU verification; vendor lowering follows later.
+integers. `emit_cpp` defaults to this portable reference backend.
+
+### Fixed backends
+
+```julia
+plan = certified_erf().plan
+emit_cpp("evaluator.hpp", plan; backend=:ac_fixed) # or :ap_fixed / :portable
+```
+
+The generation CLI and fresh CMake builds default to `ac_fixed`. Both native
+backends store fixed fields and tables in the library's fixed types, evaluate
+exact widened products/aligned sums/FMA with those types, and narrow with the
+library's quantizers. Constants are loaded from exact raw bits. IEEE inputs are
+decoded into an exact native fixed value before the library applies rounding;
+this avoids implicit double rounding or loss of subnormals.
+
+| PRESAGe policy | `ap_fixed` / `ac_fixed` implementation |
+| --- | --- |
+| Nearest even | `AP_RND_CONV` / `AC_RND_CONV` |
+| Toward zero | `AP_TRN_ZERO` / `AC_TRN_ZERO` |
+| Down | `AP_TRN` / `AC_TRN` |
+| Up | Floor into a widened native value, then add one quantum if a remainder exists. `RND_INF` is a nearest rounding tie policy and cannot implement this. |
+| Wrap / saturate | `AP_WRAP` / `AC_WRAP`, or `AP_SAT` / `AC_SAT` after quantization. |
+| Reject | Quantize into a safe native width, compare with exact target limits, then cast or throw. Neither library has this overflow policy. |
+
+The final IEEE conversion extracts the native result's bits and uses the exact
+GMP bridge. GMP does not evaluate or quantize native fixed operations. These
+are CPU verification backends; removing the host bridge, diagnostics and trace
+machinery for HLS synthesis is separate work.
+
+Use the public [Xilinx simulation headers](https://github.com/Xilinx/HLS_arbitrary_Precision_Types)
+and [Algorithmic C headers](https://github.com/hlslibs/ac_types). Compile with
+their include directory and GMP linkage. The Xilinx public repository explicitly
+excludes synthesis support. With libc++, the emitter skips its unused legacy
+`std::complex` specializations, whose forward declarations conflict with libc++'s
+inline namespace. Scalar arithmetic headers remain unmodified.
+
+Native widths and absolute integer-bit counts are capped at 4096, including
+widened temporaries and IEEE decoding. Unsupported widths or extreme scales are
+rejected during emission before writing a header. The portable backend retains
+arbitrary-width arithmetic and huge-exponent handling. The `ap_fixed` header
+requires `AP_INT_MAX_W >= 4096`; generated code supplies this default when unset.
 
 The binary harness processes one input word at a time. `--trace-index` adds an
 eight-byte first-table-index field after each output; an unvisited index is
-`UINT64_MAX`. This mode is consumed by the CPU conformance checker.
+`UINT64_MAX`. `--trace-fixed` also appends, for each fixed node in graph order,
+one visitation byte and `ceil(W/8)` little-endian payload bytes, with zero padding.
+Unvisited nodes have zero payload and are not evaluated. The CPU checker uses
+this mode for fixed programs to detect differences hidden by final IEEE rounding.
 
 ## Fresh erf candidate
 

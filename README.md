@@ -1,7 +1,8 @@
 # PRESAGe
 
 Julia planning and verification core for systematic function approximation on
-FPGAs. Generated evaluators use portable C++; vendor backends will follow.
+FPGAs. Generated evaluators use C++ with `ac_fixed` or `ap_fixed` arithmetic,
+with a portable integer backend for reference checks.
 Development and numerical verification currently run locally without an FPGA.
 
 The package provides exact IEEE formats and rounding, `FunctionSpec`, versioned
@@ -22,7 +23,9 @@ set `CXX` and optionally `GMP_PREFIX` for the package tests. The expected worksp
 ```text
 workspace/
 ├── PRESAGe/          # Project.toml, src/, test/, scripts/, docs/
-└── Sollya.jl/        # Local numerical dependency
+├── Sollya.jl/        # Local numerical dependency
+├── ac_types/        # Public Algorithmic C headers
+└── HLS_arbitrary_Precision_Types/ # Public Xilinx simulation headers
 ```
 
 From the **PRESAGe repository root**:
@@ -42,6 +45,21 @@ prefix commands with `JULIA_DEPOT_PATH=/tmp/presage-depot:`.
 Sollya.jl discovers the installed library. Set `SOLLYA_LIBRARY` to an explicit
 shared-library path before the first native call when necessary. Direct MPFR
 references use Julia's own MPFR runtime.
+
+Both fixed libraries are public under Apache 2.0:
+[Algorithmic C types](https://github.com/hlslibs/ac_types) and
+[Xilinx arbitrary precision simulation types](https://github.com/Xilinx/HLS_arbitrary_Precision_Types).
+Place local checkouts beside PRESAGe, or set `PRESAGE_AC_INCLUDE_DIR` and
+`PRESAGE_AP_INCLUDE_DIR` to their `include` directories. Tests run each vendor
+backend when its headers are present; `PRESAGE_REQUIRE_VENDOR_TESTS=true` makes
+missing headers an error. Builds and tests do not download them.
+
+To obtain the official checkouts from the PRESAGe repository root:
+
+```sh
+git clone --depth 1 https://github.com/hlslibs/ac_types.git ../ac_types
+git clone --depth 1 https://github.com/Xilinx/HLS_arbitrary_Precision_Types.git ../HLS_arbitrary_Precision_Types
+```
 
 ## API
 
@@ -78,15 +96,33 @@ build/cpu-macos/presage_cpu < inputs.bin > outputs.bin
 CMake 3.24 or newer generates `plan.toml`, `certificate.toml`, `evaluator.hpp`
 and a binary harness in `build/cpu-macos/generated`. Defaults are four segments
 on `[0,4]`, degree nine, 31 fractional bits, automatic stage integer widths and
-separate multiply/add operations, with IEEE32 input/output. Generation searches
+separate multiply/add operations, `ac_fixed` arithmetic and IEEE32 input/output. Generation searches
 within explicit width limits and requires a successful certificate.
 
 The header exposes `presage_evaluator::evaluate(float)` and `evaluate_bits`.
 The harness reads and writes little-endian words. `verify_cpu.jl` checks output
-bits and the first table index against the exact interpreter, including boundary
+bits, the first table index and every visited fixed node's exact payload against
+the interpreter, including boundary
 neighbours and special values. CMake uses strict floating semantics. Manual
 compilation needs C++20, `-ffp-contract=off -fno-fast-math -frounding-math`,
 GMP include/library paths and `-lgmpxx -lgmp` for fixed evaluators.
+Vendor builds also need the selected library's include directory.
+
+Build and validate both libraries with ordinary LLVM C++ compilation:
+
+```sh
+cmake --preset cpu-macos-ac
+cmake --build --preset cpu-macos-ac
+ctest --preset cpu-macos-ac
+
+cmake --preset cpu-macos-ap
+cmake --build --preset cpu-macos-ap
+ctest --preset cpu-macos-ap
+```
+
+Use `-DPRESAGE_BACKEND=portable|ap_fixed|ac_fixed` with any preset to select
+arithmetic. Existing CMake caches retain their earlier selection. See
+[backend semantics and CPU limits](docs/arithmetic.md#fixed-backends).
 
 Standalone generation and recertification are also available:
 
@@ -100,7 +136,8 @@ Use `cpu-linux` on Linux. `-DPRESAGE_PLAN=/path/to/plan.toml` selects an existin
 evaluator; `-DPRESAGE_EVALUATION=fma` selects FMA for fresh `erf` generation.
 Floating candidates use `-DPRESAGE_INTERNAL=double -DPRESAGE_CERTIFY=OFF`.
 
-The generation CLI accepts `--internal=fixed|single|double`, `--evaluation=fma`,
+The generation CLI accepts `--backend=portable|ap_fixed|ac_fixed` (default
+`ac_fixed`), `--internal=fixed|single|double`, `--evaluation=fma`,
 `--degree=N`, `--segments=N` (a power of two), `--fraction-bits=N`,
 `--coefficient-fraction-bits=N` and `--max-fraction-bits=N`. Generation precision,
 proof precision and norm tightness have separate controls. Fixed generation

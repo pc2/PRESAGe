@@ -8,7 +8,7 @@ use each Julia installation's own MPFR/GMP runtime.
 ## Results
 
 The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **135,707 checks on both Julia 1.10.12 and Julia 1.13.1**, with four
+passes **135,762 checks on both Julia 1.10.12 and Julia 1.13.1**, with four
 threads. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
@@ -23,9 +23,10 @@ coverage or numerical certificates.
 | Portable CPU conformance | 18 | Compiled binary32/64 Mul/Add/FMA; bounded nonsymmetric kernels; mixed formats; bit operations; tables; inward domain thresholds; skipped invalid lookups. Each conformance assertion checks multiple input words. |
 | Fresh erf candidate | 2,125 | Exact stored coefficients; bit/table conformance; boundary rows and neighbours; special branches; enclosed sampled accuracy; IEEE32 internal FMA variant conformance. |
 | Exact fixed arithmetic | 1,568 | Exhaustive small-format encoding round trips and widened arithmetic; signed/unsigned quantization; ties; all rounding/overflow policies; huge scaling; arbitrary-width schema v3 words. |
-| Fixed CPU conformance | 37 | Exact IEEE32/64 conversions; native/GMP products, sums and FMA; directed rounding; actual wrap/saturate/reject cases; classification evaluation; scale extremes; binary64 subnormal/midpoint conversions. |
+| Fixed CPU conformance | 37 | Exact IEEE32/64 conversions; native/GMP products, sums and FMA; directed rounding; actual wrap/saturate/reject cases; classification evaluation; scale extremes; binary64 subnormal/midpoint conversions. Every visited fixed payload is checked. |
+| Native vendor fixed arithmetic | 48 | Both `ap_fixed` and `ac_fixed` compiled with ordinary LLVM C++20; 16,384 matrix cases per library; mixed signedness/scales; all rounding modes, wrap/saturation and rejection after rounding; every visited fixed payload; 31/80-bit separate/FMA erf; finite IEEE32/64 range and lazy specials; scaling and width limits. |
 | Uniform fixed erf certificates | 2,346 | Every fixed node's range; complete graph audit; uniform error contributions/tails; CPU bits/rows; sampled MPFR checks against the certified bound; rejected graph/metadata changes; width-search failure; wide separate/FMA certificates. |
-| Certified generation commands | 14 | Default certified generation, stored-plan recertification, identical emission, explicit search-limit reports, preserved valid outputs after failure, stale-report removal, option validation. |
+| Certified generation commands | 21 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal, option validation. |
 
 In particular, `exp` at IEEE32 input `0xc2af0001` resolves to output
 **`0x006cb285`** through both backends at 256 bits. Exact rational midpoint
@@ -49,17 +50,36 @@ below **`2^-23`**. The constant-tail bound is approximately **`1.542e-8`**.
 These bounds cover every finite input, including negative inputs and zeros.
 See [the proof method and contributions](certification.md).
 
-Compiled bits and table selections match the interpreter on **2,107 inputs**
-for the default fixed graph. Directed/special cases and wide fixed designs have
-additional conformance checks. Both separate Mul/Add and FMA graphs with 80
-fractional bits pass uniform certification and CPU conformance. Supnorm failure
+Compiled output bits, table selections, fixed-node visitation and exact fixed
+payloads match the interpreter on **2,107 inputs** for the default fixed graph
+with each of `portable`, `ap_fixed` and `ac_fixed`. Directed/special cases and
+wide fixed designs have additional checks. Both separate Mul/Add and FMA graphs
+with 80 fractional bits pass uniform certification and all three CPU backends.
+Supnorm failure
 has no sampled fallback; changes to branch thresholds or stored coefficients
 are rejected by the graph audit. A deliberately inadequate degree/width choice
 returns `bound_exceeds_budget`, and an exhausted search returns `search_limit`.
 
-The root `cpu-macos` preset generates the fixed plan and numerical report,
-compiles with GMP and strict floating semantics, and passes CTest. Re-emission
+The `cpu-macos-ac` and `cpu-macos-ap` presets generate the fixed plan and numerical
+report, compile with native library headers, GMP and strict floating semantics,
+and pass CTest. Fresh root builds default to `ac_fixed`. Re-emission
 from a stored plan reruns its certificate and produces identical C++ files.
+
+## Public fixed libraries
+
+The workspace has local checkouts of [Algorithmic C types](https://github.com/hlslibs/ac_types)
+(headers report 5.1.1) and [Xilinx arbitrary precision simulation types](https://github.com/Xilinx/HLS_arbitrary_Precision_Types).
+Both use Apache 2.0. No vendor toolchain or FPGA is needed for these tests.
+Library quantizers implement nearest-even, toward-zero and downward rounding;
+upward rounding and reject overflow are explicit native adapters. Native fixed
+arithmetic and stored bits are tested against the exact Julia interpreter.
+GMP supplies the host IEEE output bridge, rather than native fixed evaluation.
+
+Xilinx's public scalar types compile with LLVM/libc++ after suppressing their
+unused, conflicting legacy `std::complex` specializations. Upstream files remain
+unchanged. This repository supplies simulation code and excludes synthesis
+support. These checks establish local conformance for the tested public headers;
+installed HLS headers and generated synthesis code require their own gate.
 
 ## Floating candidate checks
 
@@ -83,7 +103,7 @@ From the PRESAGe repository root, with native libraries installed:
 JULIA_DEPOT_PATH=/tmp/presage-depot: JULIA_PKG_SERVER='' \
   julia --startup-file=no scripts/dev.jl
 
-JULIA_DEPOT_PATH=/tmp/presage-depot: JULIA_PKG_SERVER='' \
+JULIA_DEPOT_PATH=/tmp/presage-depot: JULIA_PKG_SERVER='' PRESAGE_REQUIRE_VENDOR_TESTS=true \
   julia --startup-file=no --threads=4 scripts/check.jl
 ```
 
@@ -96,14 +116,21 @@ resolve only standard libraries and the local development dependency.
 After bootstrap, with LLVM/Clang and CMake installed:
 
 ```sh
-JULIA_DEPOT_PATH=/tmp/presage-depot: cmake --preset cpu-macos
-JULIA_DEPOT_PATH=/tmp/presage-depot: cmake --build --preset cpu-macos
-JULIA_DEPOT_PATH=/tmp/presage-depot: ctest --preset cpu-macos
+JULIA_DEPOT_PATH=/tmp/presage-depot: cmake --preset cpu-macos-ac
+JULIA_DEPOT_PATH=/tmp/presage-depot: cmake --build --preset cpu-macos-ac
+JULIA_DEPOT_PATH=/tmp/presage-depot: ctest --preset cpu-macos-ac
+
+JULIA_DEPOT_PATH=/tmp/presage-depot: cmake --preset cpu-macos-ap
+JULIA_DEPOT_PATH=/tmp/presage-depot: cmake --build --preset cpu-macos-ap
+JULIA_DEPOT_PATH=/tmp/presage-depot: ctest --preset cpu-macos-ap
 ```
 
 The package CPU tests compile with `-ffp-contract=off -fno-fast-math
 -frounding-math` and C++20. Fixed verification also uses GMP C++ development
 headers/libraries. Set `CXX` and optionally `GMP_PREFIX` for another installation.
+Supply sibling header checkouts, or `PRESAGE_AP_INCLUDE_DIR` and
+`PRESAGE_AC_INCLUDE_DIR`. The required-vendor flag rejects missing dependencies;
+without it, unavailable vendor test groups are explicitly skipped.
 
 ## Limits
 
@@ -116,5 +143,5 @@ nearest-even rounding; fixed helpers also support directed conversions.
 Binary16 **encoding and rounding** were exhausted; binary16 transcendental
 functions were not. Near-zero ulp and correct-rounding claims are not established.
 Sollya and direct MPFR checks share MPFR algorithms, so their agreement is not
-fully independent evidence. Linux, vendor arithmetic, synthesis and FPGA
+fully independent evidence. Linux, installed vendor toolchains, synthesis and FPGA
 performance were not tested. These are separate later gates in the plan.
