@@ -3,6 +3,13 @@ struct FixedNodeBound
     format::FixedFormat
     range::_Interval
 end
+struct FloatNodeBound
+    node::Int
+    format::FloatFormat
+    range::_Interval
+end
+_node_bound(node, f::FixedFormat, range) = FixedNodeBound(node, f, range)
+_node_bound(node, f::FloatFormat, range) = FloatNodeBound(node, f, range)
 struct PathCertificate
     domain::_Interval
     upper_inclusive::Bool
@@ -11,7 +18,7 @@ struct PathCertificate
     arithmetic_error::Rational{BigInt}
     output_rounding::Rational{BigInt}
     total::Rational{BigInt}
-    ranges::Tuple{Vararg{FixedNodeBound}}
+    ranges::Tuple{Vararg{Union{FixedNodeBound, FloatNodeBound}}}
 end
 """Uniform numerical result for the exact program in `plan`; sampled maxima are separate."""
 struct CertificationResult
@@ -30,8 +37,8 @@ _quantizer_error(source::FixedFormat, target::FixedFormat) =
     _fraction(target) >= _fraction(source) ? _q(0) : _pow2(-_fraction(target) - 1)
 function _float_rounding_bound(range, f::FloatFormat)
     magnitude = _interval_magnitude(range)
-    maxfinite = decode_ieee(_inf(f) - 1, f).value
-    magnitude <= maxfinite || throw(OverflowError("output range may overflow"))
+    all(q -> decode_ieee(round_ieee(q, f), f).value !== nothing, range) ||
+        throw(OverflowError("floating range may overflow after rounding"))
     iszero(magnitude) && return _q(0)
     n, d = abs(numerator(magnitude)), denominator(magnitude)
     e = ndigits(n; base = 2) - ndigits(d; base = 2)
@@ -362,12 +369,21 @@ function _certificate_data(result::CertificationResult)
                 "nonfinite_inputs" => "shared primitive special-value policy",
                 "table_bits" => 65536 * 16,
             )
-        elseif get(result.settings, "method", "") == "fixed_polynomial_horner"
+        elseif get(result.settings, "method", "") in
+               ("fixed_polynomial_horner", "floating_polynomial_horner")
+            input = result.plan.spec.input_format
+            output = result.plan.spec.output_format
             Dict(
                 "input_domain" => _rational_text.(collect(only(result.paths).domain)),
-                "inputs" => "all representable fixed inputs in the interval",
-                "outside_domain" => "rejected before polynomial evaluation",
-                "overflow" => "all reachable fixed nodes and output conversions bounded",
+                "inputs" =>
+                    input isa FixedFormat ?
+                    "all representable fixed inputs in the interval" :
+                    "all representable finite floating inputs in the interval",
+                "outside_domain" =>
+                    result.plan.spec.domain === nothing ? "no excluded finite inputs" :
+                    output isa FixedFormat ? "rejected before polynomial evaluation" :
+                    "canonical quiet NaN before polynomial evaluation",
+                "overflow" => "all reachable arithmetic nodes and output conversions bounded",
             )
         else
             Dict(

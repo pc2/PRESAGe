@@ -76,6 +76,8 @@ function polynomial_plan(
        spec.input_format isa FixedFormat &&
        spec.output_format isa FixedFormat
         settings["kernel"] = "fixed_polynomial_horner"
+    else
+        settings["kernel"] = "floating_polynomial_horner"
     end
     return PlanArtifact(spec; program = IR.Program(nodes; output), settings)
 end

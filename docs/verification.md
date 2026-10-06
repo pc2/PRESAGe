@@ -8,7 +8,7 @@ use each Julia installation's own MPFR/GMP runtime.
 ## Results
 
 The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **369,202 checks on Julia 1.13.1**, with four
+passes **781,164 checks on Julia 1.13.1**, with four
 threads. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
@@ -35,16 +35,18 @@ coverage or numerical certificates.
 | Official AC floating arithmetic | 98 | Binary32/128/256, bfloat16, 300-bit fractions and exhaustive small formats through native AC Add/Mul/FMA; conversions, scaling, wide bit operations/tables, raw/typed APIs, padding, 5000-bit raw payloads; 448 mixed fixed/float cases per portable/AC/AP backend with directed rounding, wrap/saturation and rejection. |
 | Uniform fixed erf certificates | 2,346 | Every fixed node's range; complete graph audit; uniform error contributions/tails; CPU bits/rows; sampled MPFR checks against the certified bound; rejected graph/metadata changes; width-search failure; wide separate/FMA certificates. |
 | Uniform fixed polynomial certificates | 11,222 | Exhaustive bounded erf/exp in separate/FMA modes against mathematical enclosures and all three C++ backends; every visited fixed node's certified range; exact affine and constant kernels, coarse coordinates and amplification, inward/clipped/singleton domains, unsigned/wide formats, changed coefficients/graphs, overflow, singularities and schema v2 reports. |
+| Uniform floating polynomial certificates | 411,962 | Uniform bounds for float/fixed interfaces and internals; 0/4/8 guard bits; exhaustive binary16 erf/exp and small-format quantization/cancellation; exact node ranges and native AC CPU bits; binary64/128/256 and custom wide formats; subnormal/overflow ties, lazy guards, signed-zero coefficients, graph audits and schema v2 reports. |
 | Certified generation commands | 32 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal and option validation; automatic fixed polynomial proofs with or without a kernel label, standalone recertification and unsupported graphs. |
-| Custom floating generation options | 7 | Automatic AC selection for stored binary128 plans, explicit binary32 AC selection, no floating-only GMP dependency, unsupported native mapping/option diagnostics and preservation of generated output on failure. |
+| Custom floating generation options | 7 | Automatic certification and AC selection for stored binary128 plans, explicit binary32 AC selection, no floating-only GMP dependency, unsupported native mapping/option diagnostics and preservation of generated output on failure. |
 | Binary16 generation and implementation policy | 21 | Automatic and explicit LUT/polynomial selection; exact budgets and half interfaces; stored LUT recertification/identical emission; FMA and unchecked polynomial generation; preserved outputs on failed proofs and invalid options. |
 
 The custom floating CMake/CTest build passes with binary128 interfaces, a
 custom 160-fraction-bit internal format and fused polynomial arithmetic,
 without GMP linkage. A separate build passes with binary32 AC interfaces and
 AP fixed arithmetic for the certified erf graph. Header simulation is verified
-locally; oneAPI compilation/synthesis and floating evaluator certificates remain
-separate gates. The existing fixed and binary16 certificate bounds are unchanged.
+locally; oneAPI compilation/synthesis remains a separate gate. Floating polynomial
+certificates are now supported as described below. The existing fixed and
+binary16 certificate bounds are unchanged.
 
 In particular, `exp` at IEEE32 input `0xc2af0001` resolves to output
 **`0x006cb285`** through both backends at 256 bits. Exact rational midpoint
@@ -178,7 +180,50 @@ checked through CMake/CTest in `build/bounded-demo-ac` and
 including output words, fixed-node visitation and exact payloads. Sollya.jl is
 unchanged.
 
-## Floating candidate checks
+## Floating polynomial certificates
+
+Degree-thirteen erf and exp kernels on `[-1,1]` have uniform certificates with
+binary32 interfaces and floating internals. The coefficients are generated with
+32 significand bits, then rounded to each selected internal format. FMA results:
+
+| Kernel | 0 extra fraction bits | 4 extra fraction bits | 8 extra fraction bits |
+| --- | ---: | ---: | ---: |
+| erf | `2.450315e-7` | `7.271769e-8` | `6.096999e-8` |
+| exp | `2.243066e-7` | `1.332194e-7` | `1.200629e-7` |
+
+All meet the test contract `2^-21`. Separate multiply/add paths are also proved;
+their arithmetic error allowances decrease with added precision. For extra
+internal precision, final binary32 narrowing contributes at most `2^-24` for
+erf and `2^-23` for exp on these ranges. With binary32 internals there is no
+separate conversion: final operation rounding is part of the arithmetic bound.
+
+The tests exhaust all 65,536 binary16 encodings for both bounded functions with
+four extra internal fraction bits. Accepted inputs are compared against MPFR
+mathematical enclosures and every visited numerical range; excluded inputs
+return NaN without evaluating the polynomial. Generated AC C++ agrees with the
+interpreter on all encodings. Smaller custom formats and mixed fixed/floating
+interfaces are exhausted for conversion error, subnormal ties, cancellation and
+domains larger than one. Binary64/128/256 and 160-fraction-bit formats have
+uniform proofs and boundary/random CPU checks. Exact identities have zero
+error certificates. Signed-zero coefficient payloads survive graph auditing.
+Overflow, invalid arithmetic/guards, insufficient error budgets and singular
+function domains produce explicit failure outcomes.
+
+The [floating example](../examples/floating_polynomial.jl) also compares fixed
+and floating internals against identical binary32 contracts using FMA:
+
+| Kernel | Fixed(36,6) internals | Float(8,27) internals |
+| --- | ---: | ---: |
+| erf | `6.801771e-8` | `7.271769e-8` |
+| exp | `1.273349e-7` | `1.332194e-7` |
+
+The stored exp floating plan was regenerated with certification and compiled
+through CMake/CTest in `build/floating-certified-cmake`. CTest passes against
+the exact interpreter; the floating-only executable has no GMP linkage.
+Coefficients and stages still share one internal format. Precision search,
+individual widths and segmented floating certification remain later work.
+
+## Segmented floating candidate checks
 
 The floating `erf_candidate()` uses degree nine, four segments on
 `[0,4]`, IEEE64 internal arithmetic and separate multiply/add operations. Its
@@ -232,13 +277,15 @@ without it, unavailable vendor test groups are explicitly skipped.
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
-degree 0–32 fixed polynomial kernels with nearest-even rounding and rejected
-overflow. Floating arithmetic, mixed interfaces and general transformations
-remain outside the certificates. The [compact contract](../examples/erf-contract.toml) remains
+degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
+rejected fixed overflow, including mixed interfaces and custom formats.
+Segmented floating erf and general transformations remain outside the
+certificates. The [compact contract](../examples/erf-contract.toml) remains
 unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces;
 a separate report records the
-numerical proof. Floating CPU arithmetic supports binary32/binary64 with
-nearest-even rounding; binary16 interfaces and exact conversions are supported,
+numerical proof. Native floating CPU arithmetic supports binary32/binary64 with
+nearest-even rounding; official AC arithmetic supports custom and wide formats.
+Binary16 interfaces and exact conversions are supported,
 and fixed helpers also support directed conversions. Binary16 erf is exhausted
 for both implementation choices. Polynomial kernels have no near-zero ulp or
 correct-rounding guarantee; binary16 LUTs reproduce resolved nearest-even outputs.

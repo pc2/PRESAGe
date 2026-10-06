@@ -84,10 +84,12 @@ and record word sizes and padding alongside the format tables.
 `certificate.toml` uses `schema = "presage-certificate"`, version 2. It records
 the numerical status, target, uniform bound, per-path contributions, exact node
 ranges, tail bound and proof settings. It is written from the same plan used by
-generation. Each path uses `domain`: an input interval for fixed polynomials,
+generation. Each path uses `domain`: an input interval for float/fixed polynomials,
 or a magnitude interval for the canonical erf evaluator. Coverage describes
-the selected proof method; fixed polynomial reports have no erf tail or IEEE
-special-value claims. `read_plan` loads evaluator semantics; `certify_plan`
+the selected proof method. Floating/mixed polynomial reports use method
+`floating_polynomial_horner`; all-fixed reports use `fixed_polynomial_horner`.
+Both contain only numerical ranges for accepted inputs and have no erf tail
+claims. Node formats can be floating or fixed. `read_plan` loads evaluator semantics; `certify_plan`
 reruns the supported proof.
 Regenerate the report whenever coefficients or arithmetic change. See
 [certificate semantics](certification.md).

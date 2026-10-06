@@ -11,8 +11,9 @@ an exact interpreter and a C++ CPU emitter. Inputs, outputs, coefficients and
 intermediates can use fixed formats; mixed fixed/floating interfaces are supported.
 The fixed binary16/IEEE32 `erf` evaluators have uniform absolute-error certificates
 covering every finite input. Fixed polynomial kernels can also be certified on
-bounded domains. Binary16 also supports a complete lookup table with resolved
-nearest-even outputs. Floating candidates run locally.
+bounded domains. Floating and mixed fixed/floating polynomial kernels also have
+uniform certificates, including custom formats and extra internal fraction bits.
+Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
 The development plan is maintained at
@@ -41,8 +42,28 @@ Generate a stored custom plan with `scripts/generate.jl custom.toml build/custom
 from the fixed `--backend`. Use `ac_std_float` explicitly to validate binary32
 through the AC headers. Floating-only AC evaluators compile without GMP linkage.
 See [format and backend limits](docs/arithmetic.md#custom-floating-backend).
-Custom floating candidates have CPU conformance checks; uniform certification
-still covers the existing fixed kernels and binary16 tables.
+Custom floating polynomial plans certify by default during generation.
+Certificates include the stored polynomial, input conversion, arithmetic,
+subnormals, exponent limits and output conversion. See
+[certification](docs/certification.md) for supported graphs and policies.
+
+### Internal guard bits
+
+Input/output and internal formats are independent. Four extra fraction bits for
+binary32 arithmetic use `FloatFormat(8,27)`:
+
+```julia
+spec = FunctionSpec("1/4+x/2-x^2/4"; input_format=IEEE32, domain=(-1,1))
+plan = polynomial_plan(spec, [1//4,1//2,-1//4];
+                       internal_format=FloatFormat(8,27), evaluation=:fma)
+result = certify_polynomial(plan)
+@assert result.status == :certified
+```
+
+The [floating polynomial example](examples/floating_polynomial.jl) generates
+bounded erf and exp approximations and certifies fixed and floating internals
+against matching binary32 contracts. Coefficients and stages currently share
+one internal format; automatic precision search and individual widths are next.
 
 ## Local setup
 
@@ -269,12 +290,12 @@ julia --startup-file=no --project=. scripts/generate.jl \
   build/fixed-plan.toml build/fixed --backend=ac_fixed
 ```
 
-Numerical reports are separate from candidate plans. Stored fixed polynomial
+Numerical reports are separate from candidate plans. Stored float/fixed polynomial
 plans and the canonical IEEE32 `erf` graph automatically rerun certification
 during generation; `--certify=false` emits an unchecked candidate.
 `--certify=true` requires a successful proof and rejects unsupported graphs.
-Polynomial certification initially supports degree 0–32, fixed input/output
-and internals, nearest-even rounding and rejected overflow. Fixed I/O is also
+Polynomial certification supports degree 0–32, float/fixed input/output
+and internals, nearest-even rounding and rejected fixed overflow. Fixed I/O is also
 supported by the reference oracle and binary reference CLI.
 
 The [bounded polynomial example](examples/bounded_polynomial.jl) generates and
@@ -290,7 +311,7 @@ In Julia, `result = certified_erf()` returns the plan, status and uniform bounds
 `certify_erf(plan)` checks a stored fixed evaluator. Julia also supports
 `erf_fixed_candidate()`, `erf_candidate()` and
 `polynomial_plan(spec, ascending_coefficients; evaluation=:separate)`.
-`certify_polynomial(plan)` proves a supported fixed polynomial;
+`certify_polynomial(plan)` proves a supported float/fixed polynomial;
 `certify_plan(plan)` selects the supported proof for a stored evaluator.
 `evaluate_bits(plan, input_bits)` executes either program with exact rounding.
 

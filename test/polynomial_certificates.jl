@@ -334,8 +334,7 @@ end
             polynomial_plan(FunctionSpec(expression; input_format = FixedFormat(6, 3)), [0])
         @test certify_polynomial(plan).status == :proof_failed
     end
-    @test certify_polynomial(polynomial_plan(FunctionSpec("x"), [0, 1])).status ==
-          :unsupported_domain
+    @test certify_polynomial(polynomial_plan(FunctionSpec("x"), [0, 1])).total_bound == 0
     @test certify_polynomial(PlanArtifact(identityplan.spec)).status == :unsupported_domain
     highdegree = polynomial_plan(
         FunctionSpec("x^33"; input_format = FixedFormat(6, 3), domain = (-1, 1)),

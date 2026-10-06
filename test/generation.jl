@@ -9,7 +9,7 @@ include(joinpath(@__DIR__, "..", "scripts", "certify.jl"))
         text = read(joinpath(output, "evaluator.hpp"), String)
         @test occursin("ac_std_float<128,15>", text)
         @test !occursin("gmpxx.h", text)
-        @test !isfile(joinpath(output, "certificate.toml"))
+        @test TOML.parsefile(joinpath(output, "certificate.toml"))["total_bound"] == "0/1"
         @test_throws ArgumentError generate_main([source, output, "--float-backend=native"])
         @test read(joinpath(output, "evaluator.hpp"), String) == text
         @test_throws ErrorException generate_main([
@@ -118,7 +118,7 @@ end
         @test TOML.parsefile(joinpath(generated, "certificate-failure.toml"))["status"] ==
               "bound_exceeds_budget"
         @test read_plan(joinpath(generated, "plan.toml")).spec.expression == "x"
-        unsupported = polynomial_plan(FunctionSpec("x"), [0, 1])
+        unsupported = erf_candidate()
         write_plan(fixedpath, unsupported)
         @test_throws ErrorException generate_main([fixedpath, generated, "--certify"])
         @test TOML.parsefile(joinpath(generated, "certificate-failure.toml"))["status"] ==

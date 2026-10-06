@@ -2,10 +2,7 @@
 # No coefficient metadata or kernel label can substitute for this graph audit.
 function _polynomial_audit(plan)
     spec, p = plan.spec, plan.program
-    p !== nothing &&
-        spec.input_format isa FixedFormat &&
-        spec.output_format isa FixedFormat ||
-        throw(ArgumentError("polynomial certification requires fixed input and output"))
+    p !== nothing || throw(ArgumentError("missing polynomial program"))
     isempty(plan.segments) && plan.dispatch === nothing && isempty(p.tables) ||
         throw(ArgumentError("polynomial certification supports one untabled Horner path"))
     all(
@@ -19,19 +16,26 @@ function _polynomial_audit(plan)
     evaluation = Symbol(get(plan.settings, "evaluation", ""))
     evaluation in (:separate, :fma) || throw(ArgumentError("unsupported Horner arithmetic"))
     guard = p.nodes[p.output]
-    guard isa IR.Guard || throw(ArgumentError("missing polynomial domain guard"))
-    final = guard.source
+    result = if spec.output_format isa FixedFormat
+        guard isa IR.Guard || throw(ArgumentError("missing polynomial domain guard"))
+        guard.source
+    else
+        guard isa IR.Select || throw(ArgumentError("missing polynomial domain guard"))
+        spec.domain === nothing ? guard.no : guard.yes
+    end
+    final = result
     p.nodes[final] isa IR.Convert && (final = p.nodes[final].source)
     f = IR.format(p, final)
-    f isa FixedFormat ||
-        throw(ArgumentError("polynomial certification requires fixed internal arithmetic"))
+    f isa Union{FixedFormat, FloatFormat} ||
+        throw(ArgumentError("unsupported internal arithmetic"))
     coordinate = f == spec.input_format ? p.input : 2
-    coefficients, stages = Rational{BigInt}[], NamedTuple[]
+    coefficients, words, stages = Rational{BigInt}[], IR.Word[], NamedTuple[]
     h = final
     while true
         n = p.nodes[h]
         if n isa IR.Const && n.format == f
-            push!(coefficients, decode_fixed(n.bits, f))
+            push!(coefficients, _polynomial_value(n.bits, f))
+            push!(words, n.bits)
             break
         end
         length(stages) < 32 || throw(ArgumentError("polynomial degree exceeds 32"))
@@ -47,26 +51,105 @@ function _polynomial_audit(plan)
         constant = p.nodes[c]
         constant isa IR.Const && constant.format == f ||
             throw(ArgumentError("unsupported stored coefficient"))
-        push!(coefficients, decode_fixed(constant.bits, f))
+        push!(coefficients, _polynomial_value(constant.bits, f))
+        push!(words, constant.bits)
         push!(stages, (result = h, previous, product, coefficient = length(coefficients)))
         h = previous
     end
     canonical = polynomial_plan(spec, coefficients; internal_format = f, evaluation)
-    _program_data(canonical.program) == _program_data(p) || throw(
+    # Rational coefficients cannot retain negative zero. Reuse the audited
+    # coefficient payloads in their canonical positions before graph comparison.
+    nodes = collect(canonical.program.nodes)
+    first_coefficient = f == spec.input_format ? 2 : 3
+    for (i, word) in enumerate(words)
+        nodes[first_coefficient + i - 1] = IR.Const(f, word)
+    end
+    canonical_program = IR.Program(nodes; output = canonical.program.output)
+    _program_data(canonical_program) == _program_data(p) || throw(
         ArgumentError("executed graph differs from the supported polynomial evaluator"),
     )
-    a, b = _fixed_limits(spec.input_format)
-    quantum = _pow2(-_fraction(spec.input_format))
-    lo, hi = a * quantum, b * quantum
+    input = spec.input_format
+    lo, hi = if input isa FixedFormat
+        a, b = _fixed_limits(input)
+        quantum = _pow2(-_fraction(input))
+        a * quantum, b * quantum
+    else
+        maximum = decode_ieee(_inf(input) - 1, input).value
+        -maximum, maximum
+    end
     if spec.domain !== nothing
         lo, hi = max(lo, spec.domain[1]), min(hi, spec.domain[2])
-        lo = decode_fixed(round_fixed(lo, spec.input_format; mode = :up), spec.input_format)
-        hi = decode_fixed(
-            round_fixed(hi, spec.input_format; mode = :down),
-            spec.input_format,
-        )
+        lo = _polynomial_value(_polynomial_round(lo, input; mode = :up), input)
+        hi = _polynomial_value(_polynomial_round(hi, input; mode = :down), input)
     end
-    return (; coefficients, stages = reverse(stages), coordinate, final, domain = (lo, hi))
+    lo <= hi || throw(ArgumentError("empty representable polynomial domain"))
+    return (;
+        coefficients,
+        stages = reverse(stages),
+        coordinate,
+        final,
+        result,
+        domain = (lo, hi),
+    )
+end
+
+_polynomial_round(q, f::FixedFormat; mode = :nearest_even) = round_fixed(q, f; mode)
+_polynomial_round(q, f::FloatFormat; mode = :nearest_even) = round_ieee(q, f; mode)
+_polynomial_value(bits, f::FixedFormat) = decode_fixed(bits, f)
+function _polynomial_value(bits, f::FloatFormat)
+    value = decode_ieee(bits, f).value
+    value === nothing && throw(ArgumentError("nonfinite stored polynomial coefficient"))
+    return value
+end
+function _interval_round(a, f::FloatFormat)
+    values = map(q -> decode_ieee(round_ieee(q, f), f).value, a)
+    any(isnothing, values) && throw(OverflowError("floating range may overflow"))
+    return values
+end
+
+# A guaranteed dyadic grid bounds exactness. Floating spacing varies by binade;
+# use the finest spacing for propagated grids and the coarsest for local error.
+function _polynomial_binade(q)
+    n, d = abs(numerator(q)), denominator(q)
+    e = ndigits(n; base = 2) - ndigits(d; base = 2)
+    (e >= 0 ? n < d << e : n << -e < d) && (e -= 1)
+    return e
+end
+_polynomial_grid(f::FixedFormat, range) = _fraction(f)
+function _polynomial_grid(f::FloatFormat, range)
+    lo, hi = range
+    smallest = lo <= 0 <= hi ? _q(0) : min(abs(lo), abs(hi))
+    exponent = iszero(smallest) ? _emin(f) : max(_emin(f), _polynomial_binade(smallest))
+    return f.fraction_bits - exponent
+end
+_polynomial_grid_exact(scale, range, f::FixedFormat) = scale <= _fraction(f)
+function _polynomial_grid_exact(scale, range, f::FloatFormat)
+    magnitude = _interval_magnitude(range)
+    iszero(magnitude) && return true
+    return scale <= f.fraction_bits - max(_emin(f), _polynomial_binade(magnitude))
+end
+
+# Format-preserving zero/unit identities and widening conversions are exact even
+# when a single grid for an interval crossing zero loses significand information.
+function _polynomial_node_exact(p, n, f, ranges)
+    if n isa IR.Convert
+        source = IR.format(p, n.source)
+        source == f && return true
+        return source isa FloatFormat &&
+               f isa FloatFormat &&
+               f.fraction_bits >= source.fraction_bits &&
+               _emin(f) - f.fraction_bits <= _emin(source) - source.fraction_bits
+    elseif n isa IR.Add
+        return (ranges[n.a] == (0, 0) && IR.format(p, n.b) == f) ||
+               (ranges[n.b] == (0, 0) && IR.format(p, n.a) == f)
+    elseif n isa Union{IR.Mul, IR.FMA}
+        n isa IR.FMA && ranges[n.c] != (0, 0) && return false
+        return ranges[n.a] == (0, 0) ||
+               ranges[n.b] == (0, 0) ||
+               (ranges[n.a] in ((1, 1), (-1, -1)) && IR.format(p, n.b) == f) ||
+               (ranges[n.b] in ((1, 1), (-1, -1)) && IR.format(p, n.a) == f)
+    end
+    return false
 end
 
 # Endpoint rounding is monotone under the audited policy. Overflow at an
@@ -74,7 +157,7 @@ end
 _dyadic_fraction(q) =
     iszero(q) ? 0 :
     ndigits(denominator(q); base = 2) - 1 - trailing_zeros(abs(numerator(q)))
-function _polynomial_ranges(p, domain)
+function _polynomial_ranges(p, layout)
     ranges, rho = Dict{Int, _Interval}(), Dict{Int, Rational{BigInt}}()
     grids = Dict{Int, Int}()
     needed = Set([p.output])
@@ -84,13 +167,22 @@ function _polynomial_ranges(p, domain)
     for (i, n) in enumerate(p.nodes)
         i in needed || continue
         f = IR.format(p, i)
-        f isa FixedFormat || continue
-        if n isa IR.Input
-            ranges[i] = domain
-            grids[i] = domain[1] == domain[2] ? _dyadic_fraction(domain[1]) : _fraction(f)
+        f isa Union{FixedFormat, FloatFormat} || continue
+        if i == p.output
+            ranges[i] = ranges[layout.result]
+            grids[i] = grids[layout.result]
+            continue
+        elseif n isa IR.Input
+            ranges[i] = layout.domain
+            grids[i] =
+                layout.domain[1] == layout.domain[2] ? _dyadic_fraction(layout.domain[1]) :
+                _polynomial_grid(f, layout.domain)
             continue
         elseif n isa IR.Const
-            ranges[i] = _singleton(decode_fixed(n.bits, f))
+            # The audited floating guard's NaN branch is outside the numerical
+            # domain. Its payload is verified by canonical graph comparison.
+            f isa FloatFormat && decode_ieee(n.bits, f).value === nothing && continue
+            ranges[i] = _singleton(_polynomial_value(n.bits, f))
             grids[i] = _dyadic_fraction(ranges[i][1])
             continue
         elseif n isa IR.Guard
@@ -109,7 +201,7 @@ function _polynomial_ranges(p, domain)
             exact = _interval_add(_interval_mul(ranges[n.a], ranges[n.b]), ranges[n.c])
             scale = max(grids[n.a] + grids[n.b], grids[n.c])
         else
-            throw(ArgumentError("unsupported fixed node $i"))
+            throw(ArgumentError("unsupported arithmetic node $i"))
         end
         ranges[i] = try
             _interval_round(exact, f)
@@ -119,21 +211,22 @@ function _polynomial_ranges(p, domain)
         end
         grids[i] =
             ranges[i][1] == ranges[i][2] ? _dyadic_fraction(ranges[i][1]) :
-            min(scale, _fraction(f))
+            min(scale, _polynomial_grid(f, ranges[i]))
         rho[i] = if exact[1] == exact[2]
             abs(ranges[i][1] - exact[1])
-        elseif scale <= _fraction(f)
+        elseif _polynomial_grid_exact(scale, exact, f) ||
+               _polynomial_node_exact(p, n, f, ranges)
             _q(0)
         else
-            _pow2(-_fraction(f) - 1)
+            f isa FixedFormat ? _pow2(-_fraction(f) - 1) : _float_rounding_bound(exact, f)
         end
     end
+    ranges[p.output] = ranges[layout.result]
     return ranges, rho
 end
 
 function _polynomial_arithmetic(p, layout, ranges, rho)
-    guard = p.nodes[p.output]
-    output = guard.source == layout.final ? _q(0) : rho[guard.source]
+    output = layout.result == layout.final ? _q(0) : rho[layout.result]
     isempty(layout.stages) && return _q(0), _q(0), output
     eta = get(rho, layout.coordinate, _q(0))
     tbound = _interval_magnitude(ranges[layout.coordinate])
@@ -201,11 +294,12 @@ end
 """
     certify_polynomial(plan; precision=256, accuracy=1//1024, max_refinements=2)
 
-Certify a fixed-input/fixed-output `polynomial_plan` (degree 0:32), using
-nearest-even rounding and rejected overflow. Audit the entire stored graph,
+Certify a float/fixed `polynomial_plan` (degree 0:32), using nearest-even
+rounding and rejected fixed overflow. Audit the entire stored graph,
 prove its stored-polynomial error with Sollya, and propagate exact rational
 ranges and rounding bounds. Coverage includes every representable input in the
-contract, or the complete input format when no domain is given. Proof failure
+contract, or all finite inputs when no domain is given. Floating proofs include
+subnormals and finite exponent limits. Proof failure
 never falls back to sampling. `accuracy` controls norm tightness.
 """
 function certify_polynomial(
@@ -233,8 +327,11 @@ function certify_polynomial(
             settings,
         )
     end
+    if any(f -> f isa FloatFormat, plan.program.types)
+        settings["method"] = "floating_polynomial_horner"
+    end
     path = try
-        ranges, rho = _polynomial_ranges(plan.program, layout.domain)
+        ranges, rho = _polynomial_ranges(plan.program, layout)
         coordinate, arithmetic, output =
             _polynomial_arithmetic(plan.program, layout, ranges, rho)
         norm = Sollya.with_session(Sollya.Session(; precision)) do
@@ -268,7 +365,7 @@ function certify_polynomial(
             end
         end
         bounds = Tuple(
-            FixedNodeBound(node, IR.format(plan.program, node), range) for
+            _node_bound(node, IR.format(plan.program, node), range) for
             (node, range) in sort!(collect(ranges); by = first)
         )
         PathCertificate(
@@ -293,7 +390,7 @@ function certify_polynomial(
     return CertificationResult(plan, status, path.total, (path,), nothing, settings, reason)
 end
 
-"""Certify a supported stored evaluator: fixed erf, fixed polynomial or binary16 LUT."""
+"""Certify a supported stored evaluator: fixed erf, float/fixed polynomial or binary16 LUT."""
 function certify_plan(
     plan::PlanArtifact;
     precision::Integer = 256,
@@ -317,8 +414,12 @@ function certify_plan(
 end
 
 function _has_supported_certificate(plan)
-    get(plan.settings, "kernel", "") in
-    ("erf_fixed_horner", "fixed_polynomial_horner", "binary16_lut") && return true
+    get(plan.settings, "kernel", "") in (
+        "erf_fixed_horner",
+        "fixed_polynomial_horner",
+        "floating_polynomial_horner",
+        "binary16_lut",
+    ) && return true
     try
         _polynomial_audit(plan)
         return true

@@ -1,9 +1,10 @@
 # Uniform numerical certification
 
-## Fixed polynomial kernels
+## Polynomial kernels
 
-`certify_polynomial(plan)` proves a fixed-input/fixed-output `polynomial_plan`
-with degree 0–32, fixed internals, nearest-even rounding and rejected overflow.
+`certify_polynomial(plan)` proves a `polynomial_plan` with degree 0–32,
+floating or fixed input/output and internals, nearest-even rounding and rejected
+fixed overflow. Custom floating exponent/fraction widths are supported.
 Separate multiply/add and FMA have distinct proofs. Unsupported graphs and
 policies return `unsupported_domain`; possible overflow or native proof failure
 returns `proof_failed`. A successful proof above the requested budget returns
@@ -25,8 +26,9 @@ proof. Changed coefficients are proved afresh against the contract's function.
 
 Coverage is every representable input inside the declared domain. The proof
 interval is clipped to the input format and its endpoints rounded inward to
-the input grid. An omitted domain covers the complete fixed input format.
-Inputs outside the domain are rejected before arithmetic executes. Singleton
+the input grid. An omitted domain covers every finite input in the format.
+Inputs outside a bounded domain return canonical NaN for floating output or
+are rejected for fixed output before arithmetic executes. Singleton
 domains are supported with certified point enclosures.
 
 Sollya checks a finite function image and bounds the stored polynomial's
@@ -37,16 +39,49 @@ simplification and exact rational extraction; other nondegenerate errors use
 semantics and native proof assumptions apply; intervals containing poles or
 invalid values are refused when their image cannot be bounded finitely.
 
-Exact rational interval propagation bounds every reachable fixed node. Its
+Exact rational interval propagation bounds every reachable arithmetic node. Its
 endpoints are rounded under the declared policy and checked for overflow.
 The analysis tracks a guaranteed dyadic grid for each value: stored constants
 can use fewer fractional bits than their format, addition aligns operand grids,
 and multiplication combines them. Operations preserving that grid are exact;
-otherwise nearest-even rounding contributes at most half a target quantum.
+fixed nearest-even rounding otherwise contributes at most half a target quantum.
 Singleton ranges give an exact rounding error. This proves zero total error for
 the affine example, including its output conversion.
 Unused nodes are excluded from range checks; a constant polynomial does not
 execute its unused input conversion.
+
+### Floating precision and guard bits
+
+Floating endpoints are rounded exactly in the declared format. Monotonicity
+bounds each implemented node, and an endpoint rounding to infinity refuses the
+proof. A finite result just above the largest finite value can still be proved.
+For a nonexact operation, the local nearest-even bound is half the largest
+spacing on its exact range. Below the normal range this is half a subnormal
+quantum, including underflow to zero. Dyadic grids, exact widening conversions
+and zero/unit identities eliminate unnecessary rounding allowances.
+
+Use `internal_format=FloatFormat(E,M+g)` for `g` extra fraction bits. The same
+format stores coefficients and rounds each Horner stage. Input conversion is
+exact when the wider format can represent the inputs. Final narrowing is
+bounded separately; if no output conversion exists, the final operation's
+rounding belongs to the arithmetic bound. More fraction bits do not enlarge
+exponent range; every intermediate is checked against its declared limits.
+
+```julia
+spec = FunctionSpec("1/4+x/2-x^2/4"; input_format=IEEE32, domain=(-1,1))
+plan = polynomial_plan(spec, [1//4,1//2,-1//4];
+                       internal_format=FloatFormat(8,27), evaluation=:fma)
+result = certify_polynomial(plan)
+@assert result.status == :certified
+```
+
+Coefficient quantization is included in the stored-polynomial norm. Proof
+precision is independent of evaluator precision; insufficient Sollya precision
+to reconstruct the stored polynomial or domain returns `proof_failed` and can
+be retried with a higher `precision`. Signed-zero coefficient payloads remain
+part of the graph audit. Numerical error treats both zeros as the value zero;
+it does not establish correctly rounded output or a signed-zero policy for
+general polynomial functions.
 
 For input `x`, rounded coordinate `z`, ideal Horner intermediate `h_k(x)`,
 `T >= abs(z)`, coordinate error `eta >= abs(z-x)` and interval magnitude
@@ -71,7 +106,7 @@ The separate-operation uniform bounds are about `1.083e-6` for erf and
 `5.520e-7` for exp, both below `2^-18`. Each domain contains 129 input values.
 
 `certify_plan(plan)` selects this proof, the canonical erf proof or exhaustive
-binary16 LUT verification. The generation and recertification CLIs support all three. Newly generated fixed
+binary16 LUT verification. The generation and recertification CLIs support all three. Newly generated
 polynomial plans certify by default; use `--certify=false` for an unchecked
 candidate. Reports use schema version 2, `PathCertificate.domain` and
 method-specific coverage. Numerical certification applies to the exact IR;
@@ -97,8 +132,9 @@ certify_erf(read_plan("plan.toml"))
 
 `certify_erf` supports the canonical fixed binary16 or IEEE32 `erf` graph with nearest-even
 rounding and rejected overflow. Other graphs return an explicit unsupported
-result. Floating arithmetic, mixed interfaces and general reductions do not
-have uniform evaluator certificates yet.
+result. The segmented floating `erf_candidate()` and general reductions do not
+have uniform evaluator certificates yet; bounded float/fixed polynomial kernels
+use the proof above.
 
 ### What is proved
 
