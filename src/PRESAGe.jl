@@ -47,6 +47,11 @@ export FloatFormat,
     certify_plan,
     certify_erf,
     certified_erf,
+    certified_lut,
+    certify_lut,
+    ImplementationModel,
+    select_implementation,
+    implementation_cost,
     write_certificate
 
 include("formats.jl")
@@ -63,7 +68,9 @@ include("cpp_vendor.jl")
 include("cpp.jl")
 include("kernels.jl")
 include("fixed_kernels.jl")
+include("costs.jl")
 include("certificates.jl")
+include("lut.jl")
 include("polynomial_certificates.jl")
 
 end

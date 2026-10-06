@@ -100,3 +100,79 @@ include(joinpath(@__DIR__, "..", "scripts", "certify.jl"))
               "unsupported_domain"
     end
 end
+
+@testset "Binary16 generation and implementation policy" begin
+    mktempdir() do directory
+        lut = joinpath(directory, "lut")
+        generate_main(["erf", lut, "--input-format=half"])
+        plan = read_plan(joinpath(lut, "plan.toml"))
+        @test plan.spec.input_format == plan.spec.output_format == IEEE16
+        @test plan.settings["kernel"] == "binary16_lut"
+        @test implementation_cost(plan).table_bits == 1 << 20
+        @test TOML.parsefile(joinpath(lut, "certificate.toml"))["status"] == "certified"
+        repeated = joinpath(directory, "repeated")
+        generate_main([joinpath(lut, "plan.toml"), repeated])
+        @test read(joinpath(lut, "evaluator.hpp")) ==
+              read(joinpath(repeated, "evaluator.hpp"))
+        @test certify_main([
+            joinpath(lut, "plan.toml"),
+            joinpath(directory, "report.toml"),
+        ]).status == :certified
+        polynomial = joinpath(directory, "polynomial")
+        generate_main([
+            "erf",
+            polynomial,
+            "--input-format=half",
+            "--output-format=half",
+            "--lut-max-bits=0",
+        ])
+        @test read_plan(joinpath(polynomial, "plan.toml")).settings["kernel"] ==
+              "erf_fixed_horner"
+        @test TOML.parsefile(joinpath(polynomial, "certificate.toml"))["status"] ==
+              "certified"
+        generate_main([
+            "erf",
+            polynomial,
+            "--input-format=half",
+            "--implementation=polynomial",
+            "--evaluation=fma",
+        ])
+        @test read_plan(joinpath(polynomial, "plan.toml")).settings["evaluation"] == "fma"
+        @test TOML.parsefile(joinpath(polynomial, "certificate.toml"))["status"] ==
+              "certified"
+        generate_main([
+            "erf",
+            polynomial,
+            "--input-format=half",
+            "--implementation=polynomial",
+            "--certify=false",
+        ])
+        @test !isfile(joinpath(polynomial, "certificate.toml"))
+        @test_throws ErrorException generate_main([
+            "erf",
+            lut,
+            "--input-format=half",
+            "--absolute-error=1/1073741824",
+        ])
+        @test TOML.parsefile(joinpath(lut, "certificate-failure.toml"))["status"] ==
+              "bound_exceeds_budget"
+        @test read(joinpath(lut, "evaluator.hpp")) ==
+              read(joinpath(repeated, "evaluator.hpp"))
+        for options in (
+            ["--input-format=half", "--output-format=single"],
+            ["--input-format=double"],
+            ["--input-format=half", "--degree=9"],
+            ["--input-format=half", "--certify=false"],
+            ["--input-format=half", "--internal=double"],
+        )
+            @test_throws ErrorException generate_main(["erf", lut, options...])
+        end
+        @test_throws ArgumentError generate_main(["erf", lut, "--implementation=lut"])
+        @test_throws ArgumentError generate_main([
+            "erf",
+            lut,
+            "--input-format=half",
+            "--implementation=unknown",
+        ])
+    end
+end

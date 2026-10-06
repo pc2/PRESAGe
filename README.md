@@ -9,9 +9,10 @@ The package provides exact IEEE formats and rounding, `FunctionSpec`, versioned
 contract/candidate artifacts, adaptive references, a typed arithmetic IR,
 an exact interpreter and a C++ CPU emitter. Inputs, outputs, coefficients and
 intermediates can use fixed formats; mixed fixed/floating interfaces are supported.
-The fixed IEEE32 `erf` evaluator has a uniform absolute-error certificate
+The fixed binary16/IEEE32 `erf` evaluators have uniform absolute-error certificates
 covering every finite input. Fixed polynomial kernels can also be certified on
-bounded domains. Floating candidates run locally.
+bounded domains. Binary16 also supports a complete lookup table with resolved
+nearest-even outputs. Floating candidates run locally.
 The development plan is maintained at
 [`../plan/DEVELOPMENT_PLAN.md`](../plan/DEVELOPMENT_PLAN.md).
 
@@ -162,7 +163,53 @@ The generation CLI accepts `--backend=portable|ap_fixed|ac_fixed` (default
 proof precision and norm tightness have separate controls. Fixed generation
 certifies by default; `--certify=false` emits an unchecked candidate. Pass an
 existing `plan.toml` instead of `erf` to emit its stored program again and rerun
-the supported fixed certificate.
+the supported certificate.
+
+## Binary16 implementations
+
+Binary16 `erf` supports a lookup table or fixed polynomial, both with half input
+and output. The default absolute target is `2^-10`. Automatic selection uses
+`ImplementationModel(lut_max_bits=1048576)`: choose the full LUT when its storage
+fits this arbitrary threshold, otherwise choose the polynomial. The table has
+65,536 sixteen-bit entries, or **128 KiB**. This policy can be calibrated later.
+
+```sh
+# Automatic selection: LUT at the default threshold.
+julia --startup-file=no --project=. scripts/generate.jl erf build/half-lut \
+  --input-format=half
+
+# Automatic selection: polynomial when the table exceeds the threshold.
+julia --startup-file=no --project=. scripts/generate.jl erf build/half-poly \
+  --input-format=half --lut-max-bits=0
+```
+
+Use `--implementation=lut|polynomial|auto` to select explicitly, and
+`--absolute-error=1/1024` to set the exact budget. `--output-format` defaults to
+the input format; the certified erf kernels require matching half or single
+interfaces. `--backend=portable|ac_fixed|ap_fixed` independently selects the C++
+arithmetic library. LUT generation requires certification and rejects polynomial
+tuning options. Stored plans retain their selected implementation when re-emitted.
+
+```julia
+spec = erf_spec(; format=IEEE16)
+lut = certified_erf(; spec, implementation=:lut)
+polynomial = certified_erf(; spec, implementation=:polynomial)
+implementation_cost(lut.plan) # Table bits, reads and static arithmetic counts.
+```
+
+The LUT resolves every entry using adaptive reference enclosures and reproduces
+nearest-even rounding for every finite input. Signed zeros and nonfinite inputs
+follow the shared primitive policy. `certify_lut(plan)` rechecks every stored
+entry and the complete lookup graph. `certified_lut(spec)` is also available for
+other matching binary16 contracts with established references and finite results
+at every finite input. Failed or unresolved references stop generation.
+
+The polynomial has a uniform total-error certificate; it does not promise
+correct rounding. Both implementations are checked on all 65,536 input patterns
+through the interpreter and all three C++ backends. Structural costs describe
+stored tables and IR operations; they are not FPGA latency, II or resource
+predictions. Binary16 CPU arithmetic currently uses fixed, float or double
+internals with portable half storage and exact conversions.
 
 ## Fixed input and output
 

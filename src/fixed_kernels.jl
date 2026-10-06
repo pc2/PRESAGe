@@ -30,6 +30,18 @@ end
 _product_format(a::FixedFormat, b::FixedFormat) =
     FixedFormat(a.width + b.width, a.integer_bits + b.integer_bits)
 
+function _check_fixed_erf_spec(spec)
+    spec.expression == "erf(x)" &&
+        spec.domain === nothing &&
+        spec.input_format == spec.output_format &&
+        spec.input_format in (IEEE16, IEEE32) || throw(
+        ArgumentError(
+            "fixed erf supports all-finite matching binary16 or binary32 interfaces",
+        ),
+    )
+    return spec.input_format
+end
+
 # This layout is also reconstructed by the certifier and compared to the entire
 # executed graph. Metadata alone cannot authorise a numerical certificate.
 function _fixed_erf_layout(
@@ -39,6 +51,7 @@ function _fixed_erf_layout(
     evaluation;
     spec = erf_spec(),
 )
+    interface = _check_fixed_erf_spec(spec)
     nsegments, degree = length(ss), length(first(ss).coefficients) - 1
     width = _q(4) / nsegments
     centers = [_q(2i - 1) * width / 2 for i = 1:nsegments]
@@ -57,15 +70,15 @@ function _fixed_erf_layout(
     end
     all(i -> decode_fixed(tables[1].values[i], inputformat) == -centers[i], 1:nsegments) ||
         throw(ArgumentError("coordinate precision cannot represent the segment centres"))
-    nodes = IR.Node[IR.Input(IEEE32)]
-    u32, ui = IR.UIntFormat(32), IR.UIntFormat(8)
+    nodes = IR.Node[IR.Input(interface)]
+    u32, ui = IR.UIntFormat(_width(interface)), IR.UIntFormat(8)
     raw = _push!(nodes, IR.BitCast(1, u32))
-    mask = _push!(nodes, IR.Const(u32, 0x7fffffff))
+    mask = _push!(nodes, IR.Const(u32, _wordmask(interface) ⊻ _sign(interface)))
     magnitude_bits = _push!(nodes, IR.BitOp(:bitand, raw, mask))
-    magnitude = _push!(nodes, IR.BitCast(magnitude_bits, IEEE32))
+    magnitude = _push!(nodes, IR.BitCast(magnitude_bits, interface))
     index = _push!(nodes, IR.Const(ui, 0))
     for i = 2:nsegments
-        threshold = _push!(nodes, IR.constant((i - 1) * width, IEEE32))
+        threshold = _push!(nodes, IR.constant((i - 1) * width, interface))
         condition = _push!(nodes, IR.Compare(:ge, magnitude, threshold))
         row = _push!(nodes, IR.Const(ui, i - 1))
         index = _push!(nodes, IR.Select(condition, row, index))
@@ -148,25 +161,25 @@ function _fixed_erf_layout(
         )
         h, hformat = next, nextformat
     end
-    result = _push!(nodes, IR.Convert(h, IEEE32))
-    limit = _push!(nodes, IR.constant(4, IEEE32))
+    result = _push!(nodes, IR.Convert(h, interface))
+    limit = _push!(nodes, IR.constant(4, interface))
     tail = _push!(nodes, IR.Compare(:gt, magnitude, limit))
-    one = _push!(nodes, IR.constant(1, IEEE32))
+    one = _push!(nodes, IR.constant(1, interface))
     positive = _push!(nodes, IR.Select(tail, one, result))
     positivebits = _push!(nodes, IR.BitCast(positive, u32))
-    signmask = _push!(nodes, IR.Const(u32, 0x80000000))
+    signmask = _push!(nodes, IR.Const(u32, _sign(interface)))
     signbits = _push!(nodes, IR.BitOp(:bitand, raw, signmask))
     signedbits = _push!(nodes, IR.BitOp(:bitxor, positivebits, signbits))
-    signed = _push!(nodes, IR.BitCast(signedbits, IEEE32))
+    signed = _push!(nodes, IR.BitCast(signedbits, interface))
     zero = _push!(nodes, IR.Classify(:zero, 1))
     output = _push!(nodes, IR.Select(zero, 1, signed))
-    output = _nan_guard!(nodes, output, 1, IEEE32)
+    output = _nan_guard!(nodes, output, 1, interface)
     program = IR.Program(nodes; tables, output)
     plan = PlanArtifact(
         spec;
         program,
         segments = ss,
-        dispatch = Dispatch(round_ieee(4, IEEE32)),
+        dispatch = Dispatch(round_ieee(4, interface)),
         settings = Dict(
             "kernel" => "erf_fixed_horner",
             "fraction_bits" => string(fraction_bits),
@@ -179,6 +192,7 @@ end
 
 """Fresh fixed Horner erf candidate with common per-stage widths derived from exact range bounds."""
 function erf_fixed_candidate(;
+    spec::FunctionSpec = erf_spec(),
     degree::Integer = 9,
     segments::Integer = 4,
     fraction_bits::Integer = 31,
@@ -186,6 +200,7 @@ function erf_fixed_candidate(;
     evaluation::Symbol = :separate,
     precision::Integer = 256,
 )
+    _check_fixed_erf_spec(spec)
     1 <= degree <= 32 || throw(ArgumentError("degree must be in 1:32"))
     1 <= segments <= 64 && ispow2(segments) ||
         throw(ArgumentError("segments must be a power of two up to 64"))
@@ -227,5 +242,6 @@ function erf_fixed_candidate(;
         Int(fraction_bits),
         Int(coefficient_fraction_bits),
         evaluation,
+        spec = spec,
     ).plan
 end

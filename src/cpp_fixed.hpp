@@ -94,9 +94,9 @@ template<class T,class U> T fixed_round(U value,std::int64_t source_fraction,int
     return integer_cast<T>(x);
 }
 template<class T,class Float> T fixed_from_float(Float x,int width,int fraction,bool is_signed,int mode,int overflow,int scale=0) {
-    using Word = std::conditional_t<sizeof(Float)==4,std::uint32_t,std::uint64_t>;
-    constexpr int mantissa = sizeof(Float)==4 ? 23 : 52;
-    constexpr int exponent_bits = sizeof(Float)==4 ? 8 : 11;
+    using Word = std::conditional_t<sizeof(Float)==2,std::uint16_t,std::conditional_t<sizeof(Float)==4,std::uint32_t,std::uint64_t>>;
+    constexpr int mantissa = sizeof(Float)==2 ? 10 : sizeof(Float)==4 ? 23 : 52;
+    constexpr int exponent_bits = sizeof(Float)==2 ? 5 : sizeof(Float)==4 ? 8 : 11;
     constexpr int bias = (1 << (exponent_bits-1))-1;
     Word raw = std::bit_cast<Word>(x);
     Word exponent = (raw >> mantissa) & ((Word(1) << exponent_bits)-1);
@@ -109,9 +109,9 @@ template<class T,class Float> T fixed_from_float(Float x,int width,int fraction,
     return fixed_round<T>(value,-std::int64_t(power)-scale,width,fraction,is_signed,mode,overflow);
 }
 template<class Float,class T> Float float_from_fixed(T value,int fraction,int mode) {
-    using Word = std::conditional_t<sizeof(Float)==4,std::uint32_t,std::uint64_t>;
-    constexpr int mantissa = sizeof(Float)==4 ? 23 : 52;
-    constexpr int exponent_bits = sizeof(Float)==4 ? 8 : 11;
+    using Word = std::conditional_t<sizeof(Float)==2,std::uint16_t,std::conditional_t<sizeof(Float)==4,std::uint32_t,std::uint64_t>>;
+    constexpr int mantissa = sizeof(Float)==2 ? 10 : sizeof(Float)==4 ? 23 : 52;
+    constexpr int exponent_bits = sizeof(Float)==2 ? 5 : sizeof(Float)==4 ? 8 : 11;
     constexpr int bias = (1 << (exponent_bits-1))-1;
     constexpr int emin = 1-bias;
     constexpr Word inf = ((Word(1) << exponent_bits)-1) << mantissa;

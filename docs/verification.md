@@ -1,6 +1,6 @@
 # Local verification
 
-Verified on 5 October 2026 on macOS, Apple Silicon, using the sibling Sollya.jl
+Verified on 6 October 2026 on macOS, Apple Silicon, using the sibling Sollya.jl
 0.1.0 checkout and installed Sollya 8.0 (Homebrew `8.0_3`). CPU evaluators use
 LLVM/Clang 23.1.2; the CMake workflow uses CMake 4.4.3. Direct primitive checks
 use each Julia installation's own MPFR/GMP runtime.
@@ -8,7 +8,7 @@ use each Julia installation's own MPFR/GMP runtime.
 ## Results
 
 The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **172,262 checks on Julia 1.13.1**, with four
+passes **368,949 checks on Julia 1.13.1**, with four
 threads. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
@@ -21,6 +21,9 @@ coverage or numerical certificates.
 | Reference command | 8 | Primitive names and constant expressions; both backends; option validation. |
 | Typed IR and exact execution | 60 | Graph/type validation; binary16/32/64 and custom floating arithmetic; separate/FMA cancellation; signed zeros; directed conversion; underflow; extreme scaling; lazy branches; schema v2 round trips. |
 | Portable CPU conformance | 18 | Compiled binary32/64 Mul/Add/FMA; bounded nonsymmetric kernels; mixed formats; bit operations; tables; inward domain thresholds; skipped invalid lookups. Each conformance assertion checks multiple input words. |
+| Binary16 CPU interfaces and conversions | 7 | All 65,536 raw words and float/double round trips; raw/typed APIs; subnormal, binade and overflow midpoint neighbours; truncation; explicit refusal of half arithmetic nodes. |
+| Binary16 fixed bridges | 6 | Complete signed finite half range through exact fixed internals in all three backends; lazy rejection of nonfinites; nearest-even and directed half output at subnormal/normal/overflow ties. |
+| Binary16 implementation selection and exhaustive certificates | 196,653 | LUT threshold boundaries and overrides, stored-entry/graph audits, unresolved references and infeasible budgets; all half encodings checked against MPFR for LUT and separate/FMA polynomials, then compiled through all three C++ backends with exact node/table traces. |
 | Fresh erf candidate | 2,125 | Exact stored coefficients; bit/table conformance; boundary rows and neighbours; special branches; enclosed sampled accuracy; IEEE32 internal FMA variant conformance. |
 | Exact fixed arithmetic | 1,568 | Exhaustive small-format encoding round trips and widened arithmetic; signed/unsigned quantization; ties; all rounding/overflow policies; huge scaling; arbitrary-width schema v3 words. |
 | Fixed CPU conformance | 37 | Exact IEEE32/64 conversions; native/GMP products, sums and FMA; directed rounding; actual wrap/saturate/reject cases; classification evaluation; scale extremes; binary64 subnormal/midpoint conversions. Every visited fixed payload is checked. |
@@ -31,6 +34,7 @@ coverage or numerical certificates.
 | Uniform fixed erf certificates | 2,346 | Every fixed node's range; complete graph audit; uniform error contributions/tails; CPU bits/rows; sampled MPFR checks against the certified bound; rejected graph/metadata changes; width-search failure; wide separate/FMA certificates. |
 | Uniform fixed polynomial certificates | 11,222 | Exhaustive bounded erf/exp in separate/FMA modes against mathematical enclosures and all three C++ backends; every visited fixed node's certified range; exact affine and constant kernels, coarse coordinates and amplification, inward/clipped/singleton domains, unsigned/wide formats, changed coefficients/graphs, overflow, singularities and schema v2 reports. |
 | Certified generation commands | 32 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal and option validation; automatic fixed polynomial proofs with or without a kernel label, standalone recertification and unsupported graphs. |
+| Binary16 generation and implementation policy | 21 | Automatic and explicit LUT/polynomial selection; exact budgets and half interfaces; stored LUT recertification/identical emission; FMA and unchecked polynomial generation; preserved outputs on failed proofs and invalid options. |
 
 In particular, `exp` at IEEE32 input `0xc2af0001` resolves to output
 **`0x006cb285`** through both backends at 256 bits. Exact rational midpoint
@@ -42,6 +46,37 @@ The standalone CLI and the `analysis/eval/golden.jl` forwarding entry point
 were also executed on a three-word input with chunk size two. Their outputs
 agreed exactly, with valid completion manifests and a correctly handled final
 one-word chunk. No legacy evaluator or historical comparison data were used.
+
+## Binary16 implementation results
+
+Both LUT and fixed-polynomial erf implementations meet the default absolute
+target `2^-10`. Every one of the 65,536 input encodings is checked, including
+signed zeros, subnormals, infinities and NaNs. Portable, ac_fixed and ap_fixed
+C++ match interpreter output bits and table choices; polynomial checks also
+compare every visited fixed payload. Separate/FMA polynomials have uniform
+Sollya/rational certificates and exhaustive direct MPFR enclosure checks.
+
+| Implementation | Logical table bits | Static reads | Arithmetic | Uniform absolute bound | Exhaustive enclosed maximum |
+| --- | ---: | ---: | --- | ---: | ---: |
+| Full LUT | 1,048,576 | 1 | None | `2.440093e-4` | `2.440093e-4` |
+| Fixed polynomial, separate | 852 | 11 | 9 multiplies, 10 adds | `4.954173e-4` | `2.460683e-4` |
+| Fixed polynomial, FMA | 852 | 11 | 9 FMAs, 1 add | `4.954173e-4` | `2.460683e-4` |
+
+Every LUT entry matches a resolved nearest-even reference. Its maximum error
+enclosure is uniform over the complete finite format; this is exhaustive
+evidence, not a sampled maximum. Changed entries or lookup graphs cannot inherit
+the certificate. Unresolved references abort table generation. The LUT's
+sixteen-bit C++ storage occupies 128 KiB and works under host `FE_DOWNWARD`.
+The static costs above describe the IR, rather than device resources or timing.
+
+`ImplementationModel(lut_max_bits=1048576)` selects the LUT at the default
+threshold. A threshold below that table size selects a fixed polynomial;
+explicit selection overrides the threshold. This arbitrary policy awaits
+synthesis calibration. The existing IEEE32 default remains polynomial.
+
+The standalone generator produced `build/half-lut` and `build/half-poly`.
+Stored plans were recertified, compiled through CMake, and checked by CTest in
+`build/half-lut-ac` and `build/half-poly-ap`. Both pass on all 65,536 encodings.
 
 ## Uniform fixed evaluator result
 
@@ -186,16 +221,17 @@ without it, unavailable vendor test groups are explicitly skipped.
 
 ## Limits
 
-Uniform certification covers the canonical fixed IEEE32 erf graph and supported
+Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 fixed polynomial kernels with nearest-even rounding and rejected
 overflow. Floating arithmetic, mixed interfaces and general transformations
 remain outside the certificates. The [compact contract](../examples/erf-contract.toml) remains
 unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces;
 a separate report records the
 numerical proof. Floating CPU arithmetic supports binary32/binary64 with
-nearest-even rounding; fixed helpers also support directed conversions.
-Binary16 **encoding and rounding** were exhausted; binary16 transcendental
-functions were not. Near-zero ulp and correct-rounding claims are not established.
+nearest-even rounding; binary16 interfaces and exact conversions are supported,
+and fixed helpers also support directed conversions. Binary16 erf is exhausted
+for both implementation choices. Polynomial kernels have no near-zero ulp or
+correct-rounding guarantee; binary16 LUTs reproduce resolved nearest-even outputs.
 Sollya and direct MPFR checks share MPFR algorithms, so their agreement is not
 fully independent evidence. Linux, installed vendor toolchains, synthesis and FPGA
 performance were not tested. These are separate later gates in the plan.

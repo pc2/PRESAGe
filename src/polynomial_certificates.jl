@@ -293,14 +293,32 @@ function certify_polynomial(
     return CertificationResult(plan, status, path.total, (path,), nothing, settings, reason)
 end
 
-"""Certify a supported stored evaluator: canonical fixed erf or fixed polynomial."""
-certify_plan(plan::PlanArtifact; kwargs...) =
-    get(plan.settings, "kernel", "") == "erf_fixed_horner" ? certify_erf(plan; kwargs...) :
-    certify_polynomial(plan; kwargs...)
+"""Certify a supported stored evaluator: fixed erf, fixed polynomial or binary16 LUT."""
+function certify_plan(
+    plan::PlanArtifact;
+    precision::Integer = 256,
+    accuracy = 1 // 1024,
+    max_refinements::Integer = 2,
+)
+    if get(plan.settings, "kernel", "") == "binary16_lut"
+        precision >= 64 || throw(ArgumentError("proof precision must be at least 64"))
+        0 < accuracy < 1 ||
+            throw(ArgumentError("norm accuracy must be between zero and one"))
+        0 <= max_refinements <= 8 || throw(ArgumentError("refinements must be in 0:8"))
+        config = OracleConfig(;
+            initial_precision = precision,
+            max_precision = max(4096, precision),
+        )
+        return certify_lut(plan; config)
+    end
+    return get(plan.settings, "kernel", "") == "erf_fixed_horner" ?
+           certify_erf(plan; precision, accuracy, max_refinements) :
+           certify_polynomial(plan; precision, accuracy, max_refinements)
+end
 
 function _has_supported_certificate(plan)
-    get(plan.settings, "kernel", "") in ("erf_fixed_horner", "fixed_polynomial_horner") &&
-        return true
+    get(plan.settings, "kernel", "") in
+    ("erf_fixed_horner", "fixed_polynomial_horner", "binary16_lut") && return true
     try
         _polynomial_audit(plan)
         return true

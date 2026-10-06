@@ -3,6 +3,7 @@ using PRESAGe
 
 function verification_inputs(plan; random_count = 2048)
     f = plan.spec.input_format
+    f == IEEE16 && !(plan.spec.output_format isa FixedFormat) && return UInt64.(0:65535)
     sign = f isa FixedFormat ? BigInt(1) << (f.width - 1) : PRESAGe._sign(f)
     mask = f isa FixedFormat ? PRESAGe._fixed_mask(f) : PRESAGe._wordmask(f)
     words =

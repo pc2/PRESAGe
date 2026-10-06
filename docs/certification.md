@@ -70,8 +70,8 @@ The [bounded example](../examples/bounded_polynomial.jl) uses degree nine,
 The separate-operation uniform bounds are about `1.083e-6` for erf and
 `5.520e-7` for exp, both below `2^-18`. Each domain contains 129 input values.
 
-`certify_plan(plan)` selects this proof or the canonical erf proof below.
-The generation and recertification CLIs support both. Newly generated fixed
+`certify_plan(plan)` selects this proof, the canonical erf proof or exhaustive
+binary16 LUT verification. The generation and recertification CLIs support all three. Newly generated fixed
 polynomial plans certify by default; use `--certify=false` for an unchecked
 candidate. Reports use schema version 2, `PathCertificate.domain` and
 method-specific coverage. Numerical certification applies to the exact IR;
@@ -95,7 +95,7 @@ write_certificate("certificate.toml", result)
 certify_erf(read_plan("plan.toml"))
 ```
 
-`certify_erf` supports the canonical fixed IEEE32 `erf` graph with nearest-even
+`certify_erf` supports the canonical fixed binary16 or IEEE32 `erf` graph with nearest-even
 rounding and rejected overflow. Other graphs return an explicit unsupported
 result. Floating arithmetic, mixed interfaces and general reductions do not
 have uniform evaluator certificates yet.
@@ -181,4 +181,28 @@ check emitted bits and table decisions against its interpreter, including
 boundaries, exceptional values, ties and arbitrary-width arithmetic. Sampled
 reference errors are additional evidence and are reported separately. Correct
 rounding, near-zero ulp accuracy, synthesis-toolchain conformance and hardware
-performance require further work.
+performance require further work for polynomial evaluators.
+
+## Exhaustive binary16 lookup tables
+
+`certified_lut(spec)` builds a full 65,536-entry table for matching binary16
+interfaces on all finite inputs. The default reference backend is direct MPFR.
+Adaptive enclosures must resolve a unique nearest-even output; every finite
+input must have a finite result. Exact primitive zero/unit cases use their
+established identities. Nonfinite inputs use the shared primitive policy.
+Domain errors at finite inputs, nonfinite finite-input results and unresolved
+references stop generation with explicit failure status.
+
+For each finite input, the stored output's absolute error is bounded against
+both directed enclosure endpoints. The maximum across the complete finite
+format is a uniform error bound, rather than a sampled maximum. For erf, this
+bound is about `2.4401e-4`, below `2^-10`. Every finite output also matches the
+resolved nearest-even reference, including subnormal results and signed zeros.
+
+`certify_lut(plan)` audits the canonical input-bitcast-table-load graph, table
+format and complete entry count, then resolves all references afresh. Changed
+entries cannot retain a certificate. Reports use method
+`binary16_exhaustive_lut` and explicitly record exhaustive coverage.
+Generation through `certified_erf` selects a LUT or fixed polynomial by the
+configurable table-bit threshold; explicit selection bypasses that threshold.
+This selection policy contains no measured FPGA performance assumptions.

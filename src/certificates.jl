@@ -39,11 +39,8 @@ function _float_rounding_bound(range, f::FloatFormat)
     return _pow2(max(e, _emin(f)) - f.fraction_bits - 1)
 end
 function _erf_audit(plan)
-    plan.program !== nothing &&
-        plan.spec.expression == "erf(x)" &&
-        plan.spec.input_format == plan.spec.output_format == IEEE32 &&
-        plan.spec.domain === nothing ||
-        throw(ArgumentError("certificate supports the all-finite IEEE32 erf contract"))
+    interface = _check_fixed_erf_spec(plan.spec)
+    plan.program !== nothing || throw(ArgumentError("missing evaluator program"))
     ss = plan.segments
     n = length(ss)
     1 <= n <= 64 && ispow2(n) || throw(ArgumentError("unsupported segmentation"))
@@ -55,7 +52,7 @@ function _erf_audit(plan)
         throw(ArgumentError("segments must cover [0,4] without gaps"))
     b = plan.dispatch
     b !== nothing &&
-        b.magnitude_threshold == round_ieee(4, IEEE32) &&
+        b.magnitude_threshold == round_ieee(4, interface) &&
         b.comparison == :greater &&
         b.positive_tail == 1 &&
         b.negative_tail == -1 || throw(ArgumentError("unsupported tail dispatch"))
@@ -107,7 +104,10 @@ function _path_arithmetic(layout, row)
             _singleton(coefficients[stage.coefficient]),
         )
     end
-    output = _float_rounding_bound(layout.ranges[row][layout.final], IEEE32)
+    output = _float_rounding_bound(
+        layout.ranges[row][layout.final],
+        layout.plan.spec.output_format,
+    )
     return coordinate, arithmetic, output
 end
 function _stored_polynomial(coefficients)
@@ -131,7 +131,7 @@ end
 """
     certify_erf(plan; precision=256, accuracy=1//1024, max_refinements=2)
 
-Certify the supported fixed IEEE32 erf graph on every finite input. Sollya
+Certify the supported fixed binary16 or binary32 erf graph on every finite input. Sollya
 supnorm proves stored-polynomial error; exact rational range/error propagation
 covers input quantisation, every arithmetic quantizer and output rounding.
 Known oddness and monotonicity cover sign restoration and constant tails.
@@ -257,16 +257,29 @@ end
 
 """Bounded width search. Exhaustion reports search_limit, never mathematical infeasibility."""
 function certified_erf(;
+    spec::FunctionSpec = erf_spec(),
+    implementation::Symbol = :auto,
+    model::ImplementationModel = ImplementationModel(),
     degree::Integer = 9,
     segments::Integer = 4,
-    initial_fraction_bits::Integer = 23 + ndigits(16degree - 1; base = 2),
-    max_fraction_bits::Integer = 47,
+    initial_fraction_bits::Integer = spec.output_format.fraction_bits +
+                                     ndigits(16degree - 1; base = 2),
+    max_fraction_bits::Integer = spec.output_format.fraction_bits + 24,
     coefficient_fraction_bits = nothing,
     evaluation::Symbol = :separate,
     precision::Integer = 256,
     proof_precision::Integer = 256,
     accuracy::Union{Integer, Rational} = 1 // 1024,
 )
+    _check_fixed_erf_spec(spec)
+    selected = select_implementation(spec; implementation, model)
+    if selected == :lut
+        config = OracleConfig(;
+            initial_precision = proof_precision,
+            max_precision = max(4096, proof_precision),
+        )
+        return certified_lut(spec; config)
+    end
     1 <= degree <= 32 || throw(ArgumentError("degree must be in 1:32"))
     0 <= initial_fraction_bits <= max_fraction_bits <= 256 ||
         throw(ArgumentError("invalid width search bounds"))
@@ -276,6 +289,7 @@ function certified_erf(;
         attempts += 1
         plan = try
             erf_fixed_candidate(;
+                spec,
                 degree,
                 segments,
                 fraction_bits = fraction,
@@ -287,7 +301,7 @@ function certified_erf(;
         catch err
             err isa Sollya.SollyaError || rethrow()
             return _certificate_failure(
-                PlanArtifact(erf_spec()),
+                PlanArtifact(spec),
                 :proof_failed,
                 "Coefficient generation failed: " * sprint(showerror, err),
             )
@@ -341,7 +355,14 @@ function _certificate_data(result::CertificationResult)
                 ],
             ) for p in result.paths
         ]
-        d["coverage"] = if get(result.settings, "method", "") == "fixed_polynomial_horner"
+        d["coverage"] = if get(result.settings, "method", "") == "binary16_exhaustive_lut"
+            Dict(
+                "inputs" => "all 65536 binary16 encodings",
+                "finite_inputs" => "resolved nearest-even output for every finite input",
+                "nonfinite_inputs" => "shared primitive special-value policy",
+                "table_bits" => 65536 * 16,
+            )
+        elseif get(result.settings, "method", "") == "fixed_polynomial_horner"
             Dict(
                 "input_domain" => _rational_text.(collect(only(result.paths).domain)),
                 "inputs" => "all representable fixed inputs in the interval",

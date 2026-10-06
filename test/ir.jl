@@ -67,7 +67,10 @@
     trace = interpret_trace(p, 0)
     @test trace.bits == 0x3f800000
     @test !haskey(trace.values, 3)
-    @test_throws ArgumentError emit_cpp(IOBuffer(), IR.Program([IR.Input(IEEE16)]))
+    @test_throws ArgumentError emit_cpp(
+        IOBuffer(),
+        IR.Program([IR.Input(FloatFormat(4, 3))]),
+    )
     @test_throws ArgumentError emit_cpp(
         IOBuffer(),
         IR.Program([IR.Input(IEEE32), IR.Convert(1, IEEE32; rounding = :up)]),

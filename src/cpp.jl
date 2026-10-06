@@ -1,10 +1,12 @@
 _cpp_type(f::FloatFormat) =
+    f == IEEE16 ? "Half" :
     f == IEEE32 ? "float" :
     f == IEEE64 ? "double" :
-    throw(ArgumentError("CPU emitter supports binary32/binary64 only"))
+    throw(ArgumentError("CPU emitter supports binary16/binary32/binary64 only"))
 _cpp_type(::IR.UIntFormat) = "std::uint64_t"
 _cpp_type(::Type{Bool}) = "bool"
 _cpp_storage(f::FloatFormat) =
+    f == IEEE16 ? "std::uint16_t" :
     f == IEEE32 ? "std::uint32_t" :
     f == IEEE64 ? "std::uint64_t" : throw(ArgumentError("unsupported CPU format"))
 _cpp_storage(f::FixedFormat) = f.width <= 64 ? "std::uint64_t" : "Big"
@@ -39,6 +41,13 @@ end
 
 function _cpp_expr(p, i, backend = :portable)
     n, f = p.nodes[i], IR.format(p, i)
+    f == IEEE16 &&
+        n isa Union{IR.Mul, IR.Add, IR.FMA, IR.ScalePow2} &&
+        throw(
+            ArgumentError(
+                "binary16 CPU support covers interfaces and conversions; use fixed, binary32 or binary64 arithmetic",
+            ),
+        )
     call(j) = "n$j()"
     if n isa Union{IR.Mul, IR.Add, IR.FMA, IR.Convert, IR.Quantize, IR.ScalePow2} && (
         f isa FixedFormat ||
@@ -106,6 +115,13 @@ function _cpp_expr(p, i, backend = :portable)
                 n.kind == :zero ? "(value == 0)" : "false"
             return "([&]() { [[maybe_unused]] auto value = $source; return $expression; }())"
         end
+        if IR.format(p, n.source) == IEEE16
+            raw = "($source.bits)"
+            return n.kind == :nan ? "(($raw & 0x7fff) > 0x7c00)" :
+                   n.kind == :infinity ? "(($raw & 0x7fff) == 0x7c00)" :
+                   n.kind == :finite ? "(($raw & 0x7c00) != 0x7c00)" :
+                   n.kind == :negative ? "(($raw & 0x8000) != 0)" : "(($raw & 0x7fff) == 0)"
+        end
         return n.kind == :nan ? "std::isnan($source)" :
                n.kind == :infinity ? "std::isinf($source)" :
                n.kind == :finite ? "std::isfinite($source)" :
@@ -145,7 +161,10 @@ function emit_cpp(
     inputformat, outputformat = IR.format(p, p.input), IR.format(p)
     inputtype, outputtype = _cpp_storage(inputformat), _cpp_storage(outputformat)
     rounding_check =
-        any(f -> f isa FloatFormat, p.types) ?
+        any(f -> f isa FloatFormat, p.types) && any(
+            n -> n isa Union{IR.Mul, IR.Add, IR.FMA, IR.Convert, IR.Quantize, IR.ScalePow2},
+            p.nodes,
+        ) ?
         "if (std::fegetround() != FE_TONEAREST) throw std::runtime_error(\"PRESAGe requires FE_TONEAREST\");" :
         ""
     println(
@@ -173,6 +192,7 @@ inline float canonical(float x) {
 inline double canonical(double x) {
     return std::isnan(x) ? std::bit_cast<double>(std::uint64_t{0x7ff8000000000000ULL}) : x;
 }
+$(any(==(IEEE16),p.types) || any(t -> t.format == IEEE16,p.tables) ? read(joinpath(@__DIR__,"cpp_half.hpp"),String) : "")
 $(_has_fixed(p) ? read(joinpath(@__DIR__,"cpp_fixed.hpp"),String) : "")
 $(_has_fixed(p) && backend != :portable ? read(joinpath(@__DIR__,"cpp_vendor.hpp"),String) : "")
 template<class T,std::size_t N>
@@ -199,8 +219,8 @@ struct Context {
         else
             println(
                 io,
-                "    inline static constexpr std::uint64_t table$i[] = {",
-                join(_cpp_hex.(t.values), ","),
+                "    inline static constexpr $(t.format isa FloatFormat ? _cpp_storage(t.format) : "std::uint64_t") table$i[] = {",
+                join(_cpp_hex.(collect(t.values)), ","),
                 "};",
             )
         end

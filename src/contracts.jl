@@ -25,8 +25,9 @@ struct FunctionSpec
     end
 end
 
-"""IEEE32 erf specification with absolute error target 2^-23."""
-erf_spec() = FunctionSpec("erf(x)")
+"""erf specification with matching IEEE interfaces and default absolute target 2^-fraction_bits."""
+erf_spec(; format::FloatFormat = IEEE32, absolute_error = _pow2(-format.fraction_bits)) =
+    FunctionSpec("erf(x)"; input_format = format, absolute_error)
 
 """Exact central/tail dispatch contract; the threshold is an input bit pattern."""
 struct Dispatch

@@ -6,6 +6,7 @@ function cpu_check(
     backend = :portable,
     public_api = false,
     input_bytes = nothing,
+    host_rounding = nothing,
 )
     compiler = get(
         ENV,
@@ -18,6 +19,20 @@ function cpu_check(
             joinpath.(Ref(directory), ("evaluator.hpp", "evaluate.cpp", "evaluate"))
         emit_cpp(header, plan; backend)
         emit_harness(source, plan.program)
+        if host_rounding !== nothing
+            mode = Dict(
+                :down => "FE_DOWNWARD",
+                :up => "FE_UPWARD",
+                :toward_zero => "FE_TOWARDZERO",
+            )[host_rounding]
+            write(
+                source,
+                replace(
+                    read(source, String),
+                    "std::fesetround(FE_TONEAREST);" => "std::fesetround($mode);",
+                ),
+            )
+        end
         if public_api
             infmt, outfmt = plan.spec.input_format, plan.spec.output_format
             decode = PRESAGe._cpp_decode_bits("word", infmt, backend)

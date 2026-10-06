@@ -63,9 +63,13 @@ table-index nodes can be inspected to check dispatch.
 ## C++ backend
 
 The C++20 emitter supports binary32/binary64 floating arithmetic with nearest-even
-rounding, plus exact fixed arithmetic and directed fixed conversions. Compile with
+rounding, binary16 interfaces and exact conversions, plus exact fixed arithmetic
+and directed fixed conversions. Binary16 uses the namespace-local `Half` type,
+a portable two-byte representation with exact widening to float/double and
+explicit nearest-even narrowing. Binary16 arithmetic nodes require fixed,
+binary32 or binary64 internals. Compile with
 `-ffp-contract=off -fno-fast-math -frounding-math`, retain gradual underflow and
-use `FE_TONEAREST` when floating nodes are present. `std::fma`
+use `FE_TONEAREST` for floating evaluators with arithmetic/conversion nodes. `std::fma`
 implements explicit FMA; separate nodes retain separate rounding. Bit conversion
 uses `std::bit_cast`. Per-call cached nodes preserve shared computations and lazy
 branches without process-global state.
@@ -75,8 +79,9 @@ up to 64, and `mpz_class` for wider fixed words. Fixed high padding bits are zer
 and checked on input. The typed `evaluate` interface accepts/returns the selected
 library's fixed types. In the portable backend, fixed values are scaled integer
 units in native integers or GMP. A typed portable input must fit its declared
-format. Programs containing floating nodes require `FE_TONEAREST`; pure fixed
-programs are independent of host floating rounding.
+format. Binary16 raw interfaces use `std::uint16_t`, and typed interfaces use
+`Half`. Pure lookup/bit graphs and pure fixed programs are independent of host
+floating rounding. LUTs store sixteen-bit entries for binary16.
 
 Fixed fields use native 64/128-bit integers where their widths fit. Products,
 aligned sums and FMA use widened native temporaries when their complete ranges

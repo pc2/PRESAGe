@@ -49,9 +49,9 @@ Out hls_quantize(const Source& source) {
     return Out(rounded); // Native wrap or saturation; rounding is already exact.
 }
 template<class T,int Fraction,class Float> T hls_from_float(Float x) {
-    using Word = std::conditional_t<sizeof(Float)==4,std::uint32_t,std::uint64_t>;
-    constexpr int mantissa = sizeof(Float)==4 ? 23 : 52;
-    constexpr int exponent_bits = sizeof(Float)==4 ? 8 : 11;
+    using Word = std::conditional_t<sizeof(Float)==2,std::uint16_t,std::conditional_t<sizeof(Float)==4,std::uint32_t,std::uint64_t>>;
+    constexpr int mantissa = sizeof(Float)==2 ? 10 : sizeof(Float)==4 ? 23 : 52;
+    constexpr int exponent_bits = sizeof(Float)==2 ? 5 : sizeof(Float)==4 ? 8 : 11;
     constexpr int bias = (1 << (exponent_bits-1))-1;
     Word raw = std::bit_cast<Word>(x);
     Word exponent = (raw >> mantissa) & ((Word(1) << exponent_bits)-1);
