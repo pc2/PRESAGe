@@ -19,6 +19,33 @@ payloads above 64 bits and official AC headers for C++ arithmetic.
 The development plan is maintained at
 [`../plan/DEVELOPMENT_PLAN.md`](../plan/DEVELOPMENT_PLAN.md).
 
+## Bounded function generation
+
+Generate coefficients and certify the complete evaluator in one call:
+
+```julia
+using PRESAGe
+
+spec = FunctionSpec("exp(x)+0.1*x";
+    input_format=IEEE32, domain=(-1,1), absolute_error=1//(1<<21))
+result = certified_polynomial(spec; degree=13,
+    internal_format=FloatFormat(8,27), evaluation=:fma,
+    generation_precision=256, proof_precision=256)
+@assert result.status == :certified
+write_plan("composed.toml", result.plan)
+write_certificate("certificate.toml", result)
+```
+
+This makes one attempt with the selected degree and shared coefficient/stage
+format. Fixed and floating internals and independent input/output formats are
+supported. Generation precision, proof precision and norm tightness are separate
+settings. Decimal/scientific literals retain exact rational semantics.
+The result retains a generated plan when its bound exceeds the budget or its
+proof fails; `generation_failed` includes a reason and a contract-only plan.
+See [generation details](docs/certification.md#generating-a-bounded-evaluator)
+and the [fixed example](examples/bounded_polynomial.jl). Ordered search and
+worker deadlines are the next development step.
+
 ## Custom floating formats
 
 ```julia

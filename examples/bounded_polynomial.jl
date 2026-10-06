@@ -1,32 +1,9 @@
 using PRESAGe
-import Sollya
-
-# Generate actual fixed coefficients, then certify the complete evaluator.
+# Generate coefficients and certify the complete evaluator in one call.
 directory = isempty(ARGS) ? joinpath("build", "bounded") : only(ARGS)
 mkpath(directory)
-for function_name in ("erf", "exp")
-    expression = function_name * "(x)"
-    coefficients = Sollya.with_session(Sollya.Session(; precision = 256)) do
-        f, domain = Sollya.sollya(expression), Sollya.interval(-1, 1)
-        try
-            polynomial = Sollya.fpminimax(
-                f,
-                9,
-                26,
-                domain;
-                error = :absolute,
-                arithmetic = :fixed,
-            )
-            try
-                Sollya.coefficients(polynomial)
-            finally
-                close(polynomial)
-            end
-        finally
-            close(f)
-            close(domain)
-        end
-    end
+for (function_name, expression) in
+    (("erf", "erf(x)"), ("exp", "exp(x)"), ("composed", "exp(x)+0.1*x"))
     spec = FunctionSpec(
         expression;
         input_format = FixedFormat(9, 3),
@@ -34,10 +11,15 @@ for function_name in ("erf", "exp")
         domain = (-1, 1),
         absolute_error = 1 // (1 << 18),
     )
-    plan = polynomial_plan(spec, coefficients; internal_format = FixedFormat(32, 6))
-    result = certify_polynomial(plan)
+    result = certified_polynomial(
+        spec;
+        degree = 9,
+        internal_format = FixedFormat(32, 6),
+        generation_precision = 256,
+        proof_precision = 256,
+    )
     result.status == :certified || error("$function_name: $(result.reason)")
-    write_plan(joinpath(directory, function_name * "-plan.toml"), plan)
+    write_plan(joinpath(directory, function_name * "-plan.toml"), result.plan)
     write_certificate(joinpath(directory, function_name * "-certificate.toml"), result)
     println(function_name, " uniform absolute bound: ", Float64(result.total_bound))
 end

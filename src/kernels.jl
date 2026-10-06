@@ -17,6 +17,32 @@ function _nan_guard!(nodes, result, input, f)
     return _push!(nodes, IR.Select(condition, nan, result))
 end
 
+# Generation, guards and certification must cover the same input grid.
+function _polynomial_domain_words(spec::FunctionSpec)
+    input = spec.input_format
+    if input isa FloatFormat && spec.domain === nothing
+        maximum = _inf(input) - 1
+        return _sign(input) | maximum, maximum
+    end
+    lo, hi = if input isa FixedFormat
+        a, b = _fixed_limits(input)
+        quantum = _pow2(-_fraction(input))
+        spec.domain === nothing ? (a * quantum, b * quantum) :
+        (max(a * quantum, spec.domain[1]), min(b * quantum, spec.domain[2]))
+    else
+        spec.domain
+    end
+    lo <= hi || throw(ArgumentError("empty representable polynomial domain"))
+    lower = _polynomial_round(lo, input; mode = :up)
+    upper = _polynomial_round(hi, input; mode = :down)
+    dl, du = _decode_input(lower, input), _decode_input(upper, input)
+    dl.value !== nothing && du.value !== nothing && dl.value <= du.value ||
+        throw(ArgumentError("empty representable polynomial domain"))
+    return lower, upper
+end
+_polynomial_domain(spec::FunctionSpec) =
+    map(word -> _polynomial_value(word, spec.input_format), _polynomial_domain_words(spec))
+
 """Uncertified Horner evaluator. Invalid domains return float NaN or reject fixed output."""
 function polynomial_plan(
     spec::FunctionSpec,
@@ -32,25 +58,7 @@ function polynomial_plan(
     f == spec.output_format ||
         (output = _push!(nodes, IR.Convert(output, spec.output_format)))
     if spec.domain !== nothing
-        lo, hi = spec.domain
-        input = spec.input_format
-        if input isa FixedFormat
-            a, b = _fixed_limits(input)
-            lo, hi =
-                max(lo, a * _pow2(-_fraction(input))), min(hi, b * _pow2(-_fraction(input)))
-        end
-        lo <= hi || throw(ArgumentError("domain has no supported representable interval"))
-        lower =
-            input isa FixedFormat ? round_fixed(lo, input; mode = :up) :
-            round_ieee(lo, input; mode = :up)
-        upper =
-            input isa FixedFormat ? round_fixed(hi, input; mode = :down) :
-            round_ieee(hi, input; mode = :down)
-        dl, du = _decode_input(lower, input), _decode_input(upper, input)
-        dl.kind in (:zero, :finite) &&
-            du.kind in (:zero, :finite) &&
-            dl.value <= du.value ||
-            throw(ArgumentError("domain has no supported representable interval"))
+        lower, upper = _polynomial_domain_words(spec)
         l = _push!(nodes, IR.Const(spec.input_format, lower))
         u = _push!(nodes, IR.Const(spec.input_format, upper))
         above = _push!(nodes, IR.Compare(:ge, 1, l))

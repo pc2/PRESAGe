@@ -8,7 +8,7 @@ use each Julia installation's own MPFR/GMP runtime.
 ## Results
 
 The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **781,164 checks on Julia 1.13.1**, with four
+passes **794,355 checks on Julia 1.13.1**, with four
 threads. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
@@ -35,7 +35,10 @@ coverage or numerical certificates.
 | Official AC floating arithmetic | 98 | Binary32/128/256, bfloat16, 300-bit fractions and exhaustive small formats through native AC Add/Mul/FMA; conversions, scaling, wide bit operations/tables, raw/typed APIs, padding, 5000-bit raw payloads; 448 mixed fixed/float cases per portable/AC/AP backend with directed rounding, wrap/saturation and rejection. |
 | Uniform fixed erf certificates | 2,346 | Every fixed node's range; complete graph audit; uniform error contributions/tails; CPU bits/rows; sampled MPFR checks against the certified bound; rejected graph/metadata changes; width-search failure; wide separate/FMA certificates. |
 | Uniform fixed polynomial certificates | 11,222 | Exhaustive bounded erf/exp in separate/FMA modes against mathematical enclosures and all three C++ backends; every visited fixed node's certified range; exact affine and constant kernels, coarse coordinates and amplification, inward/clipped/singleton domains, unsigned/wide formats, changed coefficients/graphs, overflow, singularities and schema v2 reports. |
+| Exact expression certification regressions | 52 | Decimal/scientific and rational expression equivalence in references and certification; exact affine errors, changed coefficients and budget failures. |
 | Uniform floating polynomial certificates | 411,962 | Uniform bounds for float/fixed interfaces and internals; 0/4/8 guard bits; exhaustive binary16 erf/exp and small-format quantization/cancellation; exact node ranges and native AC CPU bits; binary64/128/256 and custom wide formats; subnormal/overflow ties, lazy guards, signed-zero coefficients, graph audits and schema v2 reports. |
+| Generated bounded polynomial certificates | 12,752 | Coefficient generation and complete certification through one API for fixed/floating erf, exp and nonsymmetric composition; exhaustive small fixed/custom inputs, exact node ranges, lazy guards, official-header CPU conformance, artifact round trips and fresh proof. |
+| Bounded generation contracts and failures | 387 | Exact constants/affine functions, decimal/rational equivalence, singleton/clipped/empty domains, all small floating words through a clipped guard and C++, extreme exponent metadata, precision/policy validation, coefficient range/subnormal failures, native failures, arithmetic/output overflow, retained over-budget candidates and ambient settings. |
 | Certified generation commands | 32 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal and option validation; automatic fixed polynomial proofs with or without a kernel label, standalone recertification and unsupported graphs. |
 | Custom floating generation options | 7 | Automatic certification and AC selection for stored binary128 plans, explicit binary32 AC selection, no floating-only GMP dependency, unsupported native mapping/option diagnostics and preservation of generated output on failure. |
 | Binary16 generation and implementation policy | 21 | Automatic and explicit LUT/polynomial selection; exact budgets and half interfaces; stored LUT recertification/identical emission; FMA and unchecked polynomial generation; preserved outputs on failed proofs and invalid options. |
@@ -179,6 +182,41 @@ checked through CMake/CTest in `build/bounded-demo-ac` and
 `build/bounded-demo-ap`. Both builds pass CTest on all 129 accepted inputs,
 including output words, fixed-node visitation and exact payloads. Sollya.jl is
 unchanged.
+
+## Bounded candidate generation
+
+`certified_polynomial` generates and certifies erf, exp and the nonsymmetric
+composition `exp(x)+0.1*x` on `[-1,1]` without supplied coefficients. The generated
+fixtures use `Fixed(9,3)` inputs and a `2^-18` absolute target, with either
+degree-nine `Fixed(32,6)` internals and `Fixed(24,4)` outputs, or degree-thirteen
+`Float(8,27)` internals and binary32 outputs. Both separate and fused arithmetic
+pass mathematical-enclosure checks and certified node ranges on all 129 accepted
+inputs. The remaining fixed words exercise the lazy domain guards. Composed
+kernels also pass ordinary C++ conformance through portable, AC and AP fixed
+backends, and official AC floating arithmetic.
+
+Small `Float(3,4)` input fixtures exhaust all 256 words with fixed or binary16
+output, including specials and excluded inputs. Regression cases cover exact
+constants/affine functions, decimal/rational equivalence, clipped and empty
+domains, singleton point candidates, signed-zero guard thresholds, extreme
+exponent metadata on compact domains, coefficient storage failures, arithmetic
+and output overflow, insufficient budgets and ambient BigFloat settings.
+Selected plans survive serialization and fresh certification with the same bound.
+
+The updated [bounded example](../examples/bounded_polynomial.jl) generates these
+separate fixed candidates locally:
+
+| Kernel | Uniform absolute bound |
+| --- | ---: |
+| erf | `1.082233e-6` |
+| exp | `5.519426e-7` |
+| exp + x/10 | `5.579087e-7` |
+
+The first two preserve the existing example's bounds. The composed-function
+mathematical references use Sollya and share the certificate's numerical
+dependency; primitive checks use directed MPFR. Generation is one synchronous
+attempt. Ordered search, worker timeout/recovery and a contract-driven generation
+CLI remain subsequent work.
 
 ## Floating polynomial certificates
 

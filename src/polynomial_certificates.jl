@@ -68,28 +68,13 @@ function _polynomial_audit(plan)
     _program_data(canonical_program) == _program_data(p) || throw(
         ArgumentError("executed graph differs from the supported polynomial evaluator"),
     )
-    input = spec.input_format
-    lo, hi = if input isa FixedFormat
-        a, b = _fixed_limits(input)
-        quantum = _pow2(-_fraction(input))
-        a * quantum, b * quantum
-    else
-        maximum = decode_ieee(_inf(input) - 1, input).value
-        -maximum, maximum
-    end
-    if spec.domain !== nothing
-        lo, hi = max(lo, spec.domain[1]), min(hi, spec.domain[2])
-        lo = _polynomial_value(_polynomial_round(lo, input; mode = :up), input)
-        hi = _polynomial_value(_polynomial_round(hi, input; mode = :down), input)
-    end
-    lo <= hi || throw(ArgumentError("empty representable polynomial domain"))
     return (;
         coefficients,
         stages = reverse(stages),
         coordinate,
         final,
         result,
-        domain = (lo, hi),
+        domain = _polynomial_domain(spec),
     )
 end
 

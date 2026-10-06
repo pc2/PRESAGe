@@ -40,6 +40,7 @@ export FloatFormat,
     emit_cpp,
     emit_harness,
     polynomial_plan,
+    certified_polynomial,
     erf_candidate,
     erf_fixed_candidate,
     CertificationResult,
@@ -76,5 +77,6 @@ include("costs.jl")
 include("certificates.jl")
 include("lut.jl")
 include("polynomial_certificates.jl")
+include("planning.jl")
 
 end

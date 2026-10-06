@@ -112,6 +112,50 @@ candidate. Reports use schema version 2, `PathCertificate.domain` and
 method-specific coverage. Numerical certification applies to the exact IR;
 CPU conformance checks validate the emitted implementations locally.
 
+## Generating a bounded evaluator
+
+`certified_polynomial(spec; degree, internal_format, ...)` generates coefficients,
+builds the canonical Horner graph and returns its complete `CertificationResult`.
+It requires an explicit domain and a maximum degree in `0:32`. Coefficients and
+stages share the internal format; input and output formats remain independent.
+The supported arithmetic policies are the same as `certify_polynomial` above.
+
+```julia
+spec = FunctionSpec("exp(x)+0.1*x";
+    input_format=FixedFormat(9,3), output_format=FixedFormat(24,4),
+    domain=(-1,1), absolute_error=1//(1<<18))
+result = certified_polynomial(spec; degree=9,
+    internal_format=FixedFormat(32,6), evaluation=:separate,
+    generation_precision=256, proof_precision=256, accuracy=1//1024)
+@assert result.status == :certified
+```
+
+Generation, domain guards and proof share the same clipped, inward-rounded
+input interval. Empty representable domains and invalid settings raise
+`ArgumentError`. Exact rational polynomials that fit the format are exported
+directly. Other ordinary intervals use Sollya `fpminimax` with absolute error:
+fixed formats specify fractional bits, floating formats specify significand
+bits. Each returned coefficient must fit the storage format exactly, including
+its exponent range and subnormal spacing. A singleton interval uses a constant
+selected from a certified point enclosure, avoiding a degenerate Remez problem.
+
+`generation_precision` controls the coefficient computation;
+`proof_precision` controls the complete evaluator proof. `accuracy` controls
+norm tightness, and `max_refinements` bounds tightness refinement. The contract's
+absolute target remains separate. Parsing, approximation, references and proof
+use matching exact decimal/scientific literal semantics.
+
+Numerical generation failure returns `generation_failed`, a reason and a
+contract-only plan. After successful generation, the usual certificate statuses
+apply, and the stored evaluator is retained even for `bound_exceeds_budget` or
+`proof_failed`. Only `certified` establishes the complete contract; a successful
+Sollya approximation alone is insufficient. Existing plan/certificate writers,
+stored-plan generation and recertification work with the returned artifacts.
+
+This API performs one synchronous attempt. Degree/precision search and isolated
+workers with wall-time deadlines are subsequent work; native calls currently
+have no timeout.
+
 ## Complete IEEE32 erf evaluator
 
 `certified_erf()` generates and certifies a fixed IEEE32 evaluator. The default

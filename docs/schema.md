@@ -93,3 +93,11 @@ claims. Node formats can be floating or fixed. `read_plan` loads evaluator seman
 reruns the supported proof.
 Regenerate the report whenever coefficients or arithmetic change. See
 [certificate semantics](certification.md).
+
+`certified_polynomial` uses these existing artifact versions. Its plan settings
+record the requested maximum `degree`, `generation_precision` and `evaluation`;
+the IR stores the actual coefficients and degree. Certificate settings record
+proof `precision` and `norm_accuracy`. A numerical `generation_failed` result has
+a contract-only plan and no uniform bound or coverage claim. Successfully
+generated candidates remain replayable even when certification fails or exceeds
+the target.
