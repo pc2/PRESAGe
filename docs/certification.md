@@ -152,9 +152,69 @@ apply, and the stored evaluator is retained even for `bound_exceeds_budget` or
 Sollya approximation alone is insufficient. Existing plan/certificate writers,
 stored-plan generation and recertification work with the returned artifacts.
 
-This API performs one synchronous attempt. Degree/precision search and isolated
-workers with wall-time deadlines are subsequent work; native calls currently
-have no timeout.
+This API performs one synchronous attempt without a wall-time limit. Use
+`search_polynomial` for supervised generation and proof.
+
+## Ordered search and worker limits
+
+```julia
+config = PolynomialSearchConfig(degrees=[1,9],
+    internal_formats=[FixedFormat(16,6), FixedFormat(32,6)],
+    generation_precision=256, proof_precision=256,
+    accuracy=1//1024, max_refinements=2,
+    max_attempts=4, job_timeout=60, total_timeout=300)
+search = search_polynomial(spec, config)
+write_search_report("search.toml", search)
+@assert search.status == :certified
+certificate = search.selected
+```
+
+Both lists must be nonempty finite vectors or tuples without duplicate choices.
+Degrees are visited in the given order; formats are visited in the given order
+within each degree. Selection stops at the first complete passing certificate.
+This policy provides a feasible evaluator without optimizing hardware cost.
+Increasing fixed fractional precision or floating significand precision does
+not change an integer or exponent range: supply each desired format explicitly.
+
+All contract, format and numerical settings are validated before a worker starts.
+Invalid settings and empty representable domains raise `ArgumentError`.
+The search clock starts after validation. Each attempt starts a fresh Julia
+process in the caller's active project and depot, with one Julia thread.
+Generation and certification happen there, and native objects never cross the
+process boundary. Startup, generation and proof count toward `job_timeout`
+and `total_timeout`, measured with a monotonic clock. A worker exceeding either
+limit is killed and reaped, and its temporary files are removed. Cleanup and
+reading exact results can add a small amount of time beyond a deadline.
+The next attempt starts with a fresh worker. There is no persistent pool,
+parallel candidate execution or cache yet.
+
+`PolynomialSearchResult` contains `status`, `selected`, `attempts`,
+`elapsed_seconds` and `stop_reason`. A successful search has status and stop
+reason `certified`, with its `CertificationResult` in `selected`. Exhaustion
+returns `search_limit` with `selected=nothing` and one of these stop reasons:
+
+| Stop reason | Meaning |
+| --- | --- |
+| `choices_exhausted` | Every supplied degree/format pair was attempted. |
+| `attempt_limit` | Further choices remain, but the maximum attempt count was reached. |
+| `total_deadline` | The total time limit expired; any active worker was stopped. |
+
+Each `SearchAttempt` records degree, internal format, status, elapsed seconds,
+reason, an optional exact `plan` and an optional `certificate`. Normal numerical
+statuses remain `generation_failed`, `bound_exceeds_budget`, `proof_failed` or
+`certified`. Supervision adds `timeout`, `worker_crashed` and `worker_failed`.
+An individual timeout, crash or numerical failure advances to the next choice
+if limits permit. A total timeout stops the search. No further candidate starts
+after success or a limit. Exhaustion makes no mathematical infeasibility claim.
+
+Workers checkpoint a generated plan before proof. Interrupted proofs can
+therefore retain coefficient payloads and the IR, even without a certificate.
+Late completed certificates may be retained for inspection but cannot select
+a candidate after a time limit. `write_search_report` saves the choices, limits,
+attempt history, exact available plans and proof contributions. Save the actual
+coefficients: repeating fpminimax with changed numerical settings can produce
+different coefficients. A stored candidate can be read and recertified without
+repeating generation.
 
 ## Complete IEEE32 erf evaluator
 

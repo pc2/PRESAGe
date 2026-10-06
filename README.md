@@ -43,8 +43,32 @@ settings. Decimal/scientific literals retain exact rational semantics.
 The result retains a generated plan when its bound exceeds the budget or its
 proof fails; `generation_failed` includes a reason and a contract-only plan.
 See [generation details](docs/certification.md#generating-a-bounded-evaluator)
-and the [fixed example](examples/bounded_polynomial.jl). Ordered search and
-worker deadlines are the next development step.
+and the [fixed example](examples/bounded_polynomial.jl).
+
+Search explicitly ordered degrees and internal formats with bounded execution:
+
+```julia
+config = PolynomialSearchConfig(degrees=[1,9,13],
+    internal_formats=[FloatFormat(8,23), FloatFormat(8,27)],
+    evaluation=:fma, max_attempts=6, job_timeout=60, total_timeout=300)
+search = search_polynomial(spec, config)
+write_search_report("search.toml", search)
+if search.status == :certified
+    write_plan("composed.toml", search.selected.plan)
+    write_certificate("certificate.toml", search.selected)
+end
+```
+
+Degrees are visited in caller order, with every format in caller order within
+each degree. The first certified candidate is selected. Each attempt uses a
+fresh process; startup counts toward both time limits, and timed-out workers
+are killed and reaped before continuing. Integer and exponent ranges remain
+explicit choices. `search_limit` retains the history and identifies exhaustion
+of choices, the attempt limit or the total deadline. Reports include exact
+available plans, certificate contributions and failure reasons. See
+[search limits](docs/certification.md#ordered-search-and-worker-limits) and the
+[search example](examples/bounded_search.jl). Contract-driven CLI generation
+is the next development step.
 
 ## Custom floating formats
 
@@ -90,7 +114,8 @@ result = certify_polynomial(plan)
 The [floating polynomial example](examples/floating_polynomial.jl) generates
 bounded erf and exp approximations and certifies fixed and floating internals
 against matching binary32 contracts. Coefficients and stages currently share
-one internal format; automatic precision search and individual widths are next.
+one internal format. Ordered search is available; individual coefficient/stage
+widths are planned.
 
 ## Local setup
 

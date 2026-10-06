@@ -8,7 +8,7 @@ use each Julia installation's own MPFR/GMP runtime.
 ## Results
 
 The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **794,355 checks on Julia 1.13.1**, with four
+passes **794,550 checks on Julia 1.13.1**, with four
 threads. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
@@ -39,6 +39,9 @@ coverage or numerical certificates.
 | Uniform floating polynomial certificates | 411,962 | Uniform bounds for float/fixed interfaces and internals; 0/4/8 guard bits; exhaustive binary16 erf/exp and small-format quantization/cancellation; exact node ranges and native AC CPU bits; binary64/128/256 and custom wide formats; subnormal/overflow ties, lazy guards, signed-zero coefficients, graph audits and schema v2 reports. |
 | Generated bounded polynomial certificates | 12,752 | Coefficient generation and complete certification through one API for fixed/floating erf, exp and nonsymmetric composition; exhaustive small fixed/custom inputs, exact node ranges, lazy guards, official-header CPU conformance, artifact round trips and fresh proof. |
 | Bounded generation contracts and failures | 387 | Exact constants/affine functions, decimal/rational equivalence, singleton/clipped/empty domains, all small floating words through a clipped guard and C++, extreme exponent metadata, precision/policy validation, coefficient range/subnormal failures, native failures, arithmetic/output overflow, retained over-budget candidates and ambient settings. |
+| Ordered bounded polynomial search | 53 | Caller degree/format order, first-certified selection, higher degree and internal precision, fixed integer/floating exponent constraints, exact report replay and recertification, retained budget/range failures, attempt/choice exhaustion and wide coefficient payloads. |
+| Search request validation | 40 | Finite distinct choices, degree/policy/numerical/time limits, validation before worker launch and immutable choice snapshots. |
+| Isolated numerical worker supervision | 102 | Controlled timeout/crash/malformed/missing/exception replies, checkpoint retention, replacement workers, process/file cleanup, total/startup deadlines, empty histories, rejection of late completed results and parent exception cleanup. |
 | Certified generation commands | 32 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal and option validation; automatic fixed polynomial proofs with or without a kernel label, standalone recertification and unsupported graphs. |
 | Custom floating generation options | 7 | Automatic certification and AC selection for stored binary128 plans, explicit binary32 AC selection, no floating-only GMP dependency, unsupported native mapping/option diagnostics and preservation of generated output on failure. |
 | Binary16 generation and implementation policy | 21 | Automatic and explicit LUT/polynomial selection; exact budgets and half interfaces; stored LUT recertification/identical emission; FMA and unchecked polynomial generation; preserved outputs on failed proofs and invalid options. |
@@ -214,9 +217,39 @@ separate fixed candidates locally:
 
 The first two preserve the existing example's bounds. The composed-function
 mathematical references use Sollya and share the certificate's numerical
-dependency; primitive checks use directed MPFR. Generation is one synchronous
-attempt. Ordered search, worker timeout/recovery and a contract-driven generation
-CLI remain subsequent work.
+dependency; primitive checks use directed MPFR. `certified_polynomial` performs
+one synchronous attempt; supervised searches use `search_polynomial` below.
+
+## Ordered search and supervised workers
+
+Search tests cover caller ordering, first-certified selection, fixed/floating
+precision choices with unchanged integer/exponent ranges, generation failures,
+attempt exhaustion and complete choice exhaustion. They retain exact candidate
+and proof data, including failed candidates. A report's selected plan is
+reconstructed, recertified with the same bound and checked through the exact
+interpreter. Wide floating coefficient words and 200-bit rational budgets cross
+the worker boundary and survive report replay.
+
+The [search example](../examples/bounded_search.jl) visits degree one with
+`Fixed(16,6)` then `Fixed(32,6)`, followed by degree nine with those same formats.
+The first three candidates exceed the budget; the last passes with a total
+bound of `5.519426e-7` against `2^-18`, using the same exp contract as above.
+Its report persists all four attempts and their actual coefficients.
+
+Controlled subprocess fixtures exercise job timeouts, nonzero worker exits,
+malformed/missing replies, worker exceptions and recovery through a succeeding
+job. Candidate checkpoints survive interrupted proofs. Tests check that every
+owned process has exited and temporary directories are gone before the next
+job starts, and also after a parent exception. No slow mathematical example is
+used to induce a timeout. A total deadline interrupts an active job and prevents
+later choices from starting; startup and already-expired budgets are covered.
+A completed certificate cannot select a candidate if its worker exceeds the
+job time limit. Exact available data remains in the report for inspection.
+
+The worker strategy starts a fresh Julia process for every attempt. It trades
+startup time for independent native state and straightforward cancellation.
+Persistent pools, parallel sweeps and hardware cost optimization are later work.
+The contract-driven generation CLI is the next integration step.
 
 ## Floating polynomial certificates
 

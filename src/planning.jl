@@ -87,11 +87,41 @@ function certified_polynomial(
     accuracy::Union{Integer, Rational} = 1 // 1024,
     max_refinements::Integer = 2,
 )
+    domain = _validate_polynomial_request(
+        spec,
+        degree,
+        internal_format,
+        evaluation,
+        generation_precision,
+        proof_precision,
+        accuracy,
+        max_refinements,
+    )
+    return _certified_polynomial(
+        spec,
+        domain,
+        Int(degree),
+        internal_format,
+        evaluation,
+        Int(generation_precision),
+        Int(proof_precision),
+        _q(accuracy),
+        Int(max_refinements),
+    )
+end
+
+function _validate_polynomial_request(
+    spec,
+    degree,
+    internal_format,
+    evaluation,
+    generation_precision,
+    proof_precision,
+    accuracy,
+    max_refinements,
+)
     spec.domain === nothing &&
         throw(ArgumentError("bounded polynomial generation requires an explicit domain"))
-    0 <= degree <= 32 || throw(ArgumentError("degree must be in 0:32"))
-    evaluation in (:separate, :fma) ||
-        throw(ArgumentError("evaluation must be :separate or :fma"))
     all((spec.input_format, internal_format, spec.output_format)) do format
         !(format isa FixedFormat) ||
             (format.rounding == :nearest_even && format.overflow == :reject)
@@ -100,6 +130,40 @@ function certified_polynomial(
             "polynomial generation requires nearest-even rounding and rejected fixed overflow",
         ),
     )
+    _validate_polynomial_settings(
+        degree,
+        internal_format,
+        evaluation,
+        generation_precision,
+        proof_precision,
+        accuracy,
+        max_refinements,
+    )
+    return _polynomial_domain(spec)
+end
+
+function _validate_polynomial_settings(
+    degree,
+    internal_format,
+    evaluation,
+    generation_precision,
+    proof_precision,
+    accuracy,
+    max_refinements,
+)
+    0 <= degree <= 32 || throw(ArgumentError("degree must be in 0:32"))
+    evaluation in (:separate, :fma) ||
+        throw(ArgumentError("evaluation must be :separate or :fma"))
+    internal_format isa FixedFormat &&
+        !(
+            internal_format.rounding == :nearest_even &&
+            internal_format.overflow == :reject
+        ) &&
+        throw(
+            ArgumentError(
+                "internal fixed formats require nearest-even rounding and rejected overflow",
+            ),
+        )
     12 <= generation_precision <= typemax(Cint) ||
         throw(ArgumentError("generation precision must be in 12:$(typemax(Cint))"))
     64 <= proof_precision <= typemax(Cint) ||
@@ -111,7 +175,21 @@ function certified_polynomial(
         internal_format.fraction_bits + 1
     typemin(Cint) <= bits <= typemax(Cint) ||
         throw(ArgumentError("coefficient precision must fit a C int"))
-    domain = _polynomial_domain(spec)
+    return nothing
+end
+
+function _certified_polynomial(
+    spec,
+    domain,
+    degree,
+    internal_format,
+    evaluation,
+    generation_precision,
+    proof_precision,
+    accuracy,
+    max_refinements;
+    candidate_ready = identity,
+)
     settings = Dict(
         "degree" => string(degree),
         "generation_precision" => string(generation_precision),
@@ -146,5 +224,6 @@ function certified_polynomial(
         program = candidate.program,
         settings = merge(candidate.settings, settings),
     )
+    candidate_ready(plan)
     return certify_polynomial(plan; precision = proof_precision, accuracy, max_refinements)
 end

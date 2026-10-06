@@ -101,3 +101,20 @@ proof `precision` and `norm_accuracy`. A numerical `generation_failed` result ha
 a contract-only plan and no uniform bound or coverage claim. Successfully
 generated candidates remain replayable even when certification fails or exceeds
 the target.
+
+## Search reports
+
+`write_search_report` writes `schema = "presage-search"`, version 1. It records
+the function spec, ordered degree/format choices, traversal order, numerical
+settings, attempt/time limits, elapsed seconds, result status and stop reason.
+`selected_attempt` is present only for a successful search and identifies the
+last attempt. Input/output formats remain in the function spec; each attempt
+records its explicit internal format and degree.
+
+The `attempts` array contains status, elapsed seconds and failure details for
+every attempted configuration. An available `plan` is a complete existing plan
+artifact with exact stored IR payloads. An available `certificate` is a complete
+existing certificate report, including separate error contributions and node
+ranges. A plan checkpoint may survive a timeout or worker failure without a
+certificate. The report is self-contained for inspection and extracting a plan;
+transient worker files and Julia serialization are not public artifact formats.

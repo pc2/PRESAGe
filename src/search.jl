@@ -1,0 +1,406 @@
+"""
+    PolynomialSearchConfig(; degrees, internal_formats, evaluation=:separate,
+        generation_precision=256, proof_precision=256, accuracy=1//1024,
+        max_refinements=2, max_attempts=64, job_timeout=60, total_timeout=300)
+
+Finite, ordered choices and limits for `search_polynomial`. Visit degrees in the
+given order, and all internal formats in their given order within each degree.
+Formats are explicit: no integer or exponent range is changed automatically.
+Timeouts are positive, finite seconds and include process startup.
+"""
+struct PolynomialSearchConfig
+    degrees::Tuple{Vararg{Int}}
+    internal_formats::Tuple{Vararg{Union{FloatFormat, FixedFormat}}}
+    evaluation::Symbol
+    generation_precision::Int
+    proof_precision::Int
+    accuracy::Rational{BigInt}
+    max_refinements::Int
+    max_attempts::Int
+    job_timeout::Float64
+    total_timeout::Float64
+    function PolynomialSearchConfig(;
+        degrees,
+        internal_formats,
+        evaluation::Symbol = :separate,
+        generation_precision::Integer = 256,
+        proof_precision::Integer = 256,
+        accuracy::Union{Integer, Rational} = 1 // 1024,
+        max_refinements::Integer = 2,
+        max_attempts::Integer = 64,
+        job_timeout::Real = 60,
+        total_timeout::Real = 300,
+    )
+        degrees isa Union{Tuple, AbstractVector} && !isempty(degrees) ||
+            throw(ArgumentError("degrees must be a nonempty finite vector or tuple"))
+        all(d -> d isa Integer && !(d isa Bool) && 0 <= d <= 32, degrees) ||
+            throw(ArgumentError("degrees must be integers in 0:32"))
+        internal_formats isa Union{Tuple, AbstractVector} && !isempty(internal_formats) ||
+            throw(
+                ArgumentError("internal formats must be a nonempty finite vector or tuple"),
+            )
+        all(f -> f isa Union{FloatFormat, FixedFormat}, internal_formats) ||
+            throw(ArgumentError("internal choices must be floating or fixed formats"))
+        length(unique(degrees)) == length(degrees) &&
+            length(unique(internal_formats)) == length(internal_formats) ||
+            throw(ArgumentError("search choices must not contain duplicates"))
+        # The same numerical/policy validation is used by the one-attempt API.
+        for format in internal_formats
+            _validate_polynomial_settings(
+                first(degrees),
+                format,
+                evaluation,
+                generation_precision,
+                proof_precision,
+                accuracy,
+                max_refinements,
+            )
+        end
+        1 <= max_attempts <= typemax(Int) ||
+            throw(ArgumentError("maximum attempts must be a positive Int"))
+        job = Float64(job_timeout)
+        total = Float64(total_timeout)
+        isfinite(job) && job > 0 && isfinite(total) && total > 0 ||
+            throw(ArgumentError("timeouts must be positive finite seconds"))
+        new(
+            Tuple(Int.(degrees)),
+            Tuple(internal_formats),
+            evaluation,
+            Int(generation_precision),
+            Int(proof_precision),
+            _q(accuracy),
+            Int(max_refinements),
+            Int(max_attempts),
+            job,
+            total,
+        )
+    end
+end
+
+"""One attempted configuration, with exact stored data when available."""
+struct SearchAttempt
+    degree::Int
+    internal_format::Union{FloatFormat, FixedFormat}
+    status::Symbol
+    elapsed_seconds::Float64
+    plan::Union{Nothing, PlanArtifact}
+    certificate::Union{Nothing, CertificationResult}
+    reason::String
+end
+
+"""First certified candidate, or `search_limit` with the complete attempt history."""
+struct PolynomialSearchResult
+    spec::FunctionSpec
+    config::PolynomialSearchConfig
+    status::Symbol
+    selected::Union{Nothing, CertificationResult}
+    attempts::Tuple{Vararg{SearchAttempt}}
+    elapsed_seconds::Float64
+    stop_reason::Symbol
+end
+
+_elapsed(start::UInt64) = Float64(time_ns() - start) / 1e9
+
+# Serialization is an ephemeral protocol between processes using this same Julia
+# environment. Public artifacts use versioned, exact TOML instead.
+function _worker_save(path, value)
+    temporary = path * ".tmp"
+    serialize(temporary, value)
+    mv(temporary, path; force = true)
+    return nothing
+end
+
+function _polynomial_worker_main(args)
+    directory = only(args)
+    request = deserialize(joinpath(directory, "request"))
+    config = request.config
+    try
+        result = _certified_polynomial(
+            request.spec,
+            request.domain,
+            request.degree,
+            request.internal_format,
+            config.evaluation,
+            config.generation_precision,
+            config.proof_precision,
+            config.accuracy,
+            config.max_refinements;
+            candidate_ready = plan ->
+                _worker_save(joinpath(directory, "candidate"), _plan_data(plan)),
+        )
+        # Encode the IR with its existing schema: raw Julia serialization does
+        # not reliably reconstruct tuples containing Type{Bool} in IR.Program.
+        _worker_save(
+            joinpath(directory, "result"),
+            (
+                plan = _plan_data(result.plan),
+                status = result.status,
+                total_bound = result.total_bound,
+                paths = result.paths,
+                tail_bound = result.tail_bound,
+                settings = result.settings,
+                reason = result.reason,
+            ),
+        )
+    catch err
+        err isa InterruptException && rethrow()
+        _worker_save(joinpath(directory, "error"), sprint(showerror, err))
+    end
+    return nothing
+end
+
+function _polynomial_worker_command(
+    directory;
+    script = joinpath(@__DIR__, "..", "scripts", "polynomial_worker.jl"),
+)
+    project = Base.active_project()
+    project === nothing && throw(ArgumentError("search requires an active Julia project"))
+    command = `$(Base.julia_cmd()) --startup-file=no --history-file=no --threads=1 --project=$(dirname(project)) $script $directory`
+    return addenv(
+        command,
+        "JULIA_DEPOT_PATH" => join(DEPOT_PATH, Sys.iswindows() ? ';' : ':'),
+        "JULIA_LOAD_PATH" => join(LOAD_PATH, Sys.iswindows() ? ';' : ':'),
+    )
+end
+
+function _worker_log(path)
+    isfile(path) || return ""
+    return open(path, "r") do io
+        # Retain a bounded diagnostic tail, even for noisy native failures.
+        seek(io, max(0, filesize(path) - 4096))
+        strip(String(read(io)))
+    end
+end
+
+function _worker_candidate(directory)
+    path = joinpath(directory, "candidate")
+    isfile(path) || return nothing
+    return _read_plan(deserialize(path))
+end
+
+function _stop_polynomial_worker(process)
+    process_running(process) && kill(process, Base.SIGKILL)
+    wait(process) # Reap this owned process before its files can be removed.
+    return nothing
+end
+
+function _run_polynomial_job(request, search_started; worker_command, process_started)
+    started = time_ns()
+    return mktempdir(; prefix = "presage-worker-") do directory
+        serialize(joinpath(directory, "request"), request)
+        log = joinpath(directory, "worker.log")
+        process = nothing
+        timed_out = false
+        deadline = false
+        try
+            total_remaining = request.config.total_timeout - _elapsed(search_started)
+            job_remaining = request.config.job_timeout - _elapsed(started)
+            if min(total_remaining, job_remaining) <= 0
+                deadline = total_remaining <= 0
+                return SearchAttempt(
+                    request.degree,
+                    request.internal_format,
+                    :timeout,
+                    _elapsed(started),
+                    nothing,
+                    nothing,
+                    deadline ? "Total search deadline expired before launch" :
+                    "Job wall-time limit expired before launch",
+                ),
+                deadline
+            end
+            process = open(log, "w") do io
+                run(pipeline(worker_command(directory); stdout = io, stderr = io); wait = false)
+            end
+            process_started(process, directory)
+            while process_running(process)
+                job_remaining = request.config.job_timeout - _elapsed(started)
+                total_remaining = request.config.total_timeout - _elapsed(search_started)
+                if min(job_remaining, total_remaining) <= 0
+                    timed_out = true
+                    deadline = total_remaining <= 0
+                    break
+                end
+                sleep(min(0.01, job_remaining, total_remaining))
+            end
+            # Reject late results too, rather than accepting a result after a limit.
+            deadline |= _elapsed(search_started) >= request.config.total_timeout
+            timed_out |= deadline || _elapsed(started) >= request.config.job_timeout
+        finally
+            process === nothing || _stop_polynomial_worker(process)
+        end
+        elapsed = _elapsed(started)
+        plan, certificate = nothing, nothing
+        worker_error = nothing
+        read_error = nothing
+        try
+            plan = _worker_candidate(directory)
+            error_path = joinpath(directory, "error")
+            if isfile(error_path)
+                worker_error = deserialize(error_path)
+                worker_error isa String || throw(ArgumentError("invalid worker error"))
+            end
+            path = joinpath(directory, "result")
+            if isfile(path)
+                data = deserialize(path)
+                certificate = CertificationResult(
+                    _read_plan(data.plan),
+                    data.status,
+                    data.total_bound,
+                    data.paths,
+                    data.tail_bound,
+                    data.settings,
+                    data.reason,
+                )
+                plan = certificate.plan
+            end
+        catch err
+            err isa InterruptException && rethrow()
+            read_error = "Invalid worker result: " * sprint(showerror, err)
+        end
+        status, reason = if timed_out
+            :timeout, deadline ? "Total search deadline expired" : "Job wall-time limit expired"
+        elseif !success(process)
+            :worker_crashed,
+            "Worker exited with code $(process.exitcode), signal $(process.termsignal)"
+        elseif read_error !== nothing
+            :worker_failed, read_error
+        elseif worker_error !== nothing
+            :worker_failed, worker_error
+        elseif certificate !== nothing
+            certificate.status, certificate.reason
+        else
+            :worker_failed, "Worker exited without a result"
+        end
+        if certificate === nothing
+            diagnostic = _worker_log(log)
+            isempty(diagnostic) || (reason *= "\n" * diagnostic)
+        end
+        return SearchAttempt(
+            request.degree,
+            request.internal_format,
+            status,
+            elapsed,
+            plan,
+            certificate,
+            reason,
+        ),
+        deadline
+    end
+end
+
+"""
+    search_polynomial(spec, config::PolynomialSearchConfig)
+
+Try degrees in order, then formats in order within each degree. Return the first
+complete certificate that meets the contract. Each attempt runs in a fresh Julia
+process; timed-out processes are killed and reaped before continuing. All native
+Sollya objects remain in the worker. Startup counts toward both wall-time limits.
+
+Invalid requests throw `ArgumentError` before any worker starts. Candidate failures
+(including timeout and crash) can advance the search. Exhausting choices, attempts
+or the total deadline returns `search_limit`, not a claim of infeasibility. Attempts
+retain exact plans, proof contributions and reasons when available, including a
+candidate checkpoint if proof was interrupted. No global cost optimality is claimed.
+"""
+search_polynomial(spec::FunctionSpec, config::PolynomialSearchConfig) =
+    _search_polynomial(spec, config)
+
+function _search_polynomial(
+    spec,
+    config;
+    worker_command = _polynomial_worker_command,
+    process_started = (process, directory) -> nothing,
+)
+    # Validate all choices, including ones beyond the attempt limit.
+    domain = nothing
+    for format in config.internal_formats
+        domain = _validate_polynomial_request(
+            spec,
+            first(config.degrees),
+            format,
+            config.evaluation,
+            config.generation_precision,
+            config.proof_precision,
+            config.accuracy,
+            config.max_refinements,
+        )
+    end
+    started = time_ns()
+    attempts = SearchAttempt[]
+    finish(status, selected, reason) = PolynomialSearchResult(
+        spec,
+        config,
+        status,
+        selected,
+        Tuple(attempts),
+        _elapsed(started),
+        reason,
+    )
+    for degree in config.degrees, internal_format in config.internal_formats
+        _elapsed(started) >= config.total_timeout &&
+            return finish(:search_limit, nothing, :total_deadline)
+        length(attempts) >= config.max_attempts &&
+            return finish(:search_limit, nothing, :attempt_limit)
+        request = (; spec, config, domain, degree, internal_format)
+        attempt, deadline =
+            _run_polynomial_job(request, started; worker_command, process_started)
+        push!(attempts, attempt)
+        (deadline || _elapsed(started) >= config.total_timeout) &&
+            return finish(:search_limit, nothing, :total_deadline)
+        attempt.status == :certified &&
+            return finish(:certified, attempt.certificate, :certified)
+    end
+    return finish(:search_limit, nothing, :choices_exhausted)
+end
+
+function _search_data(result::PolynomialSearchResult)
+    config = result.config
+    attempts = map(enumerate(result.attempts)) do (index, attempt)
+        data = Dict{String, Any}(
+            "index" => index,
+            "degree" => attempt.degree,
+            "internal_format" => _format_data(attempt.internal_format),
+            "status" => string(attempt.status),
+            "elapsed_seconds" => attempt.elapsed_seconds,
+            "reason" => attempt.reason,
+        )
+        attempt.plan === nothing || (data["plan"] = _plan_data(attempt.plan))
+        attempt.certificate === nothing ||
+            (data["certificate"] = _certificate_data(attempt.certificate))
+        data
+    end
+    data = Dict{String, Any}(
+        "schema" => "presage-search",
+        "schema_version" => 1,
+        "spec" => _spec_data(result.spec),
+        "status" => string(result.status),
+        "stop_reason" => string(result.stop_reason),
+        "elapsed_seconds" => result.elapsed_seconds,
+        "order" => "degree_then_format",
+        "degrees" => collect(config.degrees),
+        "internal_formats" =>
+            [Dict("format" => _format_data(f)) for f in config.internal_formats],
+        "settings" => Dict(
+            "evaluation" => string(config.evaluation),
+            "generation_precision" => config.generation_precision,
+            "proof_precision" => config.proof_precision,
+            "norm_accuracy" => _rational_text(config.accuracy),
+            "max_refinements" => config.max_refinements,
+        ),
+        "limits" => Dict(
+            "max_attempts" => config.max_attempts,
+            "job_timeout_seconds" => config.job_timeout,
+            "total_timeout_seconds" => config.total_timeout,
+        ),
+        "attempts" => collect(attempts),
+    )
+    result.selected === nothing || (data["selected_attempt"] = length(result.attempts))
+    return data
+end
+
+"""Write the ordered search history, exact available plans and proof reports as TOML."""
+write_search_report(io::IO, result::PolynomialSearchResult) =
+    TOML.print(io, _search_data(result); sorted = true)
+write_search_report(path::AbstractString, result::PolynomialSearchResult) =
+    open(io -> write_search_report(io, result), path, "w")

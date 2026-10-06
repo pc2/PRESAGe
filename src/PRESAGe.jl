@@ -1,6 +1,7 @@
 module PRESAGe
 
 using Libdl
+using Serialization
 using TOML
 import Sollya
 
@@ -41,6 +42,11 @@ export FloatFormat,
     emit_harness,
     polynomial_plan,
     certified_polynomial,
+    PolynomialSearchConfig,
+    SearchAttempt,
+    PolynomialSearchResult,
+    search_polynomial,
+    write_search_report,
     erf_candidate,
     erf_fixed_candidate,
     CertificationResult,
@@ -78,5 +84,6 @@ include("certificates.jl")
 include("lut.jl")
 include("polynomial_certificates.jl")
 include("planning.jl")
+include("search.jl")
 
 end
