@@ -46,6 +46,8 @@ export FloatFormat,
     SearchAttempt,
     PolynomialSearchResult,
     search_polynomial,
+    write_search_config,
+    read_search_config,
     write_search_report,
     erf_candidate,
     erf_fixed_candidate,
@@ -85,5 +87,6 @@ include("lut.jl")
 include("polynomial_certificates.jl")
 include("planning.jl")
 include("search.jl")
+include("search_schema.jl")
 
 end

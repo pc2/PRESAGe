@@ -67,8 +67,30 @@ explicit choices. `search_limit` retains the history and identifies exhaustion
 of choices, the attempt limit or the total deadline. Reports include exact
 available plans, certificate contributions and failure reasons. See
 [search limits](docs/certification.md#ordered-search-and-worker-limits) and the
-[search example](examples/bounded_search.jl). Contract-driven CLI generation
-is the next development step.
+[search example](examples/bounded_search.jl).
+
+## Generation from a contract
+
+The CLI reads a bounded contract and a separate search configuration:
+
+```sh
+julia --startup-file=no --project=. scripts/generate.jl \
+  examples/exp-contract.toml build/bounded \
+  --search-config=examples/polynomial-search.toml --backend=ac_fixed
+
+# Replay the stored evaluator and recertify it without another search.
+julia --startup-file=no --project=. scripts/generate.jl \
+  build/bounded/plan.toml build/replayed --backend=ap_fixed
+```
+
+A successful search saves `evaluator.hpp`, `evaluate.cpp`, `plan.toml`,
+`certificate.toml` and `search.toml`. A failed search saves
+`search-failure.toml` and preserves the previous valid output. Bounded search
+always requires certification. Create your own inputs with
+`write_plan(path, PlanArtifact(spec))` and `write_search_config(path, config)`;
+`read_search_config` restores the exact choices and limits. Numerical search
+options belong in that file; CLI backend/name options control emission.
+See [generation and failure reports](docs/generation.md).
 
 ## Custom floating formats
 

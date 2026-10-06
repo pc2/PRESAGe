@@ -5,6 +5,7 @@ import Sollya
 
 include("formats.jl")
 include("schema.jl")
+include("search_schema.jl")
 include("oracle.jl")
 include("streams.jl")
 include("cli.jl")
@@ -21,3 +22,4 @@ include("floating_certificates.jl")
 include("planning.jl")
 include("search.jl")
 include("generation.jl")
+include("bounded_generation.jl")

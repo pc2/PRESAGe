@@ -1,9 +1,12 @@
 #!/usr/bin/env julia
 using PRESAGe
+using TOML
+
+include(joinpath(@__DIR__, "generation_artifacts.jl"))
 
 function generate_main(args)
     length(args) >= 2 || error(
-        "Usage: generate.jl erf|PLAN.toml OUTPUT_DIR [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false]",
+        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false]",
     )
     source, directory = args[1:2]
     options = Dict{String, String}()
@@ -31,6 +34,7 @@ function generate_main(args)
             "absolute-error",
             "implementation",
             "lut-max-bits",
+            "search-config",
         ) || error("unknown option $key")
         haskey(options, key) && error("duplicate option $key")
         options[key] = value
@@ -51,7 +55,36 @@ function generate_main(args)
     proof_precision = parse(Int, get(options, "proof-precision", "256"))
     accuracy = PRESAGe._parse_rational(get(options, "norm-accuracy", "1/1024"))
     result = nothing
-    plan = if source == "erf"
+    search = nothing
+    plan = if haskey(options, "search-config")
+        source == "erf" && error("search-config requires a bounded contract file")
+        all(
+            k -> k in ("search-config", "name", "backend", "float-backend", "certify"),
+            keys(options),
+        ) || error("search settings belong in the search configuration file")
+        certify || error("bounded search requires certification")
+        contract = read_plan(source)
+        contract.program === nothing &&
+            contract.status == :contract &&
+            isempty(contract.segments) &&
+            contract.dispatch === nothing &&
+            isempty(contract.settings) || error(
+            "bounded search requires a contract without candidate data or settings",
+        )
+        config = read_search_config(options["search-config"])
+        search = search_polynomial(contract.spec, config)
+        if search.status != :certified
+            _generation_search_failure(directory, search)
+            detail =
+                isempty(search.attempts) ? "no attempts started" :
+                last(search.attempts).reason
+            error(
+                "search_limit ($(search.stop_reason)), $(length(search.attempts)) attempts: $detail",
+            )
+        end
+        result = search.selected
+        result.plan
+    elseif source == "erf"
         internal = get(options, "internal", "fixed")
         internal in ("fixed", "single", "double") ||
             error("internal must be fixed, single or double")
@@ -202,19 +235,40 @@ function generate_main(args)
     end
     plan.program === nothing && error("plan contains no arithmetic program")
     name = get(options, "name", "evaluator")
-    # Validate emission before creating output files.
-    header = IOBuffer()
-    emit_cpp(header, plan; name, backend, float_backend)
-    harness = IOBuffer()
-    emit_harness(harness, plan.program; name)
-    mkpath(directory)
-    certificate_path = joinpath(directory, "certificate.toml")
-    isfile(certificate_path) && rm(certificate_path)
-    write(joinpath(directory, "evaluator.hpp"), take!(header))
-    write(joinpath(directory, "evaluate.cpp"), take!(harness))
-    write_plan(joinpath(directory, "plan.toml"), plan)
+    artifacts = Dict{String, String}()
+    try
+        artifacts["evaluator.hpp"] =
+            _generation_text((io, p) -> emit_cpp(io, p; name, backend, float_backend), plan)
+        artifacts["evaluate.cpp"] =
+            _generation_text((io, program) -> emit_harness(io, program; name), plan.program)
+        artifacts["plan.toml"] = _generation_text(write_plan, plan)
+        result === nothing ||
+            (artifacts["certificate.toml"] = _generation_text(write_certificate, result))
+        search === nothing ||
+            (artifacts["search.toml"] = _generation_text(write_search_report, search))
+    catch err
+        err isa InterruptException && rethrow()
+        search === nothing || _generation_search_failure(
+            directory,
+            search;
+            stage = "emission",
+            reason = sprint(showerror, err),
+        )
+        rethrow()
+    end
+    try
+        _publish_generation(directory, artifacts)
+    catch err
+        err isa InterruptException && rethrow()
+        search === nothing || _generation_search_failure(
+            directory,
+            search;
+            stage = "publication",
+            reason = sprint(showerror, err),
+        )
+        rethrow()
+    end
     if result !== nothing
-        write_certificate(certificate_path, result)
         println(
             "Generated certified evaluator in ",
             directory,
@@ -240,8 +294,7 @@ function generate_main(args)
         costs.fmas,
         " FMAs (static IR counts)",
     )
-    failure = joinpath(directory, "certificate-failure.toml")
-    isfile(failure) && rm(failure)
+    return plan
 end
 if abspath(PROGRAM_FILE) == @__FILE__
     generate_main(ARGS)

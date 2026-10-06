@@ -8,7 +8,7 @@ use each Julia installation's own MPFR/GMP runtime.
 ## Results
 
 The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **794,550 checks on Julia 1.13.1**, with four
+passes **961,161 checks on Julia 1.13.1**, with four
 threads. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
@@ -16,6 +16,7 @@ coverage or numerical certificates.
 | --- | ---: | --- |
 | Exact IEEE encodings and rounding | 129,326 | Every binary16 encoding against host decoding; exact round trips; signed zero; normal/subnormal ties; binade and overflow transitions; directed rounding; small custom-format midpoints; extreme native exponents. |
 | Contract and exact artifacts | 27 | Compact IEEE32 erf contract; default and distinct output formats; custom formats; candidate threshold bits; 2000-bit rational coefficients; round trips; invalid formats/domains; unsupported schema versions and certification claims. |
+| Search configuration artifacts | 39 | Exact choice/settings/limit round trips for fixed, custom and wide formats; defaults; rejected schemas, versions, orders, unknown fields and invalid types. |
 | Adaptive references | 138 | Sollya/MPFR primitive agreement on selected inputs; subnormal exp; primitive domain/special values; composed functions; irrational constants/coefficients; exact rational ties; bounded refinement; unresolved and evaluation-failure outcomes; concurrent MPFR calls. |
 | Bounded streams | 40 | Both byte orders; partial final chunks; truncated words; empty files; output refusal; format metadata; failure records; no final binary on unresolved results. |
 | Reference command | 8 | Primitive names and constant expressions; both backends; option validation. |
@@ -45,6 +46,9 @@ coverage or numerical certificates.
 | Certified generation commands | 32 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal and option validation; automatic fixed polynomial proofs with or without a kernel label, standalone recertification and unsupported graphs. |
 | Custom floating generation options | 7 | Automatic certification and AC selection for stored binary128 plans, explicit binary32 AC selection, no floating-only GMP dependency, unsupported native mapping/option diagnostics and preservation of generated output on failure. |
 | Binary16 generation and implementation policy | 21 | Automatic and explicit LUT/polynomial selection; exact budgets and half interfaces; stored LUT recertification/identical emission; FMA and unchecked polynomial generation; preserved outputs on failed proofs and invalid options. |
+| Bounded generation CLI and artifact replay | 823 | Actual CLI subprocess from contract/config files, four-attempt selection, exact report/plan/certificate agreement, replay without search, fixed mathematical enclosures and compiled portable/AC/AP output files; numeric/emission/publication failures, preserved valid artifacts, invalid options and stale-report cleanup. |
+| Bounded generation floating and exact expressions | 165,739 | Matching decimal/scientific and rational binary32 programs/bounds, deterministic boundaries/interior samples and official AC floating C++; all small custom words including output subnormal ties; all binary16 words against MPFR, lazy guards and compiled official AC fixed arithmetic. |
+| Generation artifact publication recovery | 10 | Controlled failure during replacement restores every managed file, preserves unrelated files and removes staging data; successful replacement and obstructed destinations. |
 
 The custom floating CMake/CTest build passes with binary128 interfaces, a
 custom 160-fraction-bit internal format and fused polynomial arithmetic,
@@ -249,7 +253,44 @@ job time limit. Exact available data remains in the report for inspection.
 The worker strategy starts a fresh Julia process for every attempt. It trades
 startup time for independent native state and straightforward cancellation.
 Persistent pools, parallel sweeps and hardware cost optimization are later work.
-The contract-driven generation CLI is the next integration step.
+The generation CLI consumes these choices through a separate search configuration.
+
+## Generation from contracts and artifact replay
+
+The [generation CLI](generation.md) accepts a bounded contract and versioned
+search configuration, generates coefficients and publishes only a certified
+selected evaluator. The checked-in exp contract visits four candidates, saves
+all attempts and selects degree nine with `Fixed(32,6)`. A real Julia CLI
+subprocess produces the artifacts; the saved plan is then read, independently
+recertified and emitted without another search. The replayed plan, certificate,
+header and harness match the original files. All 512 fixed input words exercise
+mathematics or lazy rejection; all 129 accepted words agree with compiled
+portable, official AC and official AP fixed evaluators. These checks compile
+the CLI's actual header/harness files.
+
+Binary32 `exp(x)+1e-1*x` and `exp(x)+x/10` on `[-1,1]`, with a `2^-21` target,
+degree thirteen and `Float(8,27)` FMA internals, generate matching executed
+programs and uniform bounds of about `1.330035e-7`. Domain neighbours,
+subnormal/special input words, deterministic samples and an interior grid pass
+mathematical enclosures and official AC floating C++ conformance. Their composed
+references share the Sollya numerical dependency.
+
+A small `Float(3,4)` input/output contract for `x/128` uses `Float(8,18)` FMA
+internals; all 256 words check final subnormal ties, zero/special encodings,
+lazy guards and exact C++/interpreter agreement. Its total bound is exactly
+`1/128`. Binary16 `exp` on `[-1,1]` uses degree nine with `Fixed(32,6)` FMA
+internals and a `2^-9` target. Its bound is about `9.766376e-4`. All 65,536
+input words pass MPFR mathematical-enclosure/lazy-guard checks and compiled
+official AC fixed conformance, including the input subnormals and both zeros.
+
+Failure checks cover attempt exhaustion, an expired total budget, fresh failed
+output directories, invalid options and emission/publication failures after a
+numerical certificate. Existing valid artifacts remain byte-identical after
+failure. A controlled file replacement error restores every previously managed
+file and preserves unrelated files; staging directories are removed. Successful
+generation clears stale reports. Search configuration round trips cover fixed,
+custom and wide floating formats, exact rational settings, defaults and rejected
+unknown/invalid fields.
 
 ## Floating polynomial certificates
 

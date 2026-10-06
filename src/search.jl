@@ -100,6 +100,9 @@ struct PolynomialSearchResult
 end
 
 _elapsed(start::UInt64) = Float64(time_ns() - start) / 1e9
+# A budget below one nanosecond cannot survive one clock tick. Treat it as
+# expired even when two successive clock reads happen to return the same value.
+_search_remaining(start, seconds) = seconds < 1e-9 ? 0.0 : seconds - _elapsed(start)
 
 # Serialization is an ephemeral protocol between processes using this same Julia
 # environment. Public artifacts use versioned, exact TOML instead.
@@ -193,8 +196,9 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
         timed_out = false
         deadline = false
         try
-            total_remaining = request.config.total_timeout - _elapsed(search_started)
-            job_remaining = request.config.job_timeout - _elapsed(started)
+            total_remaining =
+                _search_remaining(search_started, request.config.total_timeout)
+            job_remaining = _search_remaining(started, request.config.job_timeout)
             if min(total_remaining, job_remaining) <= 0
                 deadline = total_remaining <= 0
                 return SearchAttempt(
@@ -214,8 +218,9 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
             end
             process_started(process, directory)
             while process_running(process)
-                job_remaining = request.config.job_timeout - _elapsed(started)
-                total_remaining = request.config.total_timeout - _elapsed(search_started)
+                job_remaining = _search_remaining(started, request.config.job_timeout)
+                total_remaining =
+                    _search_remaining(search_started, request.config.total_timeout)
                 if min(job_remaining, total_remaining) <= 0
                     timed_out = true
                     deadline = total_remaining <= 0
@@ -224,8 +229,9 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
                 sleep(min(0.01, job_remaining, total_remaining))
             end
             # Reject late results too, rather than accepting a result after a limit.
-            deadline |= _elapsed(search_started) >= request.config.total_timeout
-            timed_out |= deadline || _elapsed(started) >= request.config.job_timeout
+            deadline |= _search_remaining(search_started, request.config.total_timeout) <= 0
+            timed_out |=
+                deadline || _search_remaining(started, request.config.job_timeout) <= 0
         finally
             process === nothing || _stop_polynomial_worker(process)
         end
@@ -338,7 +344,7 @@ function _search_polynomial(
         reason,
     )
     for degree in config.degrees, internal_format in config.internal_formats
-        _elapsed(started) >= config.total_timeout &&
+        _search_remaining(started, config.total_timeout) <= 0 &&
             return finish(:search_limit, nothing, :total_deadline)
         length(attempts) >= config.max_attempts &&
             return finish(:search_limit, nothing, :attempt_limit)
@@ -346,7 +352,7 @@ function _search_polynomial(
         attempt, deadline =
             _run_polynomial_job(request, started; worker_command, process_started)
         push!(attempts, attempt)
-        (deadline || _elapsed(started) >= config.total_timeout) &&
+        (deadline || _search_remaining(started, config.total_timeout) <= 0) &&
             return finish(:search_limit, nothing, :total_deadline)
         attempt.status == :certified &&
             return finish(:certified, attempt.certificate, :certified)
@@ -377,24 +383,9 @@ function _search_data(result::PolynomialSearchResult)
         "status" => string(result.status),
         "stop_reason" => string(result.stop_reason),
         "elapsed_seconds" => result.elapsed_seconds,
-        "order" => "degree_then_format",
-        "degrees" => collect(config.degrees),
-        "internal_formats" =>
-            [Dict("format" => _format_data(f)) for f in config.internal_formats],
-        "settings" => Dict(
-            "evaluation" => string(config.evaluation),
-            "generation_precision" => config.generation_precision,
-            "proof_precision" => config.proof_precision,
-            "norm_accuracy" => _rational_text(config.accuracy),
-            "max_refinements" => config.max_refinements,
-        ),
-        "limits" => Dict(
-            "max_attempts" => config.max_attempts,
-            "job_timeout_seconds" => config.job_timeout,
-            "total_timeout_seconds" => config.total_timeout,
-        ),
         "attempts" => collect(attempts),
     )
+    merge!(data, _search_config_fields(config))
     result.selected === nothing || (data["selected_attempt"] = length(result.attempts))
     return data
 end

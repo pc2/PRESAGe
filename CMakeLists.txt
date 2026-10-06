@@ -64,7 +64,9 @@ add_custom_command(
   OUTPUT "${generated}/evaluator.hpp" "${generated}/evaluate.cpp" "${generated}/plan.toml" ${certificate_output}
   COMMAND "${PRESAGE_JULIA}" --startup-file=no "--project=${CMAKE_CURRENT_SOURCE_DIR}"
           "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate.jl" "${source}" "${generated}" ${options}
-  DEPENDS ${PRESAGE_JULIA_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate.jl" ${PRESAGE_PLAN}
+  DEPENDS ${PRESAGE_JULIA_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate.jl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generation_artifacts.jl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/polynomial_worker.jl" ${PRESAGE_PLAN}
   VERBATIM)
 add_executable(presage_cpu "${generated}/evaluate.cpp" "${generated}/evaluator.hpp")
 target_compile_features(presage_cpu PRIVATE cxx_std_20)

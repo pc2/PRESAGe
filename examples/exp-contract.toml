@@ -1,0 +1,10 @@
+schema = "presage-plan"
+schema_version = 4
+status = "contract"
+
+[spec]
+expression = "exp(x)"
+absolute_error = "1/262144"
+domain = ["-1/1", "1/1"]
+input_format = { kind = "fixed", width = 9, integer_bits = 3, signed = true, rounding = "nearest_even", overflow = "reject" }
+output_format = { kind = "fixed", width = 24, integer_bits = 4, signed = true, rounding = "nearest_even", overflow = "reject" }

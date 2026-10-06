@@ -118,3 +118,41 @@ existing certificate report, including separate error contributions and node
 ranges. A plan checkpoint may survive a timeout or worker failure without a
 certificate. The report is self-contained for inspection and extracting a plan;
 transient worker files and Julia serialization are not public artifact formats.
+
+When CLI emission or publication fails after a certified search,
+`search-failure.toml` retains that numerical report and adds a
+`generation_failure` table with `stage` and `reason`. Its numerical `certified`
+status does not claim successful evaluator publication.
+
+## Search configurations
+
+`write_search_config` writes `schema = "presage-search-config"`, version 1.
+`read_search_config` accepts a path or IO and validates the complete request.
+Unknown fields, versions and traversal orders are rejected. Choices are
+mandatory; omitted numerical settings and limits use `PolynomialSearchConfig`
+defaults. An omitted `order` means `degree_then_format`.
+
+```toml
+schema = "presage-search-config"
+schema_version = 1
+degrees = [1, 9, 13]
+internal_formats = [{ format = "binary32" }, { format = "float(8,27)" }]
+
+[settings]
+evaluation = "fma"
+generation_precision = 256
+proof_precision = 256
+norm_accuracy = "1/1024"
+max_refinements = 2
+
+[limits]
+max_attempts = 6
+job_timeout_seconds = 60.0
+total_timeout_seconds = 300.0
+```
+
+Each internal choice wraps its format in a `format` field. Floating formats use
+the existing names; fixed formats use the existing complete format table with
+`kind`, `width`, `integer_bits`, `signed`, `rounding` and `overflow`. The
+[fixed search example](../examples/polynomial-search.toml) shows this encoding.
+Choices retain their order, and integer/exponent ranges remain explicit.

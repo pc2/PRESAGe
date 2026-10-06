@@ -8,6 +8,7 @@ function cpu_check(
     public_api = false,
     input_bytes = nothing,
     host_rounding = nothing,
+    generated_directory = nothing,
 )
     compiler = get(
         ENV,
@@ -18,8 +19,13 @@ function cpu_check(
     mktempdir() do directory
         header, source, exe =
             joinpath.(Ref(directory), ("evaluator.hpp", "evaluate.cpp", "evaluate"))
-        emit_cpp(header, plan; backend, float_backend)
-        emit_harness(source, plan.program)
+        if generated_directory === nothing
+            emit_cpp(header, plan; backend, float_backend)
+            emit_harness(source, plan.program)
+        else
+            cp(joinpath(generated_directory, "evaluator.hpp"), header)
+            cp(joinpath(generated_directory, "evaluate.cpp"), source)
+        end
         if host_rounding !== nothing
             mode = Dict(
                 :down => "FE_DOWNWARD",
