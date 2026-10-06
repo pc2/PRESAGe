@@ -339,7 +339,8 @@ function certify_polynomial(
             try
                 p = _stored_polynomial(layout.coefficients)
                 push!(owned, p)
-                f = Sollya.sollya(plan.spec.expression)
+                # Match the oracle's exact decimal/scientific literal semantics.
+                f = Sollya.sollya(_exact_expression(plan.spec.expression))
                 push!(owned, f)
                 domain = Sollya.interval(layout.domain...)
                 push!(owned, domain)

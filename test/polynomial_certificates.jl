@@ -353,3 +353,41 @@ end
     @test data["coverage"]["inputs"] == "all representable fixed inputs in the interval"
     @test !haskey(data["coverage"], "infinities") && !haskey(data, "tail")
 end
+
+@testset "Exact decimal expressions in polynomial certificates" begin
+    for (precision, expression) in (
+        (64, "(1.000000000000000000001-1)*1e21"),
+        (256, "(1." * repeat("0", 79) * "1-1)*1e80"),
+    )
+        # Exercise the default proof precision as well as an explicit lower one.
+        options = precision == 256 ? (;) : (; precision)
+        for format in (FixedFormat(8, 3), IEEE32)
+            spec = FunctionSpec(expression; input_format = format, domain = (-1, 1))
+            # The expression is exactly one, even when its decimal literal
+            # would round to one before the subtraction at the proof precision.
+            wrong = certify_polynomial(polynomial_plan(spec, [0]); options...)
+            @test wrong.status == :bound_exceeds_budget
+            @test wrong.total_bound == 1
+            correct = certify_polynomial(polynomial_plan(spec, [1]); options...)
+            @test correct.status == :certified
+            @test correct.total_bound == 0
+        end
+        for format in (FixedFormat(precision + 4, 1), FloatFormat(8, precision - 1)),
+            literal in ("0.1", "1e-1", "1/10")
+
+            spec = FunctionSpec(
+                literal;
+                input_format = format,
+                domain = (0, 0),
+                absolute_error = PRESAGe._pow2(-precision - 8),
+            )
+            plan = polynomial_plan(spec, [1 // 10])
+            actual = PRESAGe._decode_input(evaluate_bits(plan, 0), format).value
+            exact_error = abs(actual - 1 // 10)
+            result = certify_polynomial(plan; options...)
+            @test exact_error > spec.absolute_error
+            @test result.status == :bound_exceeds_budget
+            @test result.total_bound == exact_error
+        end
+    end
+end
