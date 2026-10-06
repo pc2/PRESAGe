@@ -1,6 +1,6 @@
 struct _FloatValue
     format::FloatFormat
-    bits::UInt64
+    bits::Union{UInt64, BigInt}
 end
 struct _FixedValue
     format::FixedFormat
@@ -48,7 +48,7 @@ function _scale(v::_FloatValue, e, f::FixedFormat, mode)
     )
 end
 _decoded(v::_FloatValue) = decode_ieee(v.bits, v.format)
-_float(bits, f) = _FloatValue(f, UInt64(bits))
+_float(bits, f) = _FloatValue(f, _float_word(bits, f))
 _invalid(f) = _float(_nan(f), f)
 _infinite(f, negative) = _float(_inf(f) | (negative ? _sign(f) : UInt64(0)), f)
 

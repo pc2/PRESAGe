@@ -35,7 +35,7 @@
     @test_throws ArgumentError read_plan(
         IOBuffer(replace(text, "status = \"candidate\"" => "status = \"certified\"")),
     )
-    @test_throws ArgumentError read_plan(IOBuffer(replace(text, "binary32" => "binary128")))
+    @test_throws ArgumentError read_plan(IOBuffer(replace(text, "binary32" => "binary512")))
     @test_throws ArgumentError PRESAGe._parse_rational("1/0")
     @test_throws MethodError PRESAGe._parse_rational(0.125)
     @test_throws ArgumentError PlanArtifact(spec; status = :certified)

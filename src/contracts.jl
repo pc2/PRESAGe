@@ -31,7 +31,7 @@ erf_spec(; format::FloatFormat = IEEE32, absolute_error = _pow2(-format.fraction
 
 """Exact central/tail dispatch contract; the threshold is an input bit pattern."""
 struct Dispatch
-    magnitude_threshold::UInt64
+    magnitude_threshold::Union{UInt64, BigInt}
     comparison::Symbol
     positive_tail::Rational{BigInt}
     negative_tail::Rational{BigInt}
@@ -43,7 +43,9 @@ struct Dispatch
     )
         comparison in (:greater, :greater_equal) ||
             throw(ArgumentError("invalid dispatch comparison"))
-        new(UInt64(threshold), comparison, _q(positive_tail), _q(negative_tail))
+        threshold >= 0 || throw(ArgumentError("threshold must be nonnegative"))
+        word = threshold <= typemax(UInt64) ? UInt64(threshold) : BigInt(threshold)
+        new(word, comparison, _q(positive_tail), _q(negative_tail))
     end
 end
 

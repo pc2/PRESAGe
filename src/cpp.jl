@@ -6,17 +6,23 @@ _cpp_type(f::FloatFormat) =
 _cpp_type(::IR.UIntFormat) = "std::uint64_t"
 _cpp_type(::Type{Bool}) = "bool"
 _cpp_storage(f::FloatFormat) =
-    f == IEEE16 ? "std::uint16_t" :
-    f == IEEE32 ? "std::uint32_t" :
-    f == IEEE64 ? "std::uint64_t" : throw(ArgumentError("unsupported CPU format"))
+    _width(f) <= 16 ? "std::uint16_t" :
+    _width(f) <= 32 ? "std::uint32_t" :
+    _width(f) <= 64 ? "std::uint64_t" : "ac_int<$(8cld(_width(f),8)),false>"
 _cpp_storage(f::FixedFormat) = f.width <= 64 ? "std::uint64_t" : "Big"
-function _cpp_decode_bits(expression, f, backend)
+function _cpp_decode_bits(expression, f, backend, float_backend = :native)
+    f isa FloatFormat &&
+        float_backend == :ac_std_float &&
+        return "ac_float_from_bits<$(_cpp_ac_type(f,backend))>($expression)"
     f isa FloatFormat && return "std::bit_cast<$(_cpp_type(f))>($expression)"
     backend != :portable &&
         return "hls_from_bits<$(_cpp_type(f,backend)),$(f.width)>($expression)"
     return "integer_cast<$(_cpp_type(f))>(fixed_units_from_bits($expression,$(f.width),$(f.signed)))"
 end
-function _cpp_encode_bits(expression, f, backend)
+function _cpp_encode_bits(expression, f, backend, float_backend = :native)
+    f isa FloatFormat &&
+        float_backend == :ac_std_float &&
+        return "FloatBits<$(_cpp_ac_type(f,backend))>::bits($expression)"
     f isa FloatFormat && return "std::bit_cast<$(_cpp_storage(f))>($expression)"
     units =
         backend == :portable ? "integer($expression)" :
@@ -136,9 +142,12 @@ function emit_cpp(
     p::IR.Program;
     name::AbstractString = "evaluator",
     backend::Symbol = :portable,
+    float_backend::Symbol = :auto,
 )
     backend in _CPP_BACKENDS ||
         throw(ArgumentError("backend must be portable, ap_fixed or ac_fixed"))
+    _resolved_float_backend(p, float_backend) == :ac_std_float &&
+        return _emit_cpp_ac(io, p; name, backend)
     ns = _cpp_name(name)
     foreach(f -> _cpp_type(f, backend), p.types)
     foreach(t -> _cpp_type(t.format, backend), p.tables)
@@ -178,6 +187,7 @@ function emit_cpp(
 #include <cfenv>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
 $(_has_fixed(p) ? "#include <gmpxx.h>\n#include <type_traits>\n#include <algorithm>" : "")
 $(_has_fixed(p) && backend != :portable ? _cpp_vendor_include(backend) : "")
 namespace $ns {
@@ -193,6 +203,7 @@ inline double canonical(double x) {
     return std::isnan(x) ? std::bit_cast<double>(std::uint64_t{0x7ff8000000000000ULL}) : x;
 }
 $(any(==(IEEE16),p.types) || any(t -> t.format == IEEE16,p.tables) ? read(joinpath(@__DIR__,"cpp_half.hpp"),String) : "")
+$(read(joinpath(@__DIR__,"cpp_float_traits.hpp"),String))
 $(_has_fixed(p) ? read(joinpath(@__DIR__,"cpp_fixed.hpp"),String) : "")
 $(_has_fixed(p) && backend != :portable ? read(joinpath(@__DIR__,"cpp_vendor.hpp"),String) : "")
 template<class T,std::size_t N>
@@ -286,12 +297,18 @@ function emit_harness(
     outputbyte =
         outfmt isa FixedFormat && outfmt.width > 64 ?
         "static_cast<char>($(ns)::Big((result >> (8*k)) & 0xff).get_ui())" :
+        outfmt isa FloatFormat && _width(outfmt) > 64 ?
+        "static_cast<char>(static_cast<ac_int<8,false>>(result >> (8*k)).to_uint())" :
         "static_cast<char>((result >> (8*k)) & 0xff)"
     firstload = findfirst(n -> n isa IR.TableLoad, p.nodes)
     index = firstload === nothing ? nothing : p.nodes[firstload].index
+    indexword =
+        index === nothing ? "" :
+        p.types[index].width > 64 ? "context.value$index.to_uint64()" :
+        "context.value$index"
     observed =
         index === nothing ? "std::numeric_limits<std::uint64_t>::max()" :
-        "(context.ready$index ? context.value$index : std::numeric_limits<std::uint64_t>::max())"
+        "(context.ready$index ? $indexword : std::numeric_limits<std::uint64_t>::max())"
     fixed_trace = IOBuffer()
     for (i, f) in enumerate(p.types)
         f isa FixedFormat || continue

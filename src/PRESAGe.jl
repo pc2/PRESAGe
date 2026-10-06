@@ -9,6 +9,8 @@ export FloatFormat,
     IEEE16,
     IEEE32,
     IEEE64,
+    IEEE128,
+    IEEE256,
     DecodedFloat,
     decode_ieee,
     round_ieee,
@@ -66,6 +68,7 @@ include("interpreter.jl")
 include("cpp_fixed.jl")
 include("cpp_vendor.jl")
 include("cpp.jl")
+include("cpp_ac_float.jl")
 include("kernels.jl")
 include("fixed_kernels.jl")
 include("costs.jl")

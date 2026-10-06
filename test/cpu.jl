@@ -4,6 +4,7 @@ function cpu_check(
     words = verification_inputs(plan);
     expected_error = nothing,
     backend = :portable,
+    float_backend = :auto,
     public_api = false,
     input_bytes = nothing,
     host_rounding = nothing,
@@ -17,7 +18,7 @@ function cpu_check(
     mktempdir() do directory
         header, source, exe =
             joinpath.(Ref(directory), ("evaluator.hpp", "evaluate.cpp", "evaluate"))
-        emit_cpp(header, plan; backend)
+        emit_cpp(header, plan; backend, float_backend)
         emit_harness(source, plan.program)
         if host_rounding !== nothing
             mode = Dict(
@@ -35,8 +36,9 @@ function cpu_check(
         end
         if public_api
             infmt, outfmt = plan.spec.input_format, plan.spec.output_format
-            decode = PRESAGe._cpp_decode_bits("word", infmt, backend)
-            encode = PRESAGe._cpp_encode_bits("typed", outfmt, backend)
+            mode = PRESAGe._resolved_float_backend(plan.program, float_backend)
+            decode = PRESAGe._cpp_decode_bits("word", infmt, backend, mode)
+            encode = PRESAGe._cpp_encode_bits("typed", outfmt, backend, mode)
             replacement = """
             using namespace presage_evaluator;
             $(!any(f -> f isa FloatFormat,plan.program.types) ? "std::fesetround(FE_DOWNWARD);" : "")
@@ -71,6 +73,8 @@ function cpu_check(
             String[]
         end
         vendor = backend == :portable ? String[] : ["-isystem", vendor_include(backend)]
+        PRESAGe._resolved_float_backend(plan.program, float_backend) == :ac_std_float &&
+            append!(vendor, ["-isystem", vendor_include(:ac_fixed)])
         run(
             `$compiler -std=c++20 -O2 -ffp-contract=off -fno-fast-math -frounding-math -Wall -Wextra -Werror $source $vendor $gmp -o $exe`,
         )

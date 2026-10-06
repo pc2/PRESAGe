@@ -6,9 +6,10 @@ function verification_inputs(plan; random_count = 2048)
     f == IEEE16 && !(plan.spec.output_format isa FixedFormat) && return UInt64.(0:65535)
     sign = f isa FixedFormat ? BigInt(1) << (f.width - 1) : PRESAGe._sign(f)
     mask = f isa FixedFormat ? PRESAGe._fixed_mask(f) : PRESAGe._wordmask(f)
+    wide = f isa FixedFormat || PRESAGe._width(f) > 64
     words =
         f isa FixedFormat ? BigInt[0, 1, mask, sign, sign - 1, sign + 1] :
-        UInt64[
+        (wide ? BigInt : UInt64)[
             0,
             sign,
             1,
@@ -47,10 +48,10 @@ function verification_inputs(plan; random_count = 2048)
     end
     state = UInt64(0x8baf672eb17227d9)
     for _ = 1:random_count
-        word = f isa FixedFormat ? BigInt(0) : UInt64(0)
+        word = wide ? BigInt(0) : UInt64(0)
         for _ = 1:cld(PRESAGe._width(f), 64)
             state = state * UInt64(6364136223846793005) + UInt64(1442695040888963407)
-            word = f isa FixedFormat ? (word << 64) | state : state
+            word = wide ? (word << 64) | state : state
         end
         push!(words, word & mask)
     end

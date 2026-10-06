@@ -229,7 +229,7 @@ function _exceptional(o::ReferenceOracle, x::DecodedFloat)
     s, p, b = o.spec, o.primitive, o.backend
     f = s.output_format
     f isa FixedFormat && return _exceptional_fixed(o, x)
-    sign = x.negative ? _sign(f) : UInt64(0)
+    sign = x.negative ? _sign(f) : _float_word(0, f)
     x.kind == :nan && return _result(:special, _nan(f), b, "canonical quiet NaN")
     if x.kind == :infinity
         if p == :erf || p == :tanh
@@ -237,7 +237,7 @@ function _exceptional(o::ReferenceOracle, x::DecodedFloat)
         elseif p == :erfc
             return _result(:special, round_ieee(x.negative ? 2 : 0, f), b)
         elseif p == :exp
-            return _result(:special, x.negative ? UInt64(0) : _inf(f), b)
+            return _result(:special, x.negative ? _float_word(0, f) : _inf(f), b)
         elseif p == :expm1
             return _result(:special, x.negative ? round_ieee(-1, f) : _inf(f), b)
         elseif p == :recip
@@ -249,7 +249,7 @@ function _exceptional(o::ReferenceOracle, x::DecodedFloat)
         elseif p in (:log, :log1p, :log2, :log10, :sqrt, :acosh, :rsqrt)
             x.negative &&
                 return _result(:domain_error, _nan(f), b, "invalid primitive argument")
-            return _result(:special, p == :rsqrt ? UInt64(0) : _inf(f), b)
+            return _result(:special, p == :rsqrt ? _float_word(0, f) : _inf(f), b)
         elseif p in (:sin, :cos, :tan, :asin, :acos, :atanh)
             return _result(:domain_error, _nan(f), b, "invalid infinite argument")
         end

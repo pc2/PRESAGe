@@ -2,12 +2,24 @@
 using PRESAGe
 
 function reference_format(text; rounding = :nearest_even, overflow = :reject)
-    float =
-        get(Dict("half" => IEEE16, "single" => IEEE32, "double" => IEEE64), text, nothing)
+    float = get(
+        Dict(
+            "half" => IEEE16,
+            "single" => IEEE32,
+            "double" => IEEE64,
+            "quad" => IEEE128,
+            "octuple" => IEEE256,
+        ),
+        text,
+        nothing,
+    )
     float === nothing || return float
+    (startswith(text, "float(") || startswith(text, "binary")) &&
+        return PRESAGe._read_format(text)
     parts = match(r"^(u?fixed)\((\d+),(\d+)\)$", text)
-    parts === nothing &&
-        error("format must be half, single, double, fixed(W,I) or ufixed(W,I)")
+    parts === nothing && error(
+        "format must be half, single, double, quad, octuple, float(E,M), fixed(W,I) or ufixed(W,I)",
+    )
     return FixedFormat(
         parse(Int, parts[2]),
         parse(Int, parts[3]);

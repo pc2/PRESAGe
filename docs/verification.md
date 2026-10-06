@@ -8,7 +8,7 @@ use each Julia installation's own MPFR/GMP runtime.
 ## Results
 
 The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **368,949 checks on Julia 1.13.1**, with four
+passes **369,202 checks on Julia 1.13.1**, with four
 threads. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
@@ -31,10 +31,20 @@ coverage or numerical certificates.
 | Fixed I/O binary streams and commands | 46 | Both byte orders; 9/137-bit fixed words; padding/word metadata; CLI mixed widths; rejection of invalid padding, truncated words and nonfinite/overflow references without publishing binary output. |
 | Fixed I/O CPU conformance | 78 | All three backends; exhaustive small fixed interfaces; signed/unsigned widths through 137 bits; raw and typed public APIs; pure fixed execution with FE_DOWNWARD; output policies; mixed interfaces; guarded domains; invalid padding even with unused input; empty/truncated streams; fixed tables and index traces. |
 | Native vendor fixed arithmetic | 48 | Both `ap_fixed` and `ac_fixed` compiled with ordinary LLVM C++20; 16,384 matrix cases per library; mixed signedness/scales; all rounding modes, wrap/saturation and rejection after rounding; every visited fixed payload; 31/80-bit separate/FMA erf; finite IEEE32/64 range and lazy specials; scaling and width limits. |
+| Wide floating core | 148 | Automatic UInt64/BigInt storage; binary128/256 and custom fractions; exact rounding, subnormal/overflow ties, signed zeros, extreme scaling, wide dispatch/schema words, both byte orders and non-byte-aligned streams; adaptive 301-bit MPFR references and explicit backend/precision limits. |
+| Official AC floating arithmetic | 98 | Binary32/128/256, bfloat16, 300-bit fractions and exhaustive small formats through native AC Add/Mul/FMA; conversions, scaling, wide bit operations/tables, raw/typed APIs, padding, 5000-bit raw payloads; 448 mixed fixed/float cases per portable/AC/AP backend with directed rounding, wrap/saturation and rejection. |
 | Uniform fixed erf certificates | 2,346 | Every fixed node's range; complete graph audit; uniform error contributions/tails; CPU bits/rows; sampled MPFR checks against the certified bound; rejected graph/metadata changes; width-search failure; wide separate/FMA certificates. |
 | Uniform fixed polynomial certificates | 11,222 | Exhaustive bounded erf/exp in separate/FMA modes against mathematical enclosures and all three C++ backends; every visited fixed node's certified range; exact affine and constant kernels, coarse coordinates and amplification, inward/clipped/singleton domains, unsigned/wide formats, changed coefficients/graphs, overflow, singularities and schema v2 reports. |
 | Certified generation commands | 32 | Default certified generation, stored-plan recertification, identical emission, both native backends with identical numerical plans, explicit search-limit reports, preserved valid outputs after failure, stale-report removal and option validation; automatic fixed polynomial proofs with or without a kernel label, standalone recertification and unsupported graphs. |
+| Custom floating generation options | 7 | Automatic AC selection for stored binary128 plans, explicit binary32 AC selection, no floating-only GMP dependency, unsupported native mapping/option diagnostics and preservation of generated output on failure. |
 | Binary16 generation and implementation policy | 21 | Automatic and explicit LUT/polynomial selection; exact budgets and half interfaces; stored LUT recertification/identical emission; FMA and unchecked polynomial generation; preserved outputs on failed proofs and invalid options. |
+
+The custom floating CMake/CTest build passes with binary128 interfaces, a
+custom 160-fraction-bit internal format and fused polynomial arithmetic,
+without GMP linkage. A separate build passes with binary32 AC interfaces and
+AP fixed arithmetic for the certified erf graph. Header simulation is verified
+locally; oneAPI compilation/synthesis and floating evaluator certificates remain
+separate gates. The existing fixed and binary16 certificate bounds are unchanged.
 
 In particular, `exp` at IEEE32 input `0xc2af0001` resolves to output
 **`0x006cb285`** through both backends at 256 bits. Exact rational midpoint

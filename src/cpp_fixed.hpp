@@ -6,16 +6,31 @@ using Big = mpz_class;
 inline Big integer(const Big& x) { return x; }
 template<class T,class U> Big integer(const __gmp_expr<T,U>& x) { return Big(x); }
 template<class T> Big integer(T x) {
+    if constexpr (requires { T::width; x[0]; }) {
+        bool negative = x < 0;
+        T magnitude = negative ? T(-x) : x;
+        Big result = 0;
+        for (int bit=0;bit<T::width;++bit)
+            if (bool(magnitude[bit])) mpz_setbit(result.get_mpz_t(),bit);
+        return negative ? -result : result;
+    } else {
     bool negative = x < 0;
     __uint128_t magnitude = negative ? -static_cast<__uint128_t>(x) : static_cast<__uint128_t>(x);
     std::uint64_t words[2] = {static_cast<std::uint64_t>(magnitude),static_cast<std::uint64_t>(magnitude >> 64)};
     Big result;
     mpz_import(result.get_mpz_t(),2,-1,sizeof(words[0]),0,0,words);
     return negative ? -result : result;
+    }
 }
 template<class T> T integer_cast(const Big& x) {
     if constexpr (std::is_same_v<T,Big>) return x;
-    else {
+    else if constexpr (requires(T value) { T::width; value[0]; }) {
+        Big raw = x;
+        mpz_mod_2exp(raw.get_mpz_t(),raw.get_mpz_t(),T::width);
+        T value = 0;
+        for (int bit=0;bit<T::width;++bit) value[bit] = mpz_tstbit(raw.get_mpz_t(),bit);
+        return value;
+    } else {
         Big magnitude = x < 0 ? -x : x;
         std::uint64_t words[2] = {0,0};
         std::size_t count = 0;
@@ -94,36 +109,38 @@ template<class T,class U> T fixed_round(U value,std::int64_t source_fraction,int
     return integer_cast<T>(x);
 }
 template<class T,class Float> T fixed_from_float(Float x,int width,int fraction,bool is_signed,int mode,int overflow,int scale=0) {
-    using Word = std::conditional_t<sizeof(Float)==2,std::uint16_t,std::conditional_t<sizeof(Float)==4,std::uint32_t,std::uint64_t>>;
-    constexpr int mantissa = sizeof(Float)==2 ? 10 : sizeof(Float)==4 ? 23 : 52;
-    constexpr int exponent_bits = sizeof(Float)==2 ? 5 : sizeof(Float)==4 ? 8 : 11;
+    using Word = typename FloatBits<Float>::Word;
+    constexpr int mantissa = FloatBits<Float>::fraction;
+    constexpr int exponent_bits = FloatBits<Float>::exponent;
     constexpr int bias = (1 << (exponent_bits-1))-1;
-    Word raw = std::bit_cast<Word>(x);
-    Word exponent = (raw >> mantissa) & ((Word(1) << exponent_bits)-1);
-    if (exponent == (Word(1) << exponent_bits)-1) throw std::domain_error("fixed conversion requires a finite value");
+    Word raw = FloatBits<Float>::bits(x);
+    Word exponent_word = (raw >> mantissa) & ((Word(1) << exponent_bits)-1);
+    int exponent = float_exponent_field(exponent_word);
+    if (exponent == (1 << exponent_bits)-1) throw std::domain_error("fixed conversion requires a finite value");
     Word significand = raw & ((Word(1) << mantissa)-1);
     if (exponent != 0) significand |= Word(1) << mantissa;
     Big value = integer(significand);
-    if (raw >> (mantissa+exponent_bits)) value = -value;
+    if ((raw >> (mantissa+exponent_bits)) != 0) value = -value;
     int power = (exponent == 0 ? 1-bias : int(exponent)-bias)-mantissa;
     return fixed_round<T>(value,-std::int64_t(power)-scale,width,fraction,is_signed,mode,overflow);
 }
 template<class Float,class T> Float float_from_fixed(T value,int fraction,int mode) {
-    using Word = std::conditional_t<sizeof(Float)==2,std::uint16_t,std::conditional_t<sizeof(Float)==4,std::uint32_t,std::uint64_t>>;
-    constexpr int mantissa = sizeof(Float)==2 ? 10 : sizeof(Float)==4 ? 23 : 52;
-    constexpr int exponent_bits = sizeof(Float)==2 ? 5 : sizeof(Float)==4 ? 8 : 11;
+    using Word = typename FloatBits<Float>::Word;
+    constexpr int mantissa = FloatBits<Float>::fraction;
+    constexpr int exponent_bits = FloatBits<Float>::exponent;
     constexpr int bias = (1 << (exponent_bits-1))-1;
     constexpr int emin = 1-bias;
-    constexpr Word inf = ((Word(1) << exponent_bits)-1) << mantissa;
+    const Word inf = ((Word(1) << exponent_bits)-1) << mantissa;
     Big signed_value = integer(value);
     bool negative = signed_value < 0;
     Word sign = negative ? Word(1) << (mantissa+exponent_bits) : Word(0);
     Big n = negative ? -signed_value : signed_value;
-    if (n == 0) return std::bit_cast<Float>(sign);
+    if (n == 0) return FloatBits<Float>::from_bits(sign);
     std::int64_t binade = std::int64_t(mpz_sizeinbase(n.get_mpz_t(),2))-1-fraction;
     auto overflow_result = [&]() {
         bool infinity = mode == 0 || (mode == 2 && !negative) || (mode == 3 && negative);
-        return std::bit_cast<Float>(Word(sign | (infinity ? inf : inf-1)));
+        Word magnitude = infinity ? inf : Word(inf-1);
+        return FloatBits<Float>::from_bits(Word(sign | magnitude));
     };
     if (binade > bias) return overflow_result();
     std::int64_t quantum = std::max<std::int64_t>(emin-mantissa,binade-mantissa);
@@ -132,7 +149,7 @@ template<class Float,class T> Float float_from_fixed(T value,int fraction,int mo
     if (q < 0) q = -q;
     if (q >= (Big(1) << (mantissa+1))) { q >>= 1; ++quantum; }
     if (quantum+mantissa > bias) return overflow_result();
-    Word word = static_cast<Word>(integer_cast<std::uint64_t>(q));
+    Word word = integer_cast<Word>(q);
     if (q >= (Big(1) << mantissa)) word = Word((Word(quantum+mantissa+bias) << mantissa) | (word-(Word(1)<<mantissa)));
-    return std::bit_cast<Float>(Word(sign | word));
+    return FloatBits<Float>::from_bits(Word(sign | word));
 }

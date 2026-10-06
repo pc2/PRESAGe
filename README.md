@@ -1,7 +1,7 @@
 # PRESAGe
 
 Julia planning and verification core for systematic function approximation on
-FPGAs. Generated evaluators use C++ with `ac_fixed` or `ap_fixed` arithmetic,
+FPGAs. Generated evaluators use C++ with `ac_std_float`, `ac_fixed` or `ap_fixed` arithmetic,
 with a portable integer backend for reference checks.
 Development and numerical verification currently run locally without an FPGA.
 
@@ -13,8 +13,36 @@ The fixed binary16/IEEE32 `erf` evaluators have uniform absolute-error certifica
 covering every finite input. Fixed polynomial kernels can also be certified on
 bounded domains. Binary16 also supports a complete lookup table with resolved
 nearest-even outputs. Floating candidates run locally.
+Custom floating formats support wide significands, with automatic `BigInt`
+payloads above 64 bits and official AC headers for C++ arithmetic.
 The development plan is maintained at
 [`../plan/DEVELOPMENT_PLAN.md`](../plan/DEVELOPMENT_PLAN.md).
+
+## Custom floating formats
+
+```julia
+using PRESAGe
+
+spec = FunctionSpec("1/4+3/2*x-1/2*x^2"; input_format=IEEE128, domain=(-1,1))
+plan = polynomial_plan(spec, [1//4, 3//2, -1//2];
+                       internal_format=FloatFormat(8,160), evaluation=:fma)
+write_plan("custom.toml", plan)
+emit_cpp("evaluator.hpp", plan) # automatically selects official AC float types
+emit_harness("evaluate.cpp", plan.program)
+```
+
+`FloatFormat(E,M)` declares exponent and fraction widths. Encoded words use
+`UInt64` up to 64 bits and `BigInt` for larger formats; `IEEE128` and `IEEE256`
+are predefined. The interpreter rounds each operation exactly. References
+adapt MPFR/Sollya working precision independently of the target format.
+
+Generate a stored custom plan with `scripts/generate.jl custom.toml build/custom`.
+`--float-backend=auto|native|ac_std_float` selects floating arithmetic separately
+from the fixed `--backend`. Use `ac_std_float` explicitly to validate binary32
+through the AC headers. Floating-only AC evaluators compile without GMP linkage.
+See [format and backend limits](docs/arithmetic.md#custom-floating-backend).
+Custom floating candidates have CPU conformance checks; uniform certification
+still covers the existing fixed kernels and binary16 tables.
 
 ## Local setup
 
@@ -281,7 +309,8 @@ julia --startup-file=no --project=. scripts/reference.jl \
   '--input-format=fixed(9,3)' '--output-format=fixed(10,2)'
 ```
 
-Formats are `half`, `single`, `double`, `fixed(W,I)` and `ufixed(W,I)`.
+Formats are `half`, `single`, `double`, `quad`, `octuple`, `float(E,M)`,
+`fixed(W,I)` and `ufixed(W,I)`, where `M` is the fraction width.
 `--output-format` defaults to the input format; `--format` remains an input-format
 alias. Fixed output also accepts `--rounding=nearest_even|toward_zero|up|down`
 and `--overflow=reject|saturate|wrap`. Expressions use Sollya syntax;

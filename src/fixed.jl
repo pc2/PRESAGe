@@ -2,9 +2,7 @@ _fraction(f::FixedFormat) = f.width - f.integer_bits
 _width(f::FixedFormat) = f.width
 _input_precision(f::FloatFormat) = f.fraction_bits + 1
 _input_precision(f::FixedFormat) = f.width
-_word_bytes(f::FloatFormat) =
-    _width(f) % 8 == 0 ? div(_width(f), 8) :
-    throw(ArgumentError("floating binary streams require byte-aligned formats"))
+_word_bytes(f::FloatFormat) = cld(_width(f), 8)
 _word_bytes(f::FixedFormat) = cld(f.width, 8)
 _fixed_mask(f::FixedFormat) = (BigInt(1) << f.width) - 1
 function _fixed_limits(f::FixedFormat)

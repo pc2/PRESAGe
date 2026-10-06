@@ -12,12 +12,16 @@ function _format_data(f::FloatFormat)
     f == IEEE16 && return "binary16"
     f == IEEE32 && return "binary32"
     f == IEEE64 && return "binary64"
+    f == IEEE128 && return "binary128"
+    f == IEEE256 && return "binary256"
     return "float($(f.exponent_bits),$(f.fraction_bits))"
 end
 function _read_format(text::AbstractString)
     text == "binary16" && return IEEE16
     text == "binary32" && return IEEE32
     text == "binary64" && return IEEE64
+    text == "binary128" && return IEEE128
+    text == "binary256" && return IEEE256
     parts = match(r"^float\((\d+),(\d+)\)$", text)
     parts === nothing && throw(ArgumentError("unsupported floating format: $text"))
     return FloatFormat(parse(Int, parts[1]), parse(Int, parts[2]))
@@ -125,7 +129,7 @@ function _read_plan(d)
         occursin(r"^0x[0-9a-fA-F]+$", b["threshold_bits"]) ||
             throw(ArgumentError("invalid threshold bits"))
         Dispatch(
-            parse(UInt64, b["threshold_bits"][3:end]; base = 16);
+            parse(BigInt, b["threshold_bits"][3:end]; base = 16);
             comparison = Symbol(b["comparison"]),
             positive_tail = _parse_rational(b["positive_tail"]),
             negative_tail = _parse_rational(b["negative_tail"]),

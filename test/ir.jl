@@ -70,6 +70,7 @@
     @test_throws ArgumentError emit_cpp(
         IOBuffer(),
         IR.Program([IR.Input(FloatFormat(4, 3))]),
+        float_backend = :native,
     )
     @test_throws ArgumentError emit_cpp(
         IOBuffer(),

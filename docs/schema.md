@@ -17,7 +17,9 @@ absolute_error = "1/8388608"
 The output format defaults to the input format, and an omitted `domain` means
 all finite inputs. A bounded domain uses two exact rational strings, such as
 `domain = ["-1/3", "2/3"]`. Formats are `binary16`, `binary32`, `binary64` or
-`float(E,M)`, where M is the number of fraction bits.
+`float(E,M)`, where M is the number of fraction bits. `binary128` and `binary256`
+are also predefined. Hexadecimal words and dispatch thresholds retain arbitrary
+widths; their text encoding is unchanged.
 
 Nearest-even rounding, IEEE overflow/subnormals, canonical quiet NaNs and
 established primitive zero/infinity behavior are shared defaults. They are not

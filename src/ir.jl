@@ -1,6 +1,14 @@
 """Typed arithmetic DAG. References are one-based node/table indices."""
 module IR
-using ..PRESAGe: FloatFormat, FixedFormat, _wordmask, round_ieee, round_fixed, _fixed_mask
+using ..PRESAGe:
+    FloatFormat,
+    FixedFormat,
+    _wordmask,
+    _word_mask,
+    _float_word,
+    round_ieee,
+    round_fixed,
+    _fixed_mask
 
 export UIntFormat,
     Node,
@@ -28,19 +36,22 @@ export UIntFormat,
 struct UIntFormat
     width::Int
     function UIntFormat(width::Integer)
-        1 <= width <= 64 || throw(ArgumentError("unsigned width must be in 1:64"))
+        1 <= width <= typemax(Int) ||
+            throw(ArgumentError("unsigned width must be a positive Int"))
         new(Int(width))
     end
 end
 const ArithmeticFormat = Union{FloatFormat, FixedFormat}
 const Type = Union{ArithmeticFormat, UIntFormat, Core.Type{Bool}}
 const Word = Union{UInt64, BigInt}
-mask(f::UIntFormat) = typemax(UInt64) >> (64 - f.width)
+mask(f::UIntFormat) = _word_mask(f.width)
 mask(f::FloatFormat) = _wordmask(f)
 mask(f::FixedFormat) = _fixed_mask(f)
 mask(::Core.Type{Bool}) = UInt64(1)
 _default_rounding(::FloatFormat) = :nearest_even
 _default_rounding(f::FixedFormat) = f.rounding
+_word(bits, f::FloatFormat) = _float_word(bits, f)
+_word(bits, f::UIntFormat) = f.width <= 64 ? UInt64(bits) : BigInt(bits)
 _word(bits, f) = f isa FixedFormat ? BigInt(bits) : UInt64(bits)
 _rounding(mode) =
     mode in (:nearest_even, :toward_zero, :up, :down) ? mode :

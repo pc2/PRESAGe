@@ -1,6 +1,6 @@
 @testset "Exact IEEE encodings and rounding" begin
     @test_throws ArgumentError FloatFormat(1, 23)
-    @test_throws ArgumentError FloatFormat(11, 53)
+    @test_throws ArgumentError FloatFormat(11, 0)
     @test_throws ArgumentError FixedFormat(16, 17)
     @test FixedFormat(16, 4).integer_bits == 4
     @test_throws ArgumentError decode_ieee(0x10000, IEEE16)

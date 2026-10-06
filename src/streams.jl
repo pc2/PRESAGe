@@ -127,7 +127,10 @@ function generate_references(
         "maximum_precision" => 0,
         "status_counts" => Dict{String, Int}(),
     )
-    if spec.input_format isa FixedFormat || spec.output_format isa FixedFormat
+    if spec.input_format isa FixedFormat ||
+       spec.output_format isa FixedFormat ||
+       _width(spec.input_format) % 8 != 0 ||
+       _width(spec.output_format) % 8 != 0
         summary["input_word_bytes"], summary["output_word_bytes"] = insize, outsize
         summary["padding"] = "zero_high_bits"
     end

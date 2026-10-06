@@ -39,7 +39,7 @@ rounding and overflow. `FixedFormat(W,I)` has `W-I` fractional bits, with `I`
 including the sign bit. It supports signed/unsigned storage, all four rounding
 modes and reject/saturate/wrap overflow. Fixed values have no signed zero or
 nonfinite encodings; converting NaN/infinity to fixed raises an error.
-Unsigned values use `IR.UIntFormat(W)` for widths 1–64; conditions use `Bool`.
+Unsigned values use `IR.UIntFormat(W)` with positive widths; conditions use `Bool`.
 Table `banks` and `unroll` are implementation metadata and do not alter values.
 
 `FunctionSpec` supports either format independently for input and output; output
@@ -57,16 +57,19 @@ package's custom floating formats, including subnormals and finite exponent
 ranges. Fixed arithmetic uses arbitrary-width integers. Arithmetic and floating
 conversions canonicalise NaNs; raw loads, selects and bit
 casts preserve payloads. Signed zeros follow the operation's rounding semantics.
+Floating and unsigned payloads use `UInt64` through 64 bits and `BigInt` above
+that width. `FloatFormat(E,M)` allows custom exponent/fraction widths whose
+metadata and exponents fit Julia `Int`; `IEEE128` and `IEEE256` are predefined.
 `interpret_trace(program, bits)` returns output bits and visited node values;
 table-index nodes can be inspected to check dispatch.
 
 ## C++ backend
 
-The C++20 emitter supports binary32/binary64 floating arithmetic with nearest-even
+The native C++20 floating backend supports binary32/binary64 arithmetic with nearest-even
 rounding, binary16 interfaces and exact conversions, plus exact fixed arithmetic
 and directed fixed conversions. Binary16 uses the namespace-local `Half` type,
 a portable two-byte representation with exact widening to float/double and
-explicit nearest-even narrowing. Binary16 arithmetic nodes require fixed,
+explicit nearest-even narrowing. Native binary16 arithmetic nodes require fixed,
 binary32 or binary64 internals. Compile with
 `-ffp-contract=off -fno-fast-math -frounding-math`, retain gradual underflow and
 use `FE_TONEAREST` for floating evaluators with arithmetic/conversion nodes. `std::fma`
@@ -89,6 +92,37 @@ fit; wider operations use GMP. Exact quantization and float/fixed conversion
 helpers also use GMP integers. Fixed headers need `gmpxx.h` and linkage with
 `-lgmpxx -lgmp`. The supported CPU compilers are Clang/GCC with native 128-bit
 integers. `emit_cpp` defaults to this portable reference backend.
+
+### Custom floating backend
+
+`emit_cpp(...; float_backend=:auto)` retains native binary16/32/64 interfaces
+for programs using those formats. A custom format or wide unsigned node selects
+the official `ac_std_float<W,E>` / `ac_int<W,false>` headers for the complete
+floating path. `float_backend=:ac_std_float` explicitly selects AC types,
+including binary32; `:native` rejects custom formats. The floating choice is
+independent of `backend=:portable|ac_fixed|ap_fixed` for fixed arithmetic.
+The CLI exposes `--float-backend`; CMake exposes `PRESAGE_FLOAT_BACKEND`.
+
+AC Add/Mul/FMA and float conversions use explicit nearest-even library calls
+with subnormals enabled. Scaling uses an exact power of two in a wider exponent
+format before one final conversion. Classification, signed zeros, comparisons,
+raw tables and lazy branches retain the IR semantics. Native fixed-to-float and
+float-to-fixed adapters use AC conversion routines, with the declared directed
+rounding and overflow policies; AP payloads are transferred exactly by bits.
+The portable fixed backend retains its independent GMP conversion path.
+
+Wide floating raw interfaces use byte-padded `ac_int` words; typed interfaces
+use `ac_std_float`. Input padding must be zero. Floating-only evaluators require
+the AC headers but no GMP linkage. Mixed fixed evaluators still use GMP for host
+transport/tracing, and portable fixed arithmetic. CPU width parameters must fit
+C `int`; the AC header's exponent calculations restrict exponent widths to 30
+bits, with additional headroom needed for scaling. Existing native fixed width
+and scale limits still apply. Unsupported mappings fail before header output.
+
+These checks exercise official header simulation using ordinary C++ compilation.
+Binary32 (`ac_std_float<32,8>`) is the initial oneAPI candidate. Toolchain support
+for other combinations requires separate validation. Floating evaluator
+certification remains separate from CPU arithmetic conformance.
 
 ### Fixed backends
 

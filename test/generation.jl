@@ -1,5 +1,30 @@
 include(joinpath(@__DIR__, "..", "scripts", "generate.jl"))
 include(joinpath(@__DIR__, "..", "scripts", "certify.jl"))
+@testset "Custom floating generation options" begin
+    mktempdir() do directory
+        source, output = joinpath(directory, "wide.toml"), joinpath(directory, "generated")
+        plan = polynomial_plan(FunctionSpec("x"; input_format = IEEE128), [0, 1])
+        write_plan(source, plan)
+        generate_main([source, output])
+        text = read(joinpath(output, "evaluator.hpp"), String)
+        @test occursin("ac_std_float<128,15>", text)
+        @test !occursin("gmpxx.h", text)
+        @test !isfile(joinpath(output, "certificate.toml"))
+        @test_throws ArgumentError generate_main([source, output, "--float-backend=native"])
+        @test read(joinpath(output, "evaluator.hpp"), String) == text
+        @test_throws ErrorException generate_main([
+            source,
+            output,
+            "--float-backend=unknown",
+        ])
+        write_plan(source, polynomial_plan(FunctionSpec("x"), [0, 1]))
+        generate_main([source, output, "--float-backend=ac_std_float"])
+        @test occursin(
+            "ac_std_float<32,8>",
+            read(joinpath(output, "evaluator.hpp"), String),
+        )
+    end
+end
 @testset "Certified generation commands" begin
     mktempdir() do directory
         generated = joinpath(directory, "generated")

@@ -64,16 +64,18 @@ That is a valid outcome, not a reference value.
 
 ## Binary streams
 
-`generate_references` accepts byte-aligned floating formats and fixed formats, an explicit `:little`
+`generate_references` accepts custom floating formats and fixed formats, an explicit `:little`
 or `:big` byte order and a configurable chunk size (default 4096 input words).
 The last chunk may contain fewer complete words. A trailing incomplete word is
 an error. Input buffer storage is bounded by the chunk size, independently of
 dataset length; reference computations are sequential and reuse an oracle.
 
-Fixed words occupy `ceil(W/8)` bytes and use zero high padding. Signed words carry
+All words occupy `ceil(W/8)` bytes and use zero high padding. Signed fixed words carry
 two's complement within exactly `W` bits. Invalid padding is rejected, and wide
 words retain all bits. Fixed stream metadata uses schema version 2 and records
-word sizes/padding. Floating stream metadata remains version 1. The CLI accepts
+word sizes/padding. Floating stream metadata remains version 1 and also records
+word sizes/padding for formats that are not byte aligned. The CLI accepts
+`quad`, `octuple`, `binary128`, `binary256` and `float(E,M)` for custom floats,
 `--input-format=fixed(W,I)` or `ufixed(W,I)`, `--output-format`, and fixed output
 `--rounding`/`--overflow` controls. Quote parenthesized formats in shell commands.
 

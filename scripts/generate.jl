@@ -3,7 +3,7 @@ using PRESAGe
 
 function generate_main(args)
     length(args) >= 2 || error(
-        "Usage: generate.jl erf|PLAN.toml OUTPUT_DIR [--backend=portable|ap_fixed|ac_fixed] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false]",
+        "Usage: generate.jl erf|PLAN.toml OUTPUT_DIR [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false]",
     )
     source, directory = args[1:2]
     options = Dict{String, String}()
@@ -25,6 +25,7 @@ function generate_main(args)
             "norm-accuracy",
             "certify",
             "backend",
+            "float-backend",
             "input-format",
             "output-format",
             "absolute-error",
@@ -37,6 +38,9 @@ function generate_main(args)
     backend = Symbol(get(options, "backend", "ac_fixed"))
     backend in PRESAGe._CPP_BACKENDS ||
         error("backend must be portable, ap_fixed or ac_fixed")
+    float_backend = Symbol(get(options, "float-backend", "auto"))
+    float_backend in PRESAGe._CPP_FLOAT_BACKENDS ||
+        error("float-backend must be auto, native or ac_std_float")
     flag = get(
         options,
         "certify",
@@ -170,8 +174,14 @@ function generate_main(args)
         end
     else
         all(
-            k ->
-                k in ("name", "certify", "proof-precision", "norm-accuracy", "backend"),
+            k -> k in (
+                "name",
+                "certify",
+                "proof-precision",
+                "norm-accuracy",
+                "backend",
+                "float-backend",
+            ),
             keys(options),
         ) || error("generation options require the erf source")
         read_plan(source)
@@ -194,7 +204,7 @@ function generate_main(args)
     name = get(options, "name", "evaluator")
     # Validate emission before creating output files.
     header = IOBuffer()
-    emit_cpp(header, plan; name, backend)
+    emit_cpp(header, plan; name, backend, float_backend)
     harness = IOBuffer()
     emit_harness(harness, plan.program; name)
     mkpath(directory)
