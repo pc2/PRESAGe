@@ -88,14 +88,17 @@ generation. Each path uses `domain`: an input interval for float/fixed polynomia
 or a magnitude interval for the canonical erf evaluator. Coverage describes
 the selected proof method. Floating/mixed polynomial reports use method
 `floating_polynomial_horner`; all-fixed reports use `fixed_polynomial_horner`.
-Both contain only numerical ranges for accepted inputs and have no erf tail
+Normalized segmented reports use `normalized_segmented_horner` and one closed
+reachable-input interval per row. These polynomial reports contain only
+numerical ranges for accepted inputs and have no erf tail
 claims. Node formats can be floating or fixed. `read_plan` loads evaluator semantics; `certify_plan`
 reruns the supported proof.
 Regenerate the report whenever coefficients or arithmetic change. See
 [certificate semantics](certification.md).
 
 `certified_polynomial` uses these existing artifact versions. Its plan settings
-record the requested maximum `degree`, `generation_precision` and `evaluation`;
+record the requested maximum `degree`, `generation_precision` and `evaluation`,
+plus `segments` when greater than one;
 the IR stores the actual coefficients and degree. Certificate settings record
 proof `precision` and `norm_accuracy`. A numerical `generation_failed` result has
 a contract-only plan and no uniform bound or coverage claim. Successfully
@@ -110,6 +113,11 @@ settings, attempt/time limits, elapsed seconds, result status and stop reason.
 `selected_attempt` is present only for a successful search and identifies the
 last attempt. Input/output formats remain in the function spec; each attempt
 records its explicit internal format and degree.
+
+Reports with segment-count choices use version 2, add the ordered `segments`
+array and each attempt's `segments` count, and use
+`order = "segment_then_degree_then_format"`. Default single-polynomial searches
+retain version 1.
 
 The `attempts` array contains status, elapsed seconds and failure details for
 every attempted configuration. An available `plan` is a complete existing plan
@@ -131,6 +139,28 @@ status does not claim successful evaluator publication.
 Unknown fields, versions and traversal orders are rejected. Choices are
 mandatory; omitted numerical settings and limits use `PolynomialSearchConfig`
 defaults. An omitted `order` means `degree_then_format`.
+
+Configurations with segment-count choices use version 2:
+
+```toml
+schema = "presage-search-config"
+schema_version = 2
+order = "segment_then_degree_then_format"
+segments = [1, 4, 8]
+degrees = [5, 9]
+internal_formats = [{ format = "float(8,27)" }]
+```
+
+Version 2 requires `segments`, an ordered list of distinct powers of two in
+1–64. An omitted `order` uses the version's default. Version 1 implies `[1]`
+and does not accept a `segments` field. Numerical settings and limits have
+the same encoding in both versions. A whole segmented candidate counts as one
+attempt and shares the same worker deadline across generation and proof of all
+rows. Exact segmented plans use the existing plan schema: `segments` contains
+nominal boundaries and normalized polynomial coefficients; the IR stores the
+actual thresholds, centre/coefficient tables, scale and complete evaluator.
+Certificate paths additionally report `coordinate.center`, `scale_exponent`,
+`ideal_domain`, `node` and, when evaluated, `rounded_domain`.
 
 ```toml
 schema = "presage-search-config"

@@ -13,6 +13,8 @@ The fixed binary16/IEEE32 `erf` evaluators have uniform absolute-error certifica
 covering every finite input. Fixed polynomial kernels can also be certified on
 bounded domains. Floating and mixed fixed/floating polynomial kernels also have
 uniform certificates, including custom formats and extra internal fraction bits.
+Bounded generation also supports normalized segments with complete dispatch,
+coordinate and per-path error proofs.
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
@@ -68,6 +70,14 @@ of choices, the attempt limit or the total deadline. Reports include exact
 available plans, certificate contributions and failure reasons. See
 [search limits](docs/certification.md#ordered-search-and-worker-limits) and the
 [search example](examples/bounded_search.jl).
+
+Add `segments=[1,4,8]` to search normalized segment counts before degrees and
+formats. Counts are powers of two up to 64; coefficients share one internal
+format, coefficient tables and one Horner evaluator. `certified_polynomial(...; segments=4)`
+makes one segmented attempt. Every executed threshold and table payload is
+audited, with input conversion/subtraction/scaling and final output rounding
+included in the uniform bound. See [coverage proofs](docs/certification.md#normalized-segments-and-coverage)
+and the [segmented example](examples/segmented_search.jl).
 
 ## Generation from a contract
 

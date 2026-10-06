@@ -2,7 +2,8 @@
 
 ## Polynomial kernels
 
-`certify_polynomial(plan)` proves a `polynomial_plan` with degree 0–32,
+`certify_polynomial(plan)` proves a `polynomial_plan` or normalized segmented
+evaluator with degree 0–32,
 floating or fixed input/output and internals, nearest-even rounding and rejected
 fixed overflow. Custom floating exponent/fraction widths are supported.
 Separate multiply/add and FMA have distinct proofs. Unsupported graphs and
@@ -155,6 +156,53 @@ stored-plan generation and recertification work with the returned artifacts.
 This API performs one synchronous attempt without a wall-time limit. Use
 `search_polynomial` for supervised generation and proof.
 
+## Normalized segments and coverage
+
+```julia
+spec = FunctionSpec("exp(x)"; input_format=FixedFormat(9,3),
+    output_format=FixedFormat(24,4), domain=(-1,1), absolute_error=1//(1<<18))
+result = certified_polynomial(spec; degree=5, segments=4,
+    internal_format=FixedFormat(32,6), evaluation=:fma)
+@assert result.status == :certified && length(result.paths) == 4
+```
+
+`segments=1` keeps the original single polynomial. Counts 2, 4, …, 64 use equal
+subintervals of the representable contract interval. Nominal boundaries are
+exact dyadic rationals. Each emitted threshold rounds upward in the **input**
+format, with `input >= threshold` selecting the next row. Every proof path is a
+closed interval between its first and last reachable input values; consecutive
+endpoints are numerical neighbours in the input format. This proves coverage
+without gaps or overlapping inputs. Both signed zeros select the same row.
+Empty representable branches are rejected before launching a search worker.
+
+Centres are rounded to the shared internal format, and the mathematical kernel
+uses these stored centres exactly. A common power-of-two scale makes every ideal
+coordinate `t=(x-center)*2^k` lie within `[-1,1]`. Sollya generates and proves
+`f(center+t*2^-k)` separately on each branch's ideal coordinate interval.
+Input conversion, subtraction and scaling execute as explicit IR nodes.
+Their accumulated coordinate error is propagated through Horner; the actual
+rounded coordinate may extend beyond the ideal interval. Range proofs bound
+this actual coordinate and all perturbed intermediates before accepting the
+complete error certificate. Final output conversion is bounded separately.
+
+The canonical graph audit compares every threshold, row selector, centre and
+coefficient payload, scale exponent, arithmetic node, conversion and lazy guard.
+Metadata or a kernel label cannot authorize a changed graph. Coefficient rows
+share one format and one padded degree, using tables and a common evaluator.
+All paths must prove their error budget; the reported total is their maximum.
+Certificate paths include input coverage, ideal and rounded coordinate domains,
+error contributions and reachable node ranges. Constant rows that skip coordinate
+arithmetic have no rounded coordinate range.
+
+Fixed internals require signed nearest-even arithmetic with rejected overflow.
+The selected format must hold the input conversion, stored negative centres and
+unscaled subtraction as well as the normalized coordinate and Horner stages.
+Segmentation does not automatically widen integer or exponent ranges.
+Singleton branches use certified point enclosures; a singleton whole contract
+uses the existing `segments=1` path. `segmented_polynomial_plan(spec, rows; ...)`
+also accepts supplied ascending coefficients **in the normalized coordinate**.
+Use `certified_polynomial` to generate them automatically.
+
 ## Ordered search and worker limits
 
 ```julia
@@ -169,9 +217,10 @@ write_search_report("search.toml", search)
 certificate = search.selected
 ```
 
-Both lists must be nonempty finite vectors or tuples without duplicate choices.
-Degrees are visited in the given order; formats are visited in the given order
-within each degree. Selection stops at the first complete passing certificate.
+Choice lists must be nonempty finite vectors or tuples without duplicates.
+An optional `segments=[1,4,8]` adds segment-count choices; the default is `[1]`.
+Counts are visited first, then degrees, then formats, each in caller order.
+Selection stops at the first complete passing certificate.
 This policy provides a feasible evaluator without optimizing hardware cost.
 Increasing fixed fractional precision or floating significand precision does
 not change an integer or exponent range: supply each desired format explicitly.
@@ -195,11 +244,11 @@ returns `search_limit` with `selected=nothing` and one of these stop reasons:
 
 | Stop reason | Meaning |
 | --- | --- |
-| `choices_exhausted` | Every supplied degree/format pair was attempted. |
+| `choices_exhausted` | Every supplied segment/degree/format combination was attempted. |
 | `attempt_limit` | Further choices remain, but the maximum attempt count was reached. |
 | `total_deadline` | The total time limit expired; any active worker was stopped. |
 
-Each `SearchAttempt` records degree, internal format, status, elapsed seconds,
+Each `SearchAttempt` records segment count, degree, internal format, status, elapsed seconds,
 reason, an optional exact `plan` and an optional `certificate`. Normal numerical
 statuses remain `generation_failed`, `bound_exceeds_budget`, `proof_failed` or
 `certified`. Supervision adds `timeout`, `worker_crashed` and `worker_failed`.

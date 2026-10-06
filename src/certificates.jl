@@ -362,6 +362,23 @@ function _certificate_data(result::CertificationResult)
                 ],
             ) for p in result.paths
         ]
+        if get(result.settings, "method", "") == "normalized_segmented_horner"
+            layout = _segmented_audit(result.plan)
+            for (report, path, certificate) in zip(d["paths"], layout.paths, result.paths)
+                coordinate = Dict{String, Any}(
+                    "center" => _rational_text(path.center),
+                    "scale_exponent" => path.exponent,
+                    "ideal_domain" => _rational_text.(collect(path.domain)),
+                    "node" => path.coordinate,
+                )
+                bound = findfirst(b -> b.node == path.coordinate, certificate.ranges)
+                bound === nothing || (
+                    coordinate["rounded_domain"] =
+                        _rational_text.(collect(certificate.ranges[bound].range))
+                )
+                report["coordinate"] = coordinate
+            end
+        end
         d["coverage"] = if get(result.settings, "method", "") == "binary16_exhaustive_lut"
             Dict(
                 "inputs" => "all 65536 binary16 encodings",
@@ -369,12 +386,19 @@ function _certificate_data(result::CertificationResult)
                 "nonfinite_inputs" => "shared primitive special-value policy",
                 "table_bits" => 65536 * 16,
             )
-        elseif get(result.settings, "method", "") in
-               ("fixed_polynomial_horner", "floating_polynomial_horner")
+        elseif get(result.settings, "method", "") in (
+            "fixed_polynomial_horner",
+            "floating_polynomial_horner",
+            "normalized_segmented_horner",
+        )
             input = result.plan.spec.input_format
             output = result.plan.spec.output_format
             Dict(
-                "input_domain" => _rational_text.(collect(only(result.paths).domain)),
+                "input_domain" =>
+                    _rational_text.([
+                        first(result.paths).domain[1],
+                        last(result.paths).domain[2],
+                    ]),
                 "inputs" =>
                     input isa FixedFormat ?
                     "all representable fixed inputs in the interval" :
@@ -384,6 +408,10 @@ function _certificate_data(result::CertificationResult)
                     output isa FixedFormat ? "rejected before polynomial evaluation" :
                     "canonical quiet NaN before polynomial evaluation",
                 "overflow" => "all reachable arithmetic nodes and output conversions bounded",
+                "dispatch" =>
+                    get(result.settings, "method", "") == "normalized_segmented_horner" ?
+                    "canonical input-format thresholds; adjacent representable path endpoints; both signed zeros share a path" :
+                    "single Horner path",
             )
         else
             Dict(

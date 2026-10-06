@@ -57,6 +57,19 @@ function polynomial_plan(
     output = _horner!(nodes, coordinate, cs, f, evaluation)
     f == spec.output_format ||
         (output = _push!(nodes, IR.Convert(output, spec.output_format)))
+    output = _polynomial_guard!(nodes, output, spec)
+    settings = Dict("evaluation" => string(evaluation))
+    if f isa FixedFormat &&
+       spec.input_format isa FixedFormat &&
+       spec.output_format isa FixedFormat
+        settings["kernel"] = "fixed_polynomial_horner"
+    else
+        settings["kernel"] = "floating_polynomial_horner"
+    end
+    return PlanArtifact(spec; program = IR.Program(nodes; output), settings)
+end
+
+function _polynomial_guard!(nodes, output, spec)
     if spec.domain !== nothing
         lower, upper = _polynomial_domain_words(spec)
         l = _push!(nodes, IR.Const(spec.input_format, lower))
@@ -79,15 +92,7 @@ function polynomial_plan(
     else
         output = _nan_guard!(nodes, output, 1, spec.output_format)
     end
-    settings = Dict("evaluation" => string(evaluation))
-    if f isa FixedFormat &&
-       spec.input_format isa FixedFormat &&
-       spec.output_format isa FixedFormat
-        settings["kernel"] = "fixed_polynomial_horner"
-    else
-        settings["kernel"] = "floating_polynomial_horner"
-    end
-    return PlanArtifact(spec; program = IR.Program(nodes; output), settings)
+    return output
 end
 
 function _erf_coefficients(center, width, degree, f, precision)

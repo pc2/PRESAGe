@@ -7,9 +7,11 @@ use each Julia installation's own MPFR/GMP runtime.
 
 ## Results
 
-The standard `Pkg.test` suite, through the offline `scripts/check.jl` runner,
-passes **961,161 checks on Julia 1.13.1**, with four
-threads. The count is dominated by exhaustive encoding checks, not by function
+All **40 test groups pass: 1,261,240 checks on Julia 1.13.1**, with four
+threads and vendor-header tests required. Numerical/CPU groups passed through
+the offline `scripts/check.jl` runner; affected search/generation groups and all
+new segmentation groups passed in a separate rerun after the fix for a timeout
+before worker launch. The count is dominated by exhaustive encoding checks, not by function
 coverage or numerical certificates.
 
 | Group | Checks | Coverage |
@@ -49,6 +51,11 @@ coverage or numerical certificates.
 | Bounded generation CLI and artifact replay | 823 | Actual CLI subprocess from contract/config files, four-attempt selection, exact report/plan/certificate agreement, replay without search, fixed mathematical enclosures and compiled portable/AC/AP output files; numeric/emission/publication failures, preserved valid artifacts, invalid options and stale-report cleanup. |
 | Bounded generation floating and exact expressions | 165,739 | Matching decimal/scientific and rational binary32 programs/bounds, deterministic boundaries/interior samples and official AC floating C++; all small custom words including output subnormal ties; all binary16 words against MPFR, lazy guards and compiled official AC fixed arithmetic. |
 | Generation artifact publication recovery | 10 | Controlled failure during replacement restores every managed file, preserves unrelated files and removes staging data; successful replacement and obstructed destinations. |
+| Normalized segmentation and complete certificates | 10,794 | Fixed/floating separate/FMA exp, exhaustive small interfaces, mathematical enclosures and every reachable node range, official AC/AP CPU conformance, exact artifacts and fresh certificates. |
+| Rounded coordinates, scaling and empty branches | 2,000 | Coarse conversion and coordinate overshoot, exact scaling down, singleton rows, lazy guards, overflow refusal, segment limits and empty-branch rejection before worker launch. |
+| Segmented graph and table audit | 32 | Rejected changes to comparisons, thresholds, indices, every centre/coefficient entry, table layout, scale, arithmetic, metadata and guards; matching changed coefficients require a fresh norm proof. |
+| Segment boundaries and exhaustive binary16 | 285,949 | Nonrepresentable binary32 endpoints and boundary neighbours, signed zeros, all 64 rows, every binary16 encoding against MPFR and portable/AC/AP C++ with lazy outside-domain behavior. |
+| Segment choices, CLI and replay | 1,304 | Exact version 2 configuration round trips and validation, single-polynomial budget failure followed by segmented success, compiled CLI output and identical stored-plan replay. |
 
 The custom floating CMake/CTest build passes with binary128 interfaces, a
 custom 160-fraction-bit internal format and fused polynomial arithmetic,
@@ -189,6 +196,37 @@ checked through CMake/CTest in `build/bounded-demo-ac` and
 `build/bounded-demo-ap`. Both builds pass CTest on all 129 accepted inputs,
 including output words, fixed-node visitation and exact payloads. Sollya.jl is
 unchanged.
+
+## Normalized segmentation
+
+`test/segmentation.jl` checks complete per-row certificates, numerical ranges,
+dispatch indices and mathematical errors. Fixed and small custom floating inputs
+are exhausted, including all excluded words. Nonrepresentable contract endpoints
+and internal thresholds are covered, with binary32 boundary neighbours and both
+signed zeros. The 64-row fixture reaches the complete six-bit table index.
+
+The fixed `exp` fixture uses `Fixed(9,3)` input, `Fixed(24,4)` output,
+`Fixed(32,6)` internals, four normalized segments and degree five on `[-1,1]`.
+Both separate/FMA modes have a uniform bound about `5.4092194e-7`, below `2^-18`.
+Floating internals are also certified and compiled. The checked-in
+[segmented search example](../examples/segmented_search.jl) first retains a
+degree-five single-polynomial budget failure, then selects this segmented
+candidate. CLI output and stored-plan replay are checked for identical exact
+plans, certificates and C++ files.
+
+Binary16 `exp` exhausts all 65,536 encodings against MPFR enclosures and through
+portable, official AC and official AP fixed C++. Each accepted encoding checks
+the selected path's bound and every visited numeric node; excluded inputs check
+canonical NaN and lazy skipping of tables and coordinate arithmetic.
+
+Coarse input conversions explicitly exercise rounded coordinates outside their
+ideal domains. Exact affine scaling-down, singleton branches, overflow refusal,
+empty-branch validation before worker launch and mutations of predicates,
+thresholds, table indices/payloads/layout, scaling, arithmetic, metadata and
+guards are covered. Independent point references use 512-bit initial precision
+so their enclosures are narrower than tight singleton norm certificates.
+These are software numerical and compiler checks; hardware calibration remains
+pending.
 
 ## Bounded candidate generation
 

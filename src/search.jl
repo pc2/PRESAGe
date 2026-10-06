@@ -1,16 +1,17 @@
 """
-    PolynomialSearchConfig(; degrees, internal_formats, evaluation=:separate,
+    PolynomialSearchConfig(; degrees, internal_formats, segments=(1,), evaluation=:separate,
         generation_precision=256, proof_precision=256, accuracy=1//1024,
         max_refinements=2, max_attempts=64, job_timeout=60, total_timeout=300)
 
-Finite, ordered choices and limits for `search_polynomial`. Visit degrees in the
-given order, and all internal formats in their given order within each degree.
+Finite, ordered choices and limits for `search_polynomial`. Visit segment counts,
+then degrees, then internal formats, each in the supplied order.
 Formats are explicit: no integer or exponent range is changed automatically.
 Timeouts are positive, finite seconds and include process startup.
 """
 struct PolynomialSearchConfig
     degrees::Tuple{Vararg{Int}}
     internal_formats::Tuple{Vararg{Union{FloatFormat, FixedFormat}}}
+    segments::Tuple{Vararg{Int}}
     evaluation::Symbol
     generation_precision::Int
     proof_precision::Int
@@ -22,6 +23,7 @@ struct PolynomialSearchConfig
     function PolynomialSearchConfig(;
         degrees,
         internal_formats,
+        segments = (1,),
         evaluation::Symbol = :separate,
         generation_precision::Integer = 256,
         proof_precision::Integer = 256,
@@ -44,8 +46,19 @@ struct PolynomialSearchConfig
         length(unique(degrees)) == length(degrees) &&
             length(unique(internal_formats)) == length(internal_formats) ||
             throw(ArgumentError("search choices must not contain duplicates"))
+        segments isa Union{Tuple, AbstractVector} && !isempty(segments) ||
+            throw(ArgumentError("segments must be a nonempty finite vector or tuple"))
+        foreach(_validate_segment_count, segments)
+        length(unique(segments)) == length(segments) ||
+            throw(ArgumentError("segment choices must not contain duplicates"))
         # The same numerical/policy validation is used by the one-attempt API.
         for format in internal_formats
+            any(>(1), segments) &&
+                format isa FixedFormat &&
+                !format.signed &&
+                throw(
+                    ArgumentError("normalized coordinates require signed fixed internals"),
+                )
             _validate_polynomial_settings(
                 first(degrees),
                 format,
@@ -65,6 +78,7 @@ struct PolynomialSearchConfig
         new(
             Tuple(Int.(degrees)),
             Tuple(internal_formats),
+            Tuple(Int.(segments)),
             evaluation,
             Int(generation_precision),
             Int(proof_precision),
@@ -81,6 +95,7 @@ end
 struct SearchAttempt
     degree::Int
     internal_format::Union{FloatFormat, FixedFormat}
+    segments::Int
     status::Symbol
     elapsed_seconds::Float64
     plan::Union{Nothing, PlanArtifact}
@@ -128,6 +143,7 @@ function _polynomial_worker_main(args)
             config.proof_precision,
             config.accuracy,
             config.max_refinements;
+            segments = request.segments,
             candidate_ready = plan ->
                 _worker_save(joinpath(directory, "candidate"), _plan_data(plan)),
         )
@@ -204,6 +220,7 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
                 return SearchAttempt(
                     request.degree,
                     request.internal_format,
+                    request.segments,
                     :timeout,
                     _elapsed(started),
                     nothing,
@@ -285,6 +302,7 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
         return SearchAttempt(
             request.degree,
             request.internal_format,
+            request.segments,
             status,
             elapsed,
             plan,
@@ -298,7 +316,7 @@ end
 """
     search_polynomial(spec, config::PolynomialSearchConfig)
 
-Try degrees in order, then formats in order within each degree. Return the first
+Try segment counts in order, then degrees, then formats. Return the first
 complete certificate that meets the contract. Each attempt runs in a fresh Julia
 process; timed-out processes are killed and reaped before continuing. All native
 Sollya objects remain in the worker. Startup counts toward both wall-time limits.
@@ -331,6 +349,9 @@ function _search_polynomial(
             config.accuracy,
             config.max_refinements,
         )
+        for segments in config.segments
+            _validate_segment_request(spec, segments, format)
+        end
     end
     started = time_ns()
     attempts = SearchAttempt[]
@@ -343,12 +364,15 @@ function _search_polynomial(
         _elapsed(started),
         reason,
     )
-    for degree in config.degrees, internal_format in config.internal_formats
+    for segments in config.segments,
+        degree in config.degrees,
+        internal_format in config.internal_formats
+
         _search_remaining(started, config.total_timeout) <= 0 &&
             return finish(:search_limit, nothing, :total_deadline)
         length(attempts) >= config.max_attempts &&
             return finish(:search_limit, nothing, :attempt_limit)
-        request = (; spec, config, domain, degree, internal_format)
+        request = (; spec, config, domain, degree, internal_format, segments)
         attempt, deadline =
             _run_polynomial_job(request, started; worker_command, process_started)
         push!(attempts, attempt)
@@ -371,6 +395,7 @@ function _search_data(result::PolynomialSearchResult)
             "elapsed_seconds" => attempt.elapsed_seconds,
             "reason" => attempt.reason,
         )
+        config.segments == (1,) || (data["segments"] = attempt.segments)
         attempt.plan === nothing || (data["plan"] = _plan_data(attempt.plan))
         attempt.certificate === nothing ||
             (data["certificate"] = _certificate_data(attempt.certificate))
@@ -378,7 +403,7 @@ function _search_data(result::PolynomialSearchResult)
     end
     data = Dict{String, Any}(
         "schema" => "presage-search",
-        "schema_version" => 1,
+        "schema_version" => config.segments == (1,) ? 1 : 2,
         "spec" => _spec_data(result.spec),
         "status" => string(result.status),
         "stop_reason" => string(result.stop_reason),

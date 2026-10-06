@@ -1,6 +1,8 @@
 function _search_config_fields(config::PolynomialSearchConfig)
-    return Dict{String, Any}(
-        "order" => "degree_then_format",
+    fields = Dict{String, Any}(
+        "order" =>
+            config.segments == (1,) ? "degree_then_format" :
+            "segment_then_degree_then_format",
         "degrees" => collect(config.degrees),
         "internal_formats" =>
             [Dict("format" => _format_data(f)) for f in config.internal_formats],
@@ -17,11 +19,16 @@ function _search_config_fields(config::PolynomialSearchConfig)
             "total_timeout_seconds" => config.total_timeout,
         ),
     )
+    config.segments == (1,) || (fields["segments"] = collect(config.segments))
+    return fields
 end
 
 function _search_config_data(config::PolynomialSearchConfig)
     return merge(
-        Dict("schema" => "presage-search-config", "schema_version" => 1),
+        Dict(
+            "schema" => "presage-search-config",
+            "schema_version" => config.segments == (1,) ? 1 : 2,
+        ),
         _search_config_fields(config),
     )
 end
@@ -41,6 +48,7 @@ function _read_search_config(data)
             "order",
             "degrees",
             "internal_formats",
+            "segments",
             "settings",
             "limits",
         ),
@@ -49,10 +57,12 @@ function _read_search_config(data)
     get(data, "schema", nothing) == "presage-search-config" ||
         throw(ArgumentError("unknown search configuration schema"))
     version = get(data, "schema_version", nothing)
-    version isa Integer && !(version isa Bool) && version == 1 ||
+    version isa Integer && !(version isa Bool) && version in (1, 2) ||
         throw(ArgumentError("unsupported search configuration version"))
-    get(data, "order", "degree_then_format") == "degree_then_format" ||
-        throw(ArgumentError("unsupported search order"))
+    (version == 1 ? !haskey(data, "segments") : haskey(data, "segments")) ||
+        throw(ArgumentError("segment choices require search configuration v2"))
+    order = version == 1 ? "degree_then_format" : "segment_then_degree_then_format"
+    get(data, "order", order) == order || throw(ArgumentError("unsupported search order"))
     haskey(data, "degrees") && haskey(data, "internal_formats") ||
         throw(ArgumentError("search configuration requires degrees and internal_formats"))
     choices = data["internal_formats"]
@@ -101,6 +111,7 @@ function _read_search_config(data)
         return PolynomialSearchConfig(
             degrees = data["degrees"],
             internal_formats = formats,
+            segments = get(data, "segments", (1,)),
             evaluation = Symbol(get(settings, "evaluation", "separate")),
             generation_precision = get(settings, "generation_precision", 256),
             proof_precision = get(settings, "proof_precision", 256),

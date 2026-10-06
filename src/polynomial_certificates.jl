@@ -158,10 +158,10 @@ function _polynomial_ranges(p, layout)
             grids[i] = grids[layout.result]
             continue
         elseif n isa IR.Input
-            ranges[i] = layout.domain
+            ranges[i] = get(layout, :input_domain, layout.domain)
             grids[i] =
-                layout.domain[1] == layout.domain[2] ? _dyadic_fraction(layout.domain[1]) :
-                _polynomial_grid(f, layout.domain)
+                ranges[i][1] == ranges[i][2] ? _dyadic_fraction(ranges[i][1]) :
+                _polynomial_grid(f, ranges[i])
             continue
         elseif n isa IR.Const
             # The audited floating guard's NaN branch is outside the numerical
@@ -170,12 +170,20 @@ function _polynomial_ranges(p, layout)
             ranges[i] = _singleton(_polynomial_value(n.bits, f))
             grids[i] = _dyadic_fraction(ranges[i][1])
             continue
+        elseif n isa IR.TableLoad
+            ranges[i] =
+                _singleton(_polynomial_value(p.tables[n.table].values[layout.row], f))
+            grids[i] = _dyadic_fraction(ranges[i][1])
+            continue
         elseif n isa IR.Guard
             ranges[i] = ranges[n.source]
             grids[i] = grids[n.source]
             continue
         elseif n isa IR.Convert
             exact, scale = ranges[n.source], grids[n.source]
+        elseif n isa IR.ScalePow2
+            exact = _interval_mul(ranges[n.source], _singleton(_pow2(n.exponent)))
+            scale = grids[n.source] - n.exponent
         elseif n isa IR.Mul
             exact = _interval_mul(ranges[n.a], ranges[n.b])
             scale = grids[n.a] + grids[n.b]
@@ -213,7 +221,16 @@ end
 function _polynomial_arithmetic(p, layout, ranges, rho)
     output = layout.result == layout.final ? _q(0) : rho[layout.result]
     isempty(layout.stages) && return _q(0), _q(0), output
-    eta = get(rho, layout.coordinate, _q(0))
+    eta = if haskey(layout, :exponent)
+        # The stored centre is exact in the ideal transformation. Input
+        # conversion and subtraction errors scale together; scaling adds its
+        # own local rounding error. Horner then uses the actual coordinate bound.
+        _pow2(layout.exponent) *
+        (get(rho, layout.converted, _q(0)) + get(rho, layout.shifted, _q(0))) +
+        get(rho, layout.coordinate, _q(0))
+    else
+        get(rho, layout.coordinate, _q(0))
+    end
     tbound = _interval_magnitude(ranges[layout.coordinate])
     exact = _singleton(layout.coefficients[end])
     coordinate, arithmetic = _q(0), _q(0)
@@ -296,6 +313,8 @@ function certify_polynomial(
     precision >= 64 || throw(ArgumentError("proof precision must be at least 64"))
     0 < accuracy < 1 || throw(ArgumentError("norm accuracy must be between zero and one"))
     0 <= max_refinements <= 8 || throw(ArgumentError("refinements must be in 0:8"))
+    get(plan.settings, "kernel", "") == "normalized_segmented_horner" &&
+        return _certify_segmented(plan; precision, accuracy, max_refinements)
     settings = Dict(
         "method" => "fixed_polynomial_horner",
         "precision" => string(precision),
@@ -404,6 +423,7 @@ function _has_supported_certificate(plan)
         "erf_fixed_horner",
         "fixed_polynomial_horner",
         "floating_polynomial_horner",
+        "normalized_segmented_horner",
         "binary16_lut",
     ) && return true
     try

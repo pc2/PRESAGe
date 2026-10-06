@@ -41,6 +41,7 @@ export FloatFormat,
     emit_cpp,
     emit_harness,
     polynomial_plan,
+    segmented_polynomial_plan,
     certified_polynomial,
     PolynomialSearchConfig,
     SearchAttempt,
@@ -85,6 +86,7 @@ include("costs.jl")
 include("certificates.jl")
 include("lut.jl")
 include("polynomial_certificates.jl")
+include("segmentation.jl")
 include("planning.jl")
 include("search.jl")
 include("search_schema.jl")

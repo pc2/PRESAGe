@@ -6,7 +6,7 @@ The contract uses the existing plan schema with status `contract`, an explicit
 finite domain and no candidate program, segments, dispatch or settings.
 Input/output formats and the error target belong to this contract.
 
-The separate search configuration declares ordered degrees and internal
+The separate search configuration declares ordered segment counts, degrees and internal
 formats, numerical settings and execution limits. Use the Julia writers:
 
 ```julia
@@ -30,6 +30,13 @@ The checked-in [exp contract](../examples/exp-contract.toml) and
 input/output example. They need degree nine with `Fixed(32,6)` after three
 budget failures. [Search ordering and limits](certification.md#ordered-search-and-worker-limits)
 also apply to the CLI.
+
+Use `segments=[1,4]` with `degrees=[5]` to try a single degree-five polynomial
+followed by four normalized segments. The fixed exp contract passes with the
+second choice. The [segmented configuration](../examples/segmented-search.toml)
+can be used with the same CLI command and exp contract. Generation and proof of
+all rows share one attempt deadline; stored segmented plans replay without
+another coefficient search.
 
 ## Options
 

@@ -15,10 +15,25 @@ function _check_generated_coefficients(coefficients, format)
     return coefficients
 end
 
-function _generated_polynomial_coefficients(spec, domain, degree, format, precision)
+function _generated_polynomial_coefficients(
+    spec,
+    domain,
+    degree,
+    format,
+    precision;
+    normalization = nothing,
+)
     Sollya.with_session(Sollya.Session(; precision)) do
         Sollya.with_objects() do keep
-            f = keep(Sollya.sollya(_exact_expression(spec.expression)))
+            f =
+                normalization === nothing ?
+                keep(Sollya.sollya(_exact_expression(spec.expression))) :
+                _normalized_function(
+                    keep,
+                    spec.expression,
+                    normalization.center,
+                    normalization.exponent,
+                )
             Sollya.isfunction(f) ||
                 throw(ArgumentError("expression must be a mathematical function"))
             interval = keep(Sollya.interval(domain...))
@@ -57,7 +72,7 @@ end
 
 """
     certified_polynomial(spec; degree, internal_format=spec.output_format,
-                         evaluation=:separate, generation_precision=256,
+                         segments=1, evaluation=:separate, generation_precision=256,
                          proof_precision=256, accuracy=1//1024, max_refinements=2)
 
 Generate and certify one bounded polynomial evaluator without supplied coefficients.
@@ -75,11 +90,15 @@ succeeds, even if its bound exceeds the budget or certification fails. Numerical
 generation failures return `generation_failed` with a contract-only plan and reason.
 Invalid settings or empty representable domains throw `ArgumentError`.
 Singleton input domains use a constant from a certified point enclosure.
+With `segments=2,4,…,64`, generate normalized coefficient tables and certify
+every dispatch branch, including rounded coordinate formation. Internal fixed
+formats must then be signed. Empty representable branches are rejected.
 This is one synchronous attempt; it performs no search and sets no wall-time limit.
 """
 function certified_polynomial(
     spec::FunctionSpec;
     degree::Integer,
+    segments::Integer = 1,
     internal_format::Union{FloatFormat, FixedFormat} = spec.output_format,
     evaluation::Symbol = :separate,
     generation_precision::Integer = 256,
@@ -97,6 +116,7 @@ function certified_polynomial(
         accuracy,
         max_refinements,
     )
+    _validate_segment_request(spec, segments, internal_format)
     return _certified_polynomial(
         spec,
         domain,
@@ -106,8 +126,20 @@ function certified_polynomial(
         Int(generation_precision),
         Int(proof_precision),
         _q(accuracy),
-        Int(max_refinements),
+        Int(max_refinements);
+        segments = Int(segments),
     )
+end
+
+function _validate_segment_request(spec, segments, format)
+    _validate_segment_count(segments)
+    if segments > 1
+        format isa FixedFormat &&
+            !format.signed &&
+            throw(ArgumentError("normalized coordinates require signed fixed internals"))
+        _segmented_domains(spec, segments)
+    end
+    return nothing
 end
 
 function _validate_polynomial_request(
@@ -188,6 +220,7 @@ function _certified_polynomial(
     proof_precision,
     accuracy,
     max_refinements;
+    segments = 1,
     candidate_ready = identity,
 )
     settings = Dict(
@@ -195,14 +228,34 @@ function _certified_polynomial(
         "generation_precision" => string(generation_precision),
         "evaluation" => string(evaluation),
     )
-    coefficients = try
-        _generated_polynomial_coefficients(
-            spec,
-            domain,
-            Int(degree),
-            internal_format,
-            Int(generation_precision),
-        )
+    segments > 1 && (settings["segments"] = string(segments))
+    candidate = try
+        if segments == 1
+            coefficients = _generated_polynomial_coefficients(
+                spec,
+                domain,
+                Int(degree),
+                internal_format,
+                Int(generation_precision),
+            )
+            polynomial_plan(spec, coefficients; internal_format, evaluation)
+        else
+            geometry = _segment_geometry(spec, segments, internal_format)
+            rows = [
+                _generated_polynomial_coefficients(
+                    spec,
+                    geometry.normalized_domains[i],
+                    degree,
+                    internal_format,
+                    generation_precision;
+                    normalization = (
+                        center = geometry.centers[i],
+                        exponent = geometry.exponent,
+                    ),
+                ) for i = 1:segments
+            ]
+            segmented_polynomial_plan(spec, rows; internal_format, evaluation)
+        end
     catch err
         err isa Union{Sollya.SollyaError, ArgumentError, OverflowError} || rethrow()
         return _certificate_failure(
@@ -218,10 +271,10 @@ function _certified_polynomial(
             ),
         )
     end
-    candidate = polynomial_plan(spec, coefficients; internal_format, evaluation)
     plan = PlanArtifact(
         spec;
         program = candidate.program,
+        segments = candidate.segments,
         settings = merge(candidate.settings, settings),
     )
     candidate_ready(plan)
