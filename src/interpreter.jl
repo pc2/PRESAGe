@@ -132,7 +132,8 @@ end
 
 function _interpret(p::IR.Program, bits::Integer, trace::Bool)
     inputformat = IR.format(p, p.input)
-    _decode_input(bits, inputformat) # Validate width before executing anything.
+    0 <= bits <= _word_mask(_width(inputformat)) ||
+        throw(ArgumentError("bits exceed input format width"))
     values = Dict{Int, Any}()
     function visit(index::Int)
         haskey(values, index) && return values[index]

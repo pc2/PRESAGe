@@ -153,26 +153,91 @@ inline Out float_to_fixed(const In &value, Status &status) {
     return copy_bits<Out, Width>(raw);
 }
 
-template <class Out, int Width, int IntegerBits, bool Signed, int Mode, int Scale, class In>
-inline Out fixed_to_float(const In &value) {
+template <class Out, int Width, int IntegerBits, bool Signed, int Mode, class In>
+inline Out fixed_scale(const In &value, long long scale) {
     UInt<Width> magnitude = copy_bits<UInt<Width>, Width>(value);
     bool negative = Signed && bool(value[Width - 1]);
     if (negative) {
         magnitude = ~magnitude;
         ++magnitude;
     }
-    return dyadic_to_float<Out, Width, Mode>(
-        magnitude, static_cast<long long>(Scale) - Width + IntegerBits, negative);
+    return dyadic_to_float<Out, Width, Mode>(magnitude, scale - Width + IntegerBits,
+                                             negative);
 }
 
-template <class Out, int Mode, int Scale, class In>
-inline Out float_convert(const In &value) {
+template <class Out, int Width, int IntegerBits, bool Signed, int Mode, int Scale, class In>
+inline Out fixed_to_float(const In &value) {
+    return fixed_scale<Out, Width, IntegerBits, Signed, Mode>(value, Scale);
+}
+
+template <class Out, int Mode, class In>
+inline Out float_scale(const In &value, long long scale) {
     if (value.is_nan())
         return float_special<Out>(false, true);
     if (value.is_infinite())
         return float_special<Out>(value.negative(), false);
     return dyadic_to_float<Out, In::fraction_bits + 1, Mode>(
-        value.significand(), value.power() + Scale, value.negative());
+        value.significand(), value.power() + scale, value.negative());
+}
+
+template <class Out, int Mode, int Scale, class In>
+inline Out float_convert(const In &value) {
+    return float_scale<Out, Mode>(value, Scale);
+}
+
+template <class In> inline int normalization_top(const In &value, Status &status) {
+    if (!value.is_finite() || value.is_zero()) {
+        status = Status::domain_rejected;
+        return -1;
+    }
+    return highest_bit<In::fraction_bits + 1>(value.significand());
+}
+
+template <int Divisor, class In>
+inline long long input_exponent(const In &value, Status &status) {
+    static_assert(Divisor >= 1 && Divisor <= 3, "unsupported exponent divisor");
+    int top = normalization_top(value, status);
+    if (status != Status::ok)
+        return 0;
+    long long exponent = value.power() + top;
+    return exponent / Divisor - (exponent % Divisor < 0);
+}
+
+template <class Out, int Divisor, class In>
+inline Out normalized_argument(const In &value, Status &status) {
+    static_assert(Out::fraction_bits == In::fraction_bits, "normalization must be exact");
+    static_assert(Divisor >= 1 && Divisor <= 3, "unsupported exponent divisor");
+    int top = normalization_top(value, status);
+    if (status != Status::ok)
+        return Out(0);
+    long long remainder = (value.power() + top) % Divisor;
+    if (remainder < 0)
+        remainder += Divisor;
+    return dyadic_to_float<Out, In::fraction_bits + 1, 0>(value.significand(),
+                                                          remainder - top, false);
+}
+
+template <class Out, class In> inline Out float_exponent(const In &value, Status &status) {
+    return Out(input_exponent<1>(value, status));
+}
+
+// A scale beyond Limit gives the same overflow/underflow result as Limit.
+// Compare the full signed integer magnitude before narrowing to a scalar.
+template <int Width, long long Limit, class In>
+inline long long bounded_exponent(const In &value) {
+    static_assert(Limit > 0, "positive scale bound required");
+    UInt<Width> raw = copy_bits<UInt<Width>, Width>(value);
+    bool negative = bool(raw[Width - 1]);
+    if (negative) {
+        raw = ~raw;
+        ++raw;
+    }
+    constexpr int Work = Width > 63 ? Width : 63;
+    UInt<Work> magnitude = raw;
+    if (magnitude > UInt<Work>(Limit))
+        return negative ? -Limit : Limit;
+    long long scale = static_cast<long long>(magnitude.to_uint64());
+    return negative ? -scale : scale;
 }
 
 template <int Predicate, class T> inline bool float_compare(const T &a, const T &b) {

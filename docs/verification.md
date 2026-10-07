@@ -1157,8 +1157,37 @@ and increment; the affected fixed-input matrix passes again after this change.
 Both CMake kernel builds and numerical CTests also pass for a certified
 binary128-input/binary32-output plan. The existing four fixed-kernel groups pass
 2,113 checks. Formatting and whitespace checks pass; the full package runner was
-not repeated. Floating arithmetic and normalization/reconstruction remain
-outside kernel emission. Actual vendor compilation and synthesis remain pending.
+not repeated. Floating arithmetic remains outside kernel emission. Normalization
+and reconstruction are described below. Actual vendor compilation and synthesis
+remain pending.
+
+## Kernel normalization and exponent reconstruction
+
+Three new groups pass 117 checks with official AP/AC headers required:
+
+| Group | Checks | Coverage |
+| --- | ---: | --- |
+| Normalization and reconstruction | 4 | 318 graphs and 833,522 input records per backend; exact intermediate payloads, lazy branches, typed/raw outputs and rejection order. |
+| Root format widening | 4 | A widened cube-root argument that exceeds 4096 bits is rejected before header output. |
+| Certified transformed kernels | 109 | Fresh reciprocal, sqrt/rsqrt, cbrt and log plans; binary16/32 inputs, fixed internals, separate/FMA evaluations, exhaustive binary16 traces and independent checks of captured AP/AC outputs. |
+
+The graph matrix covers exact subnormal normalization, signed exponent
+extraction, floor division by two/three and direct final reconstruction.
+Input-exponent scaling covers both multipliers and all rounding modes.
+Dynamic signed fixed exponents include 8/32/64/129/4096-bit words, minimum
+negative values and wide output-format boundaries. Full-magnitude checks precede
+scalar conversion. Special source values, shared operands, inactive invalid
+branches and competing domain/overflow/table failures retain interpreter policy.
+4096-bit floating words and extreme 62-bit exponent fields are checked without
+expanding rational inputs. Interpreter input validation now checks the encoded
+width directly and leaves numerical decoding to operations that require it.
+
+The affected IR, static floating conversion, capability and maximum-width
+regressions pass another 86 checks, for 203 targeted checks. Both CMake kernel
+builds and numerical CTests pass for a freshly certified binary32-input,
+binary16-output sqrt plan. Formatting and whitespace checks pass. The complete
+package runner was not repeated. These are ordinary C++17 public-header checks;
+actual vendor compilation, C simulation and synthesis remain pending.
 
 ## Limits
 

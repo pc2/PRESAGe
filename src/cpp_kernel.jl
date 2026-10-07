@@ -16,6 +16,22 @@ _kernel_width(f::Union{FixedFormat, FloatFormat}) = _width(f)
 _kernel_width(f::IR.UIntFormat) = f.width
 _kernel_width(::Type{Bool}) = 1
 
+function _kernel_scale_limit(source, output)
+    # Beyond this magnitude, even an extreme finite source overflows or falls
+    # below half the smallest output subnormal. E <= 62 keeps the sum in Int64.
+    source_bound =
+        source isa FloatFormat ? BigInt(_bias(source)) + source.fraction_bits :
+        BigInt(source.width)
+    return source_bound + _bias(output) + output.fraction_bits + 2
+end
+
+function _kernel_scale_expr(source, output, backend, mode, value, scale)
+    type = _kernel_type(output, backend)
+    return source isa FixedFormat ?
+           "fixed_scale<$type,$(source.width),$(source.integer_bits),$(source.signed),$mode>($value,$scale)" :
+           "float_scale<$type,$mode>($value,$scale)"
+end
+
 function _kernel_chunks(bits, width)
     return join(
         (
@@ -110,6 +126,31 @@ function _kernel_expr(p, i, backend)
             call,
             quantizer = "quantize",
             reinterpret = "copy_bits",
+        )
+    elseif n isa Union{IR.FloatMantissa, IR.RootArgument}
+        divisor = n isa IR.RootArgument ? n.divisor : 1
+        return "normalized_argument<$(_kernel_type(f,backend)),$divisor>($(call(n.source)),status)"
+    elseif n isa IR.FloatExponent
+        return "float_exponent<$(_kernel_type(f,backend))>($(call(n.source)),status)"
+    elseif n isa IR.ScaleByInputExponent
+        return _kernel_scale_expr(
+            IR.format(p, n.source),
+            f,
+            backend,
+            _cpp_mode(n.rounding),
+            call(n.source),
+            "$(n.multiplier) * scale",
+        )
+    elseif n isa IR.ScaleByExponent
+        source, exponent = IR.format(p, n.source), IR.format(p, n.exponent)
+        scale = "bounded_exponent<$(exponent.width),$(_kernel_scale_limit(source,f))LL>($(call(n.exponent)))"
+        return _kernel_scale_expr(
+            source,
+            f,
+            backend,
+            _cpp_mode(n.rounding),
+            call(n.source),
+            scale,
         )
     elseif n isa IR.Compare
         if IR.format(p, n.a) isa FloatFormat
@@ -234,6 +275,20 @@ function _kernel_node(io, p, i, expression, backend)
             )
             println(io, "        value$i = n$(n.source)();")
         end
+    elseif n isa IR.ScaleByInputExponent
+        # The interpreter normalizes the input before visiting the source.
+        println(io, "        auto arg$(n.input) = n$(n.input)();")
+        println(io, "        if (status != Status::ok) return value$i;")
+        println(
+            io,
+            "        long long scale = input_exponent<$(n.divisor)>(arg$(n.input),status);",
+        )
+        println(io, "        if (status != Status::ok) return value$i;")
+        if n.source != n.input
+            println(io, "        auto arg$(n.source) = n$(n.source)();")
+            println(io, "        if (status != Status::ok) return value$i;")
+        end
+        println(io, "        value$i = $expression;")
     else
         for ref in unique(IR.refs(n))
             println(io, "        [[maybe_unused]] auto arg$ref = n$ref();")
@@ -250,8 +305,9 @@ end
 
 `toolchain=:generic` uses the supplied public headers. `:vitis` and `:oneapi`
 select vendor include paths and guarded memory hints; actual synthesis needs
-the corresponding vendor compiler. Floating arithmetic and exponent reduction
-are explicitly unsupported; conversions and IEEE branch operations are supported.
+the corresponding vendor compiler. Fixed arithmetic, IEEE conversions/branches,
+normalization and exponent reconstruction are supported. Floating arithmetic is
+explicitly unsupported.
 """
 function emit_kernel(
     io::IO,

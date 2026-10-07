@@ -111,4 +111,12 @@
         program = IR.Program([IR.Input(IEEE32)]),
         status = :contract,
     )
+    # Input width validation is independent of numerical decoding and remains
+    # mandatory even if a lazy graph never evaluates its input.
+    for format in (FloatFormat(62, 80), FixedFormat(129, 5))
+        program = IR.Program([IR.Input(format), IR.constant(1, IEEE32)])
+        for bits in (-1, big(2)^PRESAGe._width(format))
+            @test_throws ArgumentError evaluate_bits(program, bits)
+        end
+    end
 end

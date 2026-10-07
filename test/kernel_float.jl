@@ -183,10 +183,7 @@ end
         IR.Add(1, 1, IEEE32),
         IR.Mul(1, 1, IEEE32),
         IR.FMA(1, 1, 1, IEEE32),
-        IR.FloatMantissa(1),
-        IR.FloatExponent(1),
         IR.FloatReciprocal(1),
-        IR.RootArgument(1),
     )
         io = IOBuffer()
         @test_throws ArgumentError emit_kernel(io, IR.Program([IR.Input(IEEE32), node]))

@@ -57,8 +57,10 @@ error enclosures and witnesses separately from certificates; see
 Fixed arithmetic graphs also have a C++17 kernel emitter with official AP/AC
 types, encoded floating interfaces and explicit rejection status. It preserves
 the stored IR's rounding, overflow and lazy branches and uses a separate host
-byte-stream adapter. IEEE conversions, special-value branches and floating LUTs
-are supported. See [kernels](docs/kernels.md); vendor synthesis remains pending.
+byte-stream adapter. IEEE conversions, special-value branches, floating LUTs,
+exact normalization and exponent reconstruction are supported, including
+fixed-internal reciprocal, sqrt/rsqrt, cbrt and log kernels.
+See [kernels](docs/kernels.md); vendor synthesis remains pending.
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.

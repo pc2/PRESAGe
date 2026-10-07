@@ -85,7 +85,7 @@ auto bits = presage_evaluator::evaluate_bits(raw);
 | Status | Byte | Corresponding interpreter result |
 | --- | --- | --- |
 | `ok` | 0 | Valid output with identical bits. |
-| `domain_rejected` | 1 | A false `Guard` or nonfinite float-to-fixed conversion raises `DomainError`. |
+| `domain_rejected` | 1 | A false `Guard`, nonfinite float-to-fixed conversion or normalization of zero/nonfinite input raises `DomainError`. |
 | `overflow_rejected` | 2 | Rounded fixed result raises `OverflowError`. |
 | `table_index_rejected` | 3 | `TableLoad` raises `BoundsError`. |
 
@@ -161,14 +161,36 @@ exponents are checked before narrowing shift counts. Work words are bounded by
 the significand and fixed/output precision, rather than the float's numerical
 exponent range; wide exponent fields do not allocate enormous fixed types.
 
+## Normalization and reconstruction
+
+`FloatMantissa` and `FloatExponent` decompose a finite nonzero input exactly as
+`abs(x)=m*2^e`, with `1≤m<2`, including subnormals. The mantissa keeps its fraction
+bits; the exponent uses the IR's signed fixed integer format. Zero, infinity and
+NaN inputs reject unless a surrounding lazy branch handles them first.
+
+`RootArgument` uses floor division `e=d*q+r`, `0≤r<d`, and returns exact
+`m*2^r` for `d=2` or `3`. The fraction width is retained, and the exponent field
+widens when necessary. `ScaleByInputExponent` reconstructs directly from a
+fixed or encoded floating stage into the output, rounding once by `2^(±q)`.
+It normalizes its input before visiting its source, preserving interpreter
+rejection order.
+
+`ScaleByExponent` accepts the declared signed fixed integer exponent, including
+widths above 64 bits. Its full magnitude is checked before scalar conversion.
+Scales beyond a bound derived from the source and output formats are clipped
+only when they give the same overflow or underflow result. Zero and nonfinite
+source policies are unchanged. This avoids oversized work words and scalar
+overflow without restricting the IR exponent width.
+
 ## Supported scope
 
 Fixed arithmetic graphs accept independent fixed or floating interfaces,
 including ordinary, normalized segmented and individually sized polynomial
 evaluators. Canonical fixed binary16/IEEE32 erf and floating LUTs are supported.
-Unsigned nodes and fixed/unsigned/floating tables are supported. Floating
-arithmetic (`Add`, `Mul`, `FMA`, reciprocal) and normalization/exponent-reduction
-graphs are rejected explicitly. The active CPU emitter covers those graphs.
+Unsigned nodes and fixed/unsigned/floating tables are supported. Fixed-internal
+reciprocal, sqrt/rsqrt, cbrt and log transformations are also supported. Floating
+arithmetic (`Add`, `Mul`, `FMA`, reciprocal) is rejected explicitly, including
+reductions that use those operations. The CPU emitter covers those graphs.
 
 Formats are parameterized by `FloatFormat(E,M)`; binary16/32/64/128/256 and
 custom encodings have local checks. Floating widths and vendor work words must
