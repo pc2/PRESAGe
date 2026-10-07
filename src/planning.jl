@@ -116,6 +116,8 @@ zeros in the contract and positive infinity use exact lazy branches.
 With `transformation=:cbrt`, split `e=3q+r`, generate the positive kernel on
 `[1,8]`, and restore the original sign. Bounded signed intervals, signed zeros
 and signed infinities are supported through audited identities and lazy branches.
+With `transformation=:log`, the kernel approximates log(m) on `[1,2]` and
+reconstructs `log(m)+e*log(2)` with the stored constant and all rounding certified.
 With `transformation=:reciprocal`, generate `1/m` on `[1,2]` and reconstruct
 with the exact input exponent. Floating interfaces and a bounded domain strictly
 on one side of zero are required. Fixed/floating stages round directly into the
@@ -148,6 +150,7 @@ function certified_polynomial(
     )
     _validate_transformation(transformation, degree, segments)
     transformation == :odd && _validate_odd_spec(spec)
+    transformation == :log && _log_geometry(spec)
     transformation == :reciprocal && _reciprocal_geometry(spec)
     transformation in (:sqrt, :rsqrt, :cbrt) && _root_geometry(spec, transformation)
     _validate_segment_request(spec, segments, internal_format)
@@ -281,6 +284,19 @@ function _certified_polynomial(
     candidate_ready = identity,
 )
     transformation == :odd && return _certified_odd(
+        spec,
+        domain,
+        degree,
+        internal_format,
+        evaluation,
+        generation_precision,
+        proof_precision,
+        accuracy,
+        max_refinements;
+        precision_layout,
+        candidate_ready,
+    )
+    transformation == :log && return _certified_log(
         spec,
         domain,
         degree,

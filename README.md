@@ -25,6 +25,9 @@ See the [root example](examples/root_search.jl) and [proof](docs/certification.m
 Cbrt extends this pipeline to bounded signed domains with `e=3q+r`, a positive
 kernel on `[1,8]`, exact sign restoration and signed zero/infinity branches.
 See the [cbrt example](examples/cbrt_search.jl).
+Log supports positive finite inputs over bounded nonnegative domains using
+`log(m)+e*log(2)`, with the stored constant and all reconstruction rounding
+included in the certificate. See the [log example](examples/log_search.jl).
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
@@ -449,6 +452,31 @@ In Julia, `result = certified_erf()` returns the plan, status and uniform bounds
 `certify_polynomial(plan)` proves a supported float/fixed polynomial;
 `certify_plan(plan)` selects the supported proof for a stored evaluator.
 `evaluate_bits(plan, input_bits)` executes either program with exact rounding.
+
+## Log exponent reconstruction
+
+```julia
+spec = FunctionSpec("log(x)"; input_format=IEEE16,
+    domain=(0,65504), absolute_error=1//64)
+config = PolynomialSearchConfig(degrees=[9],
+    internal_formats=[FixedFormat(80,24)], transformation=:log,
+    evaluation=:fma, job_timeout=60, total_timeout=90)
+search = search_polynomial(spec, config)
+@assert search.status == :certified
+```
+
+The degree describes `log(m)` on `[1,2]`. Exact normalization includes
+subnormals. Reconstruction uses the coordinate format, allowing individual
+Horner widths to change independently. Its certificate includes coordinate
+and stage errors, stored `log(2)` error multiplied by the largest accepted
+exponent, reconstruction arithmetic and output conversion. `log(1)` is exact
+positive zero; included signed zeros return negative infinity. Positive
+infinity returns infinity; invalid or excluded finite inputs return NaN.
+This is a uniform absolute bound, without a correct-rounding or ulp guarantee.
+
+```sh
+julia --startup-file=no --project=. examples/log_search.jl
+```
 
 ## Reference CLI
 

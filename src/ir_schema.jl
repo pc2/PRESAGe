@@ -48,6 +48,7 @@ const _IR_NODES = Dict(
         IR.BitOp,
         IR.ScalePow2,
         IR.FloatMantissa,
+        IR.FloatExponent,
         IR.RootArgument,
         IR.ScaleByInputExponent,
         IR.CopySign,

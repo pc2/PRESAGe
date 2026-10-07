@@ -696,3 +696,31 @@ its real cube-root primitive. Unsupported cbrt compositions are rejected, and
 ordinary polynomial proofs on signed cbrt domains require the explicit root
 transformation. Parser recovery cannot authorize an identity evaluator as a
 cube-root approximation.
+
+## Log exponent reconstruction
+
+For positive finite inputs, exact normalization gives `x=m*2^e`, `1≤m<2`.
+The identity `log(x)=log(m)+e*log(2)` reduces approximation to `[1,2]`.
+A canonical graph audit covers coefficient/constant payloads, exponent
+extraction, every cast, separate/FMA reconstruction and lazy branches.
+
+Let `N` bound the stored mantissa polynomial norm, `C` coordinate error,
+`V` Horner error, `L` the stored constant, and `E=max(abs(e))` over the
+accepted representable inputs. Directed Sollya bounds for `log(2)` give `δL`.
+If `ηe` bounds exponent conversion error, reconstruction contributes
+`E*δL + abs(L)*ηe`, the final-Horner cast error, and its explicit arithmetic
+rounding. The total adds these terms to `N+C+V` and output conversion rounding.
+No exponent error is hidden in coefficient generation. The reduced interval
+can enlarge the accepted mantissa set, so the norm's reported lower bound is zero.
+
+The certified image `[0,log(2)]` enlarged by `N+C+V` tightens the last Horner
+range before reconstruction. Exact grids and interval propagation establish
+rounding bounds and refuse possible fixed or floating overflow. Cancellation
+near one is included in the absolute bound; it does not establish an ulp guarantee.
+
+Domains must be bounded and nonnegative, with floating interfaces and one
+kernel. Both signed zeros yield negative infinity when included, `log(1)`
+yields positive zero, and positive infinity yields infinity. Negative inputs,
+negative infinity, NaNs and excluded finite inputs return canonical NaN before
+normalization. Zero-only and one-only contracts have an exact zero bound and
+no numerical paths. Precision optimization recertifies the complete graph.

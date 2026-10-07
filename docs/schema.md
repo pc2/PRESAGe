@@ -261,3 +261,21 @@ Certificate v2 retains method `root_polynomial_horner`, records transformation
 Numerical paths describe the original signed input interval; zero branches
 are exact. Coverage explicitly includes both signed infinities and NaN handling.
 Exact replay audits every normalization, coefficient, stage, sign and branch.
+
+## Log reconstruction artifacts
+
+Log searches use configuration/report v8, `transformation="log"`,
+`segments=[1]` and `degree_then_format` ordering. Degree and precision lists
+describe the mantissa polynomial on `[1,2]`.
+
+Plans containing `FloatExponent(source)` use v9. Its signed integer fixed
+format is inferred from the floating source, including subnormal exponent
+limits. Earlier plan versions reject this operation. The stored log(2)
+constant, conversions, reconstruction and exceptional branches are ordinary
+IR nodes; constant storage and reconstruction use the coordinate format.
+
+Certificate v2 uses method `log_polynomial_horner`. Transformation fields
+record the identity, mantissa domain, input exponents, constant/reconstruction
+nodes and the exponent-scaled constant error bound. Paths describe positive
+finite inputs; coverage records exact zero/one, infinity and invalid-input
+behavior. Recertification audits and proves every stored operation again.

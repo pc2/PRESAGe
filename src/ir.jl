@@ -9,7 +9,8 @@ using ..PRESAGe:
     round_ieee,
     round_fixed,
     _fixed_mask,
-    _root_argument_format
+    _root_argument_format,
+    _float_exponent_format
 
 export UIntFormat,
     Node,
@@ -29,6 +30,7 @@ export UIntFormat,
     BitOp,
     ScalePow2,
     FloatMantissa,
+    FloatExponent,
     RootArgument,
     ScaleByInputExponent,
     CopySign,
@@ -199,6 +201,10 @@ end
 struct FloatMantissa <: Node
     source::Int
 end
+"""Exact signed integer e in abs(source)=m*2^e, for finite nonzero inputs."""
+struct FloatExponent <: Node
+    source::Int
+end
 """Exact m*2^r where abs(source)=m*2^e and e=divisor*q+r, using floor division.
 Retain fraction bits; widen the exponent field when necessary to represent t.
 """
@@ -255,7 +261,7 @@ refs(n::FMA) = (n.a, n.b, n.c)
 refs(n::Select) = (n.condition, n.yes, n.no)
 refs(n::Guard) = (n.condition, n.source)
 refs(n::Union{Convert, Quantize, BitCast, ExtractBits, ScalePow2, Classify}) = (n.source,)
-refs(n::FloatMantissa) = (n.source,)
+refs(n::Union{FloatMantissa, FloatExponent}) = (n.source,)
 refs(n::RootArgument) = (n.source,)
 refs(n::ScaleByInputExponent) = (n.source, n.input)
 refs(n::CopySign) = (n.source, n.sign)
@@ -339,6 +345,10 @@ function _type(n::Node, types, tables)
         n.kind in (:nan, :infinity, :finite, :zero, :negative) ||
             throw(ArgumentError("invalid classification"))
         return Bool
+    elseif n isa FloatExponent
+        types[n.source] isa FloatFormat ||
+            throw(ArgumentError("exponent extraction needs a floating source"))
+        return _float_exponent_format(types[n.source])
     elseif n isa Union{FloatMantissa, RootArgument}
         types[n.source] isa FloatFormat ||
             throw(ArgumentError("mantissa normalization needs a floating source"))

@@ -508,6 +508,34 @@ function _certificate_data(result::CertificationResult)
             "zero_only" => path.zero_only,
         )
     end
+    if get(result.settings, "method", "") == "log_polynomial_horner"
+        path = only(_log_audit(result.plan).paths)
+        d["coverage"] = Dict(
+            "input_domain" => _rational_text.(collect(path.accepted_domain)),
+            "inputs" => "all representable positive finite inputs in the interval",
+            "zeros" => "both signed zeros return negative infinity when zero is in the contract",
+            "one" => "exact positive zero when one is in the contract",
+            "positive_infinity" => "positive infinity",
+            "invalid_inputs" => "negative finite inputs, negative infinity and NaNs return canonical quiet NaN",
+            "outside_domain" => "finite inputs outside the bounded domain return canonical quiet NaN",
+            "overflow" => "all reachable positive finite arithmetic nodes and output conversions bounded",
+        )
+        d["transformation"] = Dict(
+            "kind" => "log",
+            "identity" => "x=m*2^e; log(x)=log(m)+e*log(2)",
+            "norm_domain" => _rational_text.(collect(path.domain)),
+            "input_exponents" => collect(path.exponents),
+            "normalization" => "exact for every positive finite input, including subnormals",
+            "stored_log2_node" => path.log2_node,
+            "log2_error_bound" => get(result.settings, "log2_error_bound", "0/1"),
+            "reconstruction_node" => path.reconstruction,
+            "rounding" =>
+                "explicit casts, " *
+                result.plan.settings["evaluation"] *
+                " reconstruction, and output conversion",
+            "exceptional_only" => path.exceptional_only,
+        )
+    end
     result.tail_bound === nothing || (
         d["tail"] = Dict(
             "magnitude_lower" => "4/1",

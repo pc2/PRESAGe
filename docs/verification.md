@@ -575,7 +575,7 @@ evaluators. The standalone example and CLI replay also run successfully.
 
 The reciprocal contract currently accepts one bounded interval strictly on
 one side of zero, with floating interfaces. Overflow refuses certification.
-Full-domain reciprocal special values, disconnected domains and cbrt/log/tail
+Full-domain reciprocal special values, disconnected domains and atan tail
 reductions remain pending. AC reconstruction requires sufficient intermediate
 exponent headroom within its 30-bit limit; arbitrary significand widths remain
 available within the existing CPU width limits.
@@ -617,7 +617,7 @@ outside the contract return canonical NaN before normalization or arithmetic.
 Numerical contracts currently require floating interfaces, a bounded
 nonnegative interval and one kernel. Possible output overflow refuses a finite
 certificate. These are absolute-error certificates, without a correct-rounding
-or ulp guarantee. Log reconstruction and atan tails remain pending.
+or ulp guarantee. Atan tails remain pending.
 
 ## Signed cbrt exponent reduction
 
@@ -663,21 +663,63 @@ compositions; signed ordinary polynomial requests require the root transformatio
 
 Cbrt currently requires floating interfaces, a bounded signed interval and one
 kernel. Internal or output overflow refuses certification. The absolute bound
-does not imply correct rounding or an ulp guarantee. Log reconstruction and
-atan tails are next.
+does not imply correct rounding or an ulp guarantee. Atan tails are next.
+
+## Log exponent reconstruction
+
+[`examples/log_search.jl`](../examples/log_search.jl) generates binary16
+`log(x)` on `[0,65504]`, covering every positive finite encoding and both
+zero poles. Degree nine uses `Fixed(80,24)` internals, ten coefficients,
+nine Horner FMAs and one reconstruction FMA. Coefficient and stage declarations
+each total 800 bits; these are structural counts.
+
+| Contribution | Certified upper bound |
+| --- | ---: |
+| Mantissa approximation | `4.535559e-9` |
+| Coordinate conversion | `0` |
+| Arithmetic, including stored constant and reconstruction | `3.643207e-15` |
+| Output rounding | `0.0078125` |
+| Total | `0.007812504535561773` |
+| Contract target | `0.015625` |
+
+The stored log(2) contribution, already included in arithmetic, is at most
+`1.095626e-16` after exponent scaling. Directed MPFR enclosures check the
+absolute error independently of the Sollya norm. Every visited numeric range
+is checked, and compiled portable/AC/AP evaluators agree on output bits and
+fixed-node payloads with both native and AC floating backends.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Exact exponent IR and C++ | 129,149 | Every binary16/small custom encoding, exact mantissa/exponent identity, signed integer storage including wide metadata, plan v9 and official headers. |
+| Certified log reconstruction | 193 | Separate/FMA bounds, stored constant term, subnormal and binade boundaries, exact one and zero poles, every CPU backend and stored recertification. |
+| Exhaustive binary16 log verification | 385,012 | All encodings for FMA, positive finite inputs for separate reconstruction, directed MPFR error enclosures, visited ranges and six compiled FMA backend combinations. |
+| Log domains, exact branches and proof refusals | 170 | Zero-/one-only generation, included/excluded poles, bounded positive intervals, mutated graphs/constants, insufficient exponent headroom and unmet budgets. |
+| Log custom floating and individual precision | 221 | Small custom input with double internals, 100-fraction-bit input and 112-fraction-bit output, nonuniform fixed stages, raw/typed AC/AP/portable conformance. |
+| Log precision search, CLI and replay | 45 | Supervised precision reduction with fresh proof, search/report v8, plan v9, actual generation, recertification and exact C++ replay. |
+| Log exponent conversion and stored constant error | 15 | Exponent 25 rounds to 24 in a three-fraction-bit coordinate; constant and reconstruction errors are accounted for separately, with official-header CPU agreement. |
+
+These seven groups pass 514,805 checks. Nineteen regression groups pass
+1,123,588 checks, covering formats, schemas, IR, references and every reciprocal,
+sqrt and rsqrt group. Together, the targeted runs pass 26 groups and 1,638,393
+checks with official vendor headers required. Formatting passes. The complete
+runner was not repeated.
+Log currently requires floating interfaces, a bounded nonnegative interval and
+one kernel. Possible overflow refuses certification. The absolute bound does
+not imply an ulp or correct-rounding guarantee; atan tails remain next.
 
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
 rejected fixed overflow, including mixed interfaces and custom formats.
-Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt and signed cbrt kernels
-also have complete certificates.
+Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt and log
+kernels also have complete certificates.
 Segmented floating erf and other transformation families remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains
 unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces;
 schema v5 adds individual coefficient/stage precision, v6 adds exponent
-reconstruction, v7 adds sqrt/rsqrt exponent splitting and v8 adds cbrt; a
+reconstruction, v7 adds sqrt/rsqrt exponent splitting, v8 adds cbrt and v9
+adds exact exponent extraction for log; a
 separate report records the
 numerical proof. Native floating CPU arithmetic supports binary32/binary64 with
 nearest-even rounding; official AC arithmetic supports custom and wide formats.

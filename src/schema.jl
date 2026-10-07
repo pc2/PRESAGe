@@ -1,4 +1,4 @@
-const _SCHEMA_VERSION = 8
+const _SCHEMA_VERSION = 9
 _has_cube_reduction(p::IR.Program) = any(
     n -> n isa Union{IR.RootArgument, IR.ScaleByInputExponent} && n.divisor == 3,
     p.nodes,
@@ -117,6 +117,7 @@ function _plan_data(p::PlanArtifact)
     fixedio = p.spec.input_format isa FixedFormat || p.spec.output_format isa FixedFormat
     guarded = p.program !== nothing && any(n -> n isa IR.Guard, p.program.nodes)
     version =
+        p.program !== nothing && any(n -> n isa IR.FloatExponent, p.program.nodes) ? 9 :
         p.program !== nothing && _has_cube_reduction(p.program) ? 8 :
         p.program !== nothing && _has_root_reduction(p.program) ? 7 :
         p.program !== nothing && _has_exponent_reduction(p.program) ? 6 :
@@ -212,6 +213,10 @@ function _read_plan(d)
         )
     end
     program = haskey(d, "program") ? _read_program(d["program"]) : nothing
+    program !== nothing &&
+        any(n -> n isa IR.FloatExponent, program.nodes) &&
+        d["schema_version"] < 9 &&
+        throw(ArgumentError("exact exponent extraction requires schema v9"))
     program !== nothing &&
         _has_cube_reduction(program) &&
         d["schema_version"] < 8 &&

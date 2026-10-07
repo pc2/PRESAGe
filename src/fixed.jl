@@ -79,3 +79,10 @@ function _round_fixed_dyadic(m::Integer, e::Integer, f::FixedFormat, mode::Symbo
 end
 hex_bits(bits::Integer, f::FixedFormat) =
     "0x" * string(BigInt(bits); base = 16, pad = cld(f.width, 4))
+
+# Exact integer storage for every normalized exponent, including subnormals.
+function _float_exponent_format(f::FloatFormat)
+    magnitude = max(abs(BigInt(_emin(f)) - f.fraction_bits), BigInt(_emax(f)))
+    width = ndigits(magnitude; base = 2) + 1
+    return FixedFormat(width, width)
+end

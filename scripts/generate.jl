@@ -297,6 +297,8 @@ function generate_main(args)
         " normalizations, ",
         costs.exponent_scalings,
         " exponent scalings, ",
+        costs.exponent_extractions,
+        " exponent extractions, ",
         costs.sign_copies,
         " sign copies (static IR counts)",
     )

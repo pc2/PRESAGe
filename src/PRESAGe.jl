@@ -47,6 +47,7 @@ export FloatFormat,
     odd_polynomial_plan,
     reciprocal_polynomial_plan,
     root_polynomial_plan,
+    log_polynomial_plan,
     segmented_polynomial_plan,
     certified_polynomial,
     PolynomialSearchConfig,
@@ -104,6 +105,7 @@ include("planning.jl")
 include("odd.jl")
 include("reciprocal.jl")
 include("roots.jl")
+include("log.jl")
 include("search.jl")
 include("search_schema.jl")
 include("precision_optimization.jl")

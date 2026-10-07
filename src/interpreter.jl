@@ -161,6 +161,10 @@ function _interpret(p::IR.Program, bits::Integer, trace::Bool)
         elseif n isa IR.FloatMantissa
             mantissa, _ = normalize_float(visit(n.source).bits, f)
             _float(mantissa, f)
+        elseif n isa IR.FloatExponent
+            source = visit(n.source)
+            _, exponent = normalize_float(source.bits, source.format)
+            _fixed(round_fixed(exponent, f), f)
         elseif n isa IR.RootArgument
             source = visit(n.source)
             _float(_root_argument(source.bits, source.format, n.divisor), f)

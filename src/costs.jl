@@ -52,6 +52,7 @@ function implementation_cost(plan::PlanArtifact)
             p.nodes,
         ),
         exponent_scalings = count(n -> n isa IR.ScaleByInputExponent, p.nodes),
+        exponent_extractions = count(n -> n isa IR.FloatExponent, p.nodes),
         sign_copies = count(n -> n isa IR.CopySign, p.nodes),
     )
 end

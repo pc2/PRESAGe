@@ -256,3 +256,20 @@ for `[1,8)`. The result type is inferred by the IR and stored through its node
 semantics. Native/AC C++ uses the same integer quotient/remainder and exact
 field construction. Cbrt restores the original input sign after direct scaling;
 its lazy branches preserve both signed zeros and infinities.
+
+## Log reconstruction arithmetic
+
+`FloatExponent(source)` returns the exact signed integer `e` from the same
+normalization as `FloatMantissa`: `abs(x)=m*2^e`, including subnormal inputs.
+Its inferred signed fixed format has no fractional bits and holds every finite
+nonzero input exponent. Zero, infinity and NaN are invalid for this operation;
+the log evaluator's lazy branches prevent their evaluation.
+
+`log_polynomial_plan(spec, coefficients, log2; precision, evaluation)` stores
+`p(m)+e*log2` as explicit IR. Constant storage and reconstruction use the
+coordinate format. Cast the final Horner value and exact exponent as needed;
+separate evaluation rounds a multiply and an add, while FMA rounds their
+combined expression once. A final conversion rounds to the output format.
+The complete certificate accounts for every operation. C++ uses the existing
+bit-field normalization and official fixed arithmetic types; no C++ `log` call
+is used in the evaluator.

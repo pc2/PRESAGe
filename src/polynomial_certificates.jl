@@ -195,6 +195,11 @@ function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = 
             grids[i] = IR.format(p, n.source).fraction_bits
             rho[i] = _q(0)
             continue
+        elseif n isa IR.FloatExponent
+            ranges[i] = _q.(layout.exponents)
+            grids[i] = 0
+            rho[i] = _q(0)
+            continue
         elseif n isa IR.ScaleByInputExponent
             exact = _interval_mul(ranges[n.source], layout.scale_domain)
             scale = grids[n.source] - layout.scale_exponents[1]
@@ -378,6 +383,8 @@ function certify_polynomial(
     0 <= max_refinements <= 8 || throw(ArgumentError("refinements must be in 0:8"))
     get(plan.settings, "transformation", "none") == "odd" &&
         return _certify_odd(plan; precision, accuracy, max_refinements)
+    get(plan.settings, "transformation", "none") == "log" &&
+        return _certify_log(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "reciprocal" &&
         return _certify_reciprocal(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") in ("sqrt", "rsqrt", "cbrt") &&
