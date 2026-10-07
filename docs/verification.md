@@ -1036,8 +1036,43 @@ group was rerun after correcting its degree-zero execution assertion.
 
 These are uniform absolute-error certificates for explicitly bounded floating
 contracts inside `[-1,1]`. Near-endpoint relative/ulp accuracy and correct
-rounding are separate work. The next local task is configured design sweeps
-and numerical caching.
+rounding are separate work. Configured design sweeps and numerical caching are
+now implemented, as described below.
+
+## Local design sweeps and numerical cache
+
+The [guard example](../examples/design_sweep.jl) evaluates exp with binary16
+inputs, binary32 outputs and target `2^-20` on `[-1,1]`. It regenerates degrees
+five/nine at guards `{0,3,6,8,10}`, then holds the degree-nine coordinates and
+coefficients fixed for a separate stage-width experiment. Both experiments have
+passing guards 6, 8 and 10 and retain three structural Pareto rows. The adaptive
+comparison certifies approximately `1.376738779803136e-7`; its exact saved plan
+is freshly recertified and compiled through official AP/AC headers.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Local sweeps, concurrent workers and exact cache replay | 31 | Bounded overlapping workers, request order, cleanup, exact plans/certificates, AP CPU replay, timing reports, corruption repair and proof-precision invalidation. |
+| Numerical cache key coverage and artifact rejection | 18 | Contracts, numerical/arithmetic/format settings, source/native/dependency identities, incompatible schemas, malformed plans/certificates and damaged entries. |
+| Sweep failures, Pareto sets and stored stage guards | 18 | All candidates after first success, retained budget failures, passing-only cache, unchanged coefficients, AC CPU replay, independent contract Pareto sets and concurrent publication. |
+| Sweep validation, limits and worker recovery | 27 | Invalid inputs/settings, row/total/job limits, late results, controlled crash/hang recovery, parent cancellation and owned-process cleanup. |
+| Sweep CLI exact artifacts and public replay | 7 | Actual CLI entry point, atomic report replacement, repeat cache reuse, exact report-plan extraction, fresh certificate and AC replay. |
+| Floating transformed cache and exact shared banks | 16 | Acos root/asin banks, all seven branches, changed stage widths, custom floating node/range records, non-dyadic coefficients and public AC floating APIs. |
+| Loaded-source cache invalidation | 1 | An isolated copied module accepts its loaded identity and refuses cache use after a numerical source changes. |
+| Persistent cache reuse across Julia processes | 3 | Cold/warm CLI runs in separate Julia processes and verified passing hits. |
+
+These eight groups pass 121 checks with official headers required for CPU tests.
+Five regression groups pass another 929 checks: search schemas, ordered search,
+request validation, isolated worker supervision and bounded precision optimization.
+Together these are 1,050 targeted checks. The standalone guard example, fresh
+certificate, AP/AC CPU compilation and formatting also pass. The complete runner
+was not repeated. A TOML tuple-export bug and a test broadcast setup error were
+corrected, and their affected groups rerun. After narrowing the SHA dependency
+to version 1, cross-process cache reuse was checked again.
+
+Hits validate exact local artifacts and compatibility rather than rerunning
+native norm proofs. Failures/timeouts are not cached. Structural Pareto metrics
+are not FPGA measurements. Sampled witness overlays, cache integration in ordered
+generation, isolated norm/coefficient caches and eviction remain separate work.
 
 ## Limits
 

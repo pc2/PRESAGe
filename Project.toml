@@ -6,6 +6,7 @@ authors = ["Gerrit Pape <gerrit.pape@uni-paderborn.de"]
 [deps]
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 Sollya = "4ba3657f-7d7c-4d39-81ac-6271ee86fac5"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
@@ -15,6 +16,7 @@ Sollya = {path = "../Sollya.jl"}
 [compat]
 Libdl = "1"
 Serialization = "1"
+SHA = "1"
 Sollya = "0.1"
 TOML = "1"
 julia = "1.13"

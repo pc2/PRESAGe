@@ -401,3 +401,23 @@ format, pi/2 storage and error. Each path is labelled as a signed central/tail,
 zero or endpoint branch, with its representable interval and complete approximation,
 coordinate, arithmetic and output contributions. Coverage includes all bounded
 representable inputs and lazy invalid-input behavior; failed proofs claim no coverage.
+
+## Sweep and cache artifacts
+
+`presage-polynomial-sweep` v1 embeds the existing exact spec/search configuration
+and one row per started candidate. Rows preserve request order and carry status,
+failure reason, cache outcome, timings, available plan/certificate and structural
+operation/precision costs. `pareto_indices` refer to certified rows; the five
+declared comparison metrics and contract index make their meaning explicit.
+Complete sweeps may contain failures. A limited sweep records its stop reason.
+
+`presage-numerical-cache` v1 is one atomically published TOML file per SHA-256
+request/compatibility key. It stores the exact numerical request, source/native
+dependency identity, plan/certificate payload, payload checksum and original
+computation timings. Hits validate identity and exact artifact semantics without
+rerunning the native proof. Only passing on-time results are published. Invalid
+entries are regenerated. See the [cache semantics](sweeps.md#cache-identity-and-integrity).
+
+Search reports also include optional `generation_seconds` and `proof_seconds`
+from completed workers. Numerical request and existing plan/certificate versions
+are unchanged by these diagnostic fields.

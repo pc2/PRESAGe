@@ -159,7 +159,32 @@ struct SearchAttempt
     plan::Union{Nothing, PlanArtifact}
     certificate::Union{Nothing, CertificationResult}
     reason::String
+    generation_seconds::Union{Nothing, Float64}
+    proof_seconds::Union{Nothing, Float64}
 end
+SearchAttempt(
+    degree,
+    format,
+    segments,
+    precision,
+    status,
+    elapsed,
+    plan,
+    certificate,
+    reason,
+) = SearchAttempt(
+    degree,
+    format,
+    segments,
+    precision,
+    status,
+    elapsed,
+    plan,
+    certificate,
+    reason,
+    nothing,
+    nothing,
+)
 
 """First certified candidate, or `search_limit` with the complete attempt history."""
 struct PolynomialSearchResult
@@ -191,6 +216,14 @@ function _polynomial_worker_main(args)
     request = deserialize(joinpath(directory, "request"))
     config = request.config
     try
+        numerical_started = time_ns()
+        generation_seconds = nothing
+        proof_started = nothing
+        checkpoint(plan) = begin
+            generation_seconds = _elapsed(numerical_started)
+            _worker_save(joinpath(directory, "candidate"), _plan_data(plan))
+            proof_started = time_ns()
+        end
         stored = get(request, :stored_plan, nothing)
         result = if stored === nothing
             _certified_polynomial(
@@ -206,12 +239,13 @@ function _polynomial_worker_main(args)
                 segments = request.segments,
                 precision_layout = request.precision,
                 transformation = config.transformation,
-                candidate_ready = plan ->
-                    _worker_save(joinpath(directory, "candidate"), _plan_data(plan)),
+                candidate_ready = checkpoint,
             )
         else
             plan = _reformat_polynomial(_read_plan(stored), request.precision)
             _worker_save(joinpath(directory, "candidate"), _plan_data(plan))
+            generation_seconds = 0.0
+            proof_started = time_ns()
             certify_plan(
                 plan;
                 precision = config.proof_precision,
@@ -219,6 +253,8 @@ function _polynomial_worker_main(args)
                 max_refinements = config.max_refinements,
             )
         end
+        proof_seconds = proof_started === nothing ? nothing : _elapsed(proof_started)
+        generation_seconds === nothing && (generation_seconds = _elapsed(numerical_started))
         # Encode the IR with its existing schema: raw Julia serialization does
         # not reliably reconstruct tuples containing Type{Bool} in IR.Program.
         _worker_save(
@@ -231,6 +267,8 @@ function _polynomial_worker_main(args)
                 tail_bound = result.tail_bound,
                 settings = result.settings,
                 reason = result.reason,
+                generation_seconds,
+                proof_seconds,
             ),
         )
     catch err
@@ -275,29 +313,39 @@ function _stop_polynomial_worker(process)
     return nothing
 end
 
-function _run_polynomial_job(request, search_started; worker_command, process_started)
-    started = time_ns()
+function _run_polynomial_job(
+    request,
+    search_started;
+    worker_command,
+    process_started,
+    job_started = time_ns(),
+    cancelled = () -> false,
+)
+    started = job_started
     return mktempdir(; prefix = "presage-worker-") do directory
         serialize(joinpath(directory, "request"), request)
         log = joinpath(directory, "worker.log")
         process = nothing
         timed_out = false
         deadline = false
+        aborted = false
         try
             total_remaining =
                 _search_remaining(search_started, request.config.total_timeout)
             job_remaining = _search_remaining(started, request.config.job_timeout)
-            if min(total_remaining, job_remaining) <= 0
+            aborted = cancelled()
+            if min(total_remaining, job_remaining) <= 0 || aborted
                 deadline = total_remaining <= 0
                 return SearchAttempt(
                     request.degree,
                     request.internal_format,
                     request.segments,
                     request.precision,
-                    :timeout,
+                    aborted ? :cancelled : :timeout,
                     _elapsed(started),
                     nothing,
                     nothing,
+                    aborted ? "Sweep cancelled before launch" :
                     deadline ? "Total search deadline expired before launch" :
                     "Job wall-time limit expired before launch",
                 ),
@@ -308,6 +356,8 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
             end
             process_started(process, directory)
             while process_running(process)
+                aborted = cancelled()
+                aborted && break
                 job_remaining = _search_remaining(started, request.config.job_timeout)
                 total_remaining =
                     _search_remaining(search_started, request.config.total_timeout)
@@ -327,6 +377,7 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
         end
         elapsed = _elapsed(started)
         plan, certificate = nothing, nothing
+        generation_seconds, proof_seconds = nothing, nothing
         worker_error = nothing
         read_error = nothing
         try
@@ -349,12 +400,16 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
                     data.reason,
                 )
                 plan = certificate.plan
+                generation_seconds = get(data, :generation_seconds, nothing)
+                proof_seconds = get(data, :proof_seconds, nothing)
             end
         catch err
             err isa InterruptException && rethrow()
             read_error = "Invalid worker result: " * sprint(showerror, err)
         end
-        status, reason = if timed_out
+        status, reason = if aborted
+            :cancelled, "Sweep cancelled after a parent task failed"
+        elseif timed_out
             :timeout, deadline ? "Total search deadline expired" : "Job wall-time limit expired"
         elseif !success(process)
             :worker_crashed,
@@ -382,6 +437,8 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
             plan,
             certificate,
             reason,
+            generation_seconds,
+            proof_seconds,
         ),
         deadline
     end
@@ -410,36 +467,7 @@ function _search_polynomial(
     worker_command = _polynomial_worker_command,
     process_started = (process, directory) -> nothing,
 )
-    # Validate all choices, including ones beyond the attempt limit.
-    config.transformation == :odd && _validate_odd_spec(spec)
-    config.transformation == :atan && _atan_geometry(spec)
-    config.transformation == :exp && _exp_geometry(spec)
-    config.transformation == :erfc && _erfc_geometry(spec)
-    config.transformation in (:sin, :cos) && _periodic_geometry(spec, config.transformation)
-    config.transformation in (:asin, :acos) &&
-        _inverse_trig_geometry(spec, config.transformation)
-    config.transformation in (:sinh, :cosh) &&
-        _hyperbolic_geometry(spec, config.transformation)
-    config.transformation == :log && _log_geometry(spec)
-    config.transformation == :reciprocal && _reciprocal_geometry(spec)
-    config.transformation in (:sqrt, :rsqrt, :cbrt) &&
-        _root_geometry(spec, config.transformation)
-    domain = nothing
-    for format in config.internal_formats
-        domain = _validate_polynomial_request(
-            spec,
-            first(config.degrees),
-            format,
-            config.evaluation,
-            config.generation_precision,
-            config.proof_precision,
-            config.accuracy,
-            config.max_refinements,
-        )
-        for segments in config.segments
-            _validate_segment_request(spec, segments, format)
-        end
-    end
+    domain = _validate_search_request(spec, config)
     started = time_ns()
     attempts = SearchAttempt[]
     finish(status, selected, reason) = PolynomialSearchResult(
@@ -471,6 +499,41 @@ function _search_polynomial(
     return finish(:search_limit, nothing, :choices_exhausted)
 end
 
+# Validate all choices, including ones beyond the attempt limit. Shared by search
+# and sweeps so invalid contracts never start a worker or read a cache entry.
+function _validate_search_request(spec, config)
+    config.transformation == :odd && _validate_odd_spec(spec)
+    config.transformation == :atan && _atan_geometry(spec)
+    config.transformation == :exp && _exp_geometry(spec)
+    config.transformation == :erfc && _erfc_geometry(spec)
+    config.transformation in (:sin, :cos) && _periodic_geometry(spec, config.transformation)
+    config.transformation in (:asin, :acos) &&
+        _inverse_trig_geometry(spec, config.transformation)
+    config.transformation in (:sinh, :cosh) &&
+        _hyperbolic_geometry(spec, config.transformation)
+    config.transformation == :log && _log_geometry(spec)
+    config.transformation == :reciprocal && _reciprocal_geometry(spec)
+    config.transformation in (:sqrt, :rsqrt, :cbrt) &&
+        _root_geometry(spec, config.transformation)
+    domain = nothing
+    for format in config.internal_formats
+        domain = _validate_polynomial_request(
+            spec,
+            first(config.degrees),
+            format,
+            config.evaluation,
+            config.generation_precision,
+            config.proof_precision,
+            config.accuracy,
+            config.max_refinements,
+        )
+        for segments in config.segments
+            _validate_segment_request(spec, segments, format)
+        end
+    end
+    return domain
+end
+
 function _search_data(result::PolynomialSearchResult)
     config = result.config
     attempts = map(enumerate(result.attempts)) do (index, attempt)
@@ -488,6 +551,10 @@ function _search_data(result::PolynomialSearchResult)
         attempt.plan === nothing || (data["plan"] = _plan_data(attempt.plan))
         attempt.certificate === nothing ||
             (data["certificate"] = _certificate_data(attempt.certificate))
+        attempt.generation_seconds === nothing ||
+            (data["generation_seconds"] = attempt.generation_seconds)
+        attempt.proof_seconds === nothing ||
+            (data["proof_seconds"] = attempt.proof_seconds)
         data
     end
     data = Dict{String, Any}(

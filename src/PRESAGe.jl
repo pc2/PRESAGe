@@ -2,6 +2,7 @@ module PRESAGe
 
 using Libdl
 using Serialization
+using SHA
 using TOML
 import Sollya
 
@@ -63,6 +64,11 @@ export FloatFormat,
     write_search_config,
     read_search_config,
     write_search_report,
+    NumericalCache,
+    PolynomialSweepRow,
+    PolynomialSweepResult,
+    sweep_polynomial,
+    write_sweep_report,
     erf_candidate,
     erf_fixed_candidate,
     CertificationResult,
@@ -121,5 +127,7 @@ include("inverse_trig.jl")
 include("search.jl")
 include("search_schema.jl")
 include("precision_optimization.jl")
+include("numerical_cache.jl")
+include("sweeps.jl")
 
 end
