@@ -1071,8 +1071,40 @@ to version 1, cross-process cache reuse was checked again.
 
 Hits validate exact local artifacts and compatibility rather than rerunning
 native norm proofs. Failures/timeouts are not cached. Structural Pareto metrics
-are not FPGA measurements. Sampled witness overlays, cache integration in ordered
-generation, isolated norm/coefficient caches and eviction remain separate work.
+are not FPGA measurements. Portable sampled witness overlays are now implemented.
+Further cache integration, isolated norm/coefficient caches and eviction are
+deferred until repeated numerical work becomes a bottleneck.
+
+## Portable sampled verification
+
+Julia writes exact input/interpreter-output streams and mathematical reference
+enclosures. One host C++20 checker, using GMP/MPFR, supplies bit agreement,
+absolute-error and global-certificate decisions plus maximum-error witnesses.
+Julia invokes the same checker for sweeps and selectively refines unresolved
+references. The protocol also accepts captured runner outputs without Julia.
+See [the workflow and format](sampled-verification.md).
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| C++ error decisions, rational equality and witnesses | 46 | Pass/fail/unresolved intervals, signed errors, exact rational equality, separate bit/accuracy/certificate failures, nonfinite outputs and missing-reference coverage. |
+| Wide words, exact fixed decoding, custom exponents and byte order | 44 | Signed/unsigned and 320-bit fixed values, binary16/128/256 and custom floats, both byte orders, zero error budgets and extreme exponents without rational expansion. |
+| Strict stream and bundle validation | 12 | Truncated/extra words, nonzero padding, mismatched inputs/expected streams, schema rejection, exact reversed-reference checks, invalid rationals/precision and protected report destinations. |
+| Bundle preparation, sampling, finite scope and special branches | 35 | Exact stored replay, exhaustive fixed inputs, deterministic boundaries, unchanged Julia precision/rounding, failed-generation cleanup, empty-suite status, fixed-reference overflow, signed zeros and nonfinite/outside coverage. |
+| Selective reference refinement and reduction transitions | 7 | An uncertain exp witness resolves after precision refinement; exp/quadrant transitions use stored multipliers. |
+| CPU runners with official AP/AC headers and wide AC floating outputs | 14 | Exhaustive accepted fixed inputs through both vendors, actual output/certificate checks, mixed wide input/binary128 output and witness bounds. |
+| Sweep observations and verification CLI | 12 | Actual bounded sweep, separate sampled report v2, retained proof/Pareto fields, observation-index validation and both verification/sweep CLI execution. |
+
+These seven groups pass 170 checks locally, with official AP/AC headers required.
+All eight sweep/cache regression groups pass another 121 checks, for 291 targeted
+checks. The standalone checker-only CMake build and both full CPU CTests pass.
+A retained AC run passes all 129 bit/accuracy/certificate cases, and its captured
+outputs replay through the standalone checker. Julia formatting and whitespace
+checks pass. The complete package runner was not repeated.
+Accuracy covers finite inputs in the contract; nonfinite and excluded inputs
+exercise exact IR bit policies. Witness branch labels describe the interpreter,
+and the certificate comparison currently uses the supplied global bound.
+Captured device results can use the same checker later; no hardware execution
+or synthesis is claimed. Sampling is separate from full-domain certification.
 
 ## Limits
 

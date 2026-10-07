@@ -61,6 +61,26 @@ computation's measurements. Generation/proof phases exclude Julia startup and
 artifact transfer; stored replay has zero coefficient-generation time. Timing
 is diagnostic and is not a Pareto metric.
 
+## Sampled observations
+
+Sampled observations can be added after the bounded sweep:
+
+```julia
+checker = build_verification_checker("build/presage_check")
+observations = verify_sweep(result; checker)
+write_sweep_report("build/sweep.toml", result; observations)
+```
+
+One C++ checker evaluates mathematical error enclosures, exact bit agreement and
+supplied certificate bounds. Julia generates references and refines unresolved
+cases. The default runner is the exact interpreter; generated C++ and later device
+outputs use the same bundle/checker. See [sampled verification](sampled-verification.md).
+Observations are separate from proof status and Pareto metrics. Their postprocessing
+does not consume the sweep's search deadline or enter its numerical cache.
+Reports with observations use schema v2; ordinary reports remain v1. The CLI's
+optional `--checker=EXEC` adds these observations and requires sampled passing
+results for certified rows before returning success.
+
 ## Cache identity and integrity
 
 Only on-time, passing complete certificates are cached. Failures, crashes,
@@ -86,14 +106,17 @@ native norm proofs are not rerun on a valid hit. These are trusted local artifac
 not authenticated external proofs.
 
 Cache use is opt-in. Clear its directory to reclaim storage. Eviction and caches
-for isolated coefficient/norm subproblems are separate work.
+for isolated coefficient/norm subproblems, and cache integration in ordered
+generation/precision optimization, are deferred until repeated numerical work
+becomes a bottleneck. A single sweep of unique candidates needs no cache;
+existing caching is useful for reruns and completed results from interrupted work.
 
 ## CLI and replay
 
 ```sh
 julia --startup-file=no --project=. scripts/sweep.jl \
   contract.toml search-config.toml build/sweep \
-  --max-parallel=2 --cache=build/numerical-cache
+  --max-parallel=2 --cache=build/numerical-cache --checker=build/presage_check
 ```
 
 The command accepts a stored `plan.toml` with a compatible explicit stage

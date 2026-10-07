@@ -50,6 +50,10 @@ Local design sweeps evaluate all configured candidates with bounded concurrent
 workers, exact numerical caching and structural Pareto reports. They can also
 hold coefficients fixed while varying stage precision. See the
 [sweep workflow](docs/sweeps.md) and [guard example](examples/design_sweep.jl).
+Portable sampled verification uses Julia-generated reference bundles and one
+standalone C++ checker, shared by local runs and saved runner outputs. It reports
+error enclosures and witnesses separately from certificates; see
+[sampled verification](docs/sampled-verification.md).
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.

@@ -298,10 +298,12 @@ function _sweep_polynomial(
     )
 end
 
-function _sweep_data(result)
+function _sweep_data(result; observations = Dict())
+    all(i -> i in (r.index for r in result.rows), keys(observations)) ||
+        throw(ArgumentError("observation index is not a sweep row"))
     data = Dict{String, Any}(
         "schema" => "presage-polynomial-sweep",
-        "schema_version" => 1,
+        "schema_version" => isempty(observations) ? 1 : 2,
         "status" => string(result.status),
         "stop_reason" => string(result.stop_reason),
         "mode" => string(result.mode),
@@ -353,13 +355,14 @@ function _sweep_data(result)
         end
         a.certificate === nothing ||
             (d["certificate"] = _certificate_data(a.certificate))
+        haskey(observations, row.index) && (d["sampled"] = observations[row.index])
         d
     end
     data
 end
 
 """Write every candidate, exact artifacts, error contributions and structural Pareto set."""
-write_sweep_report(io::IO, result::PolynomialSweepResult) =
-    TOML.print(io, _sweep_data(result); sorted = true)
-write_sweep_report(path::AbstractString, result::PolynomialSweepResult) =
-    open(io -> write_sweep_report(io, result), path, "w")
+write_sweep_report(io::IO, result::PolynomialSweepResult; observations = Dict()) =
+    TOML.print(io, _sweep_data(result; observations); sorted = true)
+write_sweep_report(path::AbstractString, result::PolynomialSweepResult; kwargs...) =
+    open(io -> write_sweep_report(io, result; kwargs...), path, "w")

@@ -69,6 +69,13 @@ export FloatFormat,
     PolynomialSweepResult,
     sweep_polynomial,
     write_sweep_report,
+    VerificationSampling,
+    sample_inputs,
+    write_verification_bundle,
+    build_verification_checker,
+    check_outputs,
+    verify_samples,
+    verify_sweep,
     erf_candidate,
     erf_fixed_candidate,
     CertificationResult,
@@ -129,5 +136,6 @@ include("search_schema.jl")
 include("precision_optimization.jl")
 include("numerical_cache.jl")
 include("sweeps.jl")
+include("verification.jl")
 
 end
