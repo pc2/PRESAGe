@@ -318,3 +318,22 @@ proved ideal residual radius, coordinate/constant errors, input-dependent
 integer exponent range and conservative maximum error scale. Numerical path
 contributions include exponent scaling; output rounding is recorded separately.
 Failure reports retain the reason without claiming proved coverage.
+
+## Hyperbolic artifacts
+
+Sinh/cosh searches use configuration/report v11, `transformation="sinh"` or
+`"cosh"`, `segments=[1]` and `degree_then_format` ordering. Kernel degree d is
+in 0:15. The d+1 coefficient/stage formats apply to separate central and exp
+coefficient banks; central degrees are 2d+1 for sinh and 2d for cosh.
+
+Plan v11 already expresses both kernels, input-format dispatch, residual
+formation, integer exponent offsets and both half-scalings in ordinary IR.
+No new arithmetic node or plan version is required. Coefficient and constant
+payloads remain exact, and stored replay preserves them.
+
+Certificate v2 uses method `hyperbolic_polynomial_horner`. Coverage records
+signed input partitioning, exact zero/infinity branches and invalid-input
+handling. Transformation fields record the identity, central kernel, exp norm
+domain, widened format, constant nodes and reconstruction order. Each original
+input path reports its scaled approximation, coordinate, arithmetic and final
+rounding bounds. Failed proofs do not claim coverage.

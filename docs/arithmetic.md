@@ -319,3 +319,26 @@ a product and add; FMA mode rounds the combined residual once. A separate
 conversion forms the polynomial coordinate. Horner storage/stage conversions
 and direct output scaling remain explicit. Zero, infinity and domain branches
 are lazy. Static costs count one exponent scaling.
+
+## Sinh/cosh reconstruction arithmetic
+
+`hyperbolic_polynomial_plan` compares `abs(x)>1` in the input format. The central
+branch forms `a*a`, evaluates q and returns `a*q(a*a)` for sinh or `q(a*a)` for
+cosh. Ascending central coefficients are stored separately from exp coefficients;
+both lists use the declared per-coefficient formats. The stage formats apply to
+one central and two tail Horner evaluations.
+
+The tail forms the same rounded integer k and residual r as exp, using exact
+input widening. It evaluates p(r) and p(-r), then uses two `ScaleByExponent`
+nodes with explicit signed integer expressions `k-1` and `-k-1`. Reconstruction
+subtracts the second term for sinh and adds it for cosh. The reduction and
+reconstruction format has at least binary64 precision, preserves input/coordinate
+precision and has extra exponent range beyond the output format. Only the
+reconstructed value is converted to the output. No intermediate exp(a) is formed.
+
+Sinh copies the original sign after conversion, preserves both signed zeros
+exactly and maps signed infinities to themselves. Cosh returns exact one for
+either zero and positive infinity for either infinity. NaNs and excluded finite
+inputs return canonical NaN before numerical evaluation. All branches are lazy.
+Structural cost reports count two coefficient banks, three Horner stage sets
+and two exponent scalings; these are not synthesis estimates.

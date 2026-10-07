@@ -17,6 +17,10 @@ For `transformation=:cbrt`, the kernel uses `[1,8]`, floor division by three
 and original sign restoration; bounded signed domains are supported.
 For `transformation=:exp`, prove rounded integer exponent selection and a
 residual in `[-1/2,1/2]`, then scale the final Horner value directly to the output.
+For `transformation=:sinh` or `:cosh`, degrees 0:15 describe central q(a²) and
+exp p(r) kernels. Two coefficient banks share the declared storage formats;
+three Horner evaluations share stage formats. Half-scaled exponential tails
+are combined in a widened floating format before output conversion.
 For `transformation=:atan`, use one shared odd kernel on `[0,1]`, with
 exact central/tail dispatch, a rounded reciprocal and stored pi/2 reconstruction.
 For `transformation=:log`, the kernel approximates log(m) on `[1,2]` and
@@ -399,6 +403,8 @@ function _search_polynomial(
     config.transformation == :odd && _validate_odd_spec(spec)
     config.transformation == :atan && _atan_geometry(spec)
     config.transformation == :exp && _exp_geometry(spec)
+    config.transformation in (:sinh, :cosh) &&
+        _hyperbolic_geometry(spec, config.transformation)
     config.transformation == :log && _log_geometry(spec)
     config.transformation == :reciprocal && _reciprocal_geometry(spec)
     config.transformation in (:sqrt, :rsqrt, :cbrt) &&

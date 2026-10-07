@@ -592,6 +592,42 @@ function _certificate_data(result::CertificationResult)
             "zero_only" => path.zero_only,
         )
     end
+    if get(result.settings, "method", "") == "hyperbolic_polynomial_horner" &&
+       result.total_bound !== nothing
+        layout = _hyperbolic_audit(result.plan)
+        kind = string(layout.geometry.transformation)
+        d["coverage"] = Dict(
+            "input_domain" => _rational_text.(collect(layout.geometry.accepted_domain)),
+            "inputs" => "all representable finite inputs in the bounded signed interval",
+            "dispatch" => "central for abs(x)<=1; exponential tails for abs(x)>1, compared in the input format",
+            "zeros" =>
+                kind == "sinh" ? "signed zeros preserved when included" :
+                "both signed zeros return exact one when included",
+            "infinities" =>
+                kind == "sinh" ? "signed infinity" : "positive infinity for either sign",
+            "invalid_inputs" => "NaNs and excluded finite inputs return canonical quiet NaN before reduction",
+            "overflow" => "both half-scaled exponential terms, reconstruction and output conversion bounded",
+        )
+        d["transformation"] = Dict(
+            "kind" => kind,
+            "identity" =>
+                kind == "sinh" ? "sinh(x)=sign(x)*(exp(abs(x))/2-exp(-abs(x))/2)" :
+                "cosh(x)=exp(abs(x))/2+exp(-abs(x))/2",
+            "central_kernel" => kind == "sinh" ? "a*q(a*a)" : "q(a*a)",
+            "exp_norm_domain" => ["-1/2", "1/2"],
+            "reduction_format" => _format_data(first(layout.paths).reduction_format),
+            "stored_log2_node" => layout.log2_node,
+            "stored_inverse_log2_node" => layout.inverse_node,
+            "rounding" => "scale by 2^(k-1) and 2^(-k-1) before wide reconstruction and final output conversion",
+            "zero_only" => layout.geometry.zero_only,
+            "paths" => [
+                Dict(
+                    "kind" => string(p.kind),
+                    "input_domain" => _rational_text.(collect(p.input_domain)),
+                ) for p in layout.paths
+            ],
+        )
+    end
     result.tail_bound === nothing || (
         d["tail"] = Dict(
             "magnitude_lower" => "4/1",

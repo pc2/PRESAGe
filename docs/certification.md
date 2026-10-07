@@ -793,3 +793,44 @@ reduction. Zero-only contracts have no numerical path and an exact zero bound.
 Contracts currently require floating interfaces, a bounded interval and one
 shared kernel. These are uniform absolute bounds, without an ulp or
 correct-rounding guarantee.
+
+## Sinh/cosh central kernels and exponential tails
+
+Representable signed input intervals partition at ±1 and the adjacent input
+encodings. The graph audit validates the comparison, every stored constant,
+both Horner evaluations, the exponent offsets, reconstruction, sign and lazy
+exceptional branches. Range analysis follows the proved branch choices.
+
+On `a=abs(x)≤1`, central Taylor coefficients are rounded into their declared
+storage formats. The actual expanded stored odd sinh or even cosh polynomial
+is certified directly against the primitive on `[0,R]`. No division by x or
+quotient regularity assumption is needed. Argument conversion, the square,
+every stage conversion/operation and the sinh reconstruction product have
+explicit error bounds. Established parity transfers this proof to both signs.
+
+For `a>1`, use `r=a-k*log(2)`, with the same complete integer-selection and
+residual proof as exp. The identities are
+`sinh(a)=2^(k-1)*exp(r)-2^(-k-1)*exp(-r)` and
+`cosh(a)=2^(k-1)*exp(r)+2^(-k-1)*exp(-r)`.
+The stored exp polynomial norm N on `[-1/2,1/2]` covers both terms. If S+ and S-
+bound the respective scales, C+/C- their coordinate errors, and V+/V- their
+Horner errors, the approximation contribution is `(S+ + S-)*N`, coordinate
+contribution is `S+*C+ + S-*C-`, and arithmetic includes `S+*V+ + S-*V-`,
+both scaling quantizers and reconstruction rounding. Final output rounding is
+added separately, including subnormals.
+
+Directed primitive enclosures enlarged by the proved two-term error bound
+retain correlation at reconstruction and establish finite output ranges.
+Scaling by one half before reconstruction avoids an overflowing exp(a)
+intermediate for finite hyperbolic results. Possible internal/output overflow,
+unproved residual coverage or an unmet absolute budget refuses certification.
+The reduced/full central norm intervals can enlarge an accepted branch, so
+reported approximation lower bounds are zero.
+
+Signed sinh zeros and all infinity limits are exact; cosh zeros return one.
+Zero-only contracts have no numerical path and a zero bound. Replay and
+precision search repeat the complete proof, including both residual signs.
+Contracts require floating interfaces, an explicit bounded signed interval
+and kernel degree 0:15. Degree d means central degree 2d+1 for sinh, 2d for
+cosh and degree d for each exp evaluation. This is a uniform absolute bound,
+without a correct-rounding or ulp guarantee.

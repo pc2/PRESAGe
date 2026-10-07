@@ -34,6 +34,9 @@ included in the certificate. See the [log example](examples/log_search.jl).
 Exp reduces bounded inputs to a residual near zero, evaluates one polynomial
 and scales directly into the floating output. Its certificate includes integer
 selection, stored constants and underflow. See the [exp example](examples/exp_search.jl).
+Sinh/cosh combine central odd/even kernels with two exponential tails. Each tail
+is scaled by one half before reconstruction, preserving finite hyperbolic results
+past exp's output overflow point. See the [hyperbolic example](examples/hyperbolic_search.jl).
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
@@ -540,6 +543,38 @@ below `1/8`.
 
 ```sh
 julia --startup-file=no --project=. examples/exp_search.jl
+```
+
+## Sinh/cosh reconstruction
+
+```julia
+spec = FunctionSpec("sinh(x)"; input_format=IEEE16,
+    domain=(-23//2,23//2), absolute_error=32)
+config = PolynomialSearchConfig(degrees=[9],
+    internal_formats=[FixedFormat(72,24)], transformation=:sinh,
+    evaluation=:fma, job_timeout=60, total_timeout=90)
+search = search_polynomial(spec, config)
+@assert search.status == :certified
+```
+
+Use `cosh(x)` with `transformation=:cosh` for cosh. Kernel degree d (0:15)
+describes central q and reduced exp p; central sinh/cosh degrees are 2d+1 and
+2d. Per-coefficient/stage formats apply to both coefficient banks and all three
+Horner evaluations. Near zero the evaluator uses an odd/even central polynomial.
+At `abs(x)>1`, it combines `2^(k-1)*p(r)` and `2^(-k-1)*p(-r)` before output
+rounding. The widened reconstruction supports finite hyperbolic outputs even
+when exp(abs(x)) would overflow the output format.
+
+The certificate includes both tail terms, constants, reduction, reconstruction,
+branch coverage and output rounding. Sinh preserves zero signs and signed
+infinities; cosh returns one for either zero and positive infinity for either
+infinity. Excluded finite inputs and NaNs return NaN. Bounded floating interfaces,
+fixed/floating internals, individual widths, precision search and replay are
+supported. The binary16 example certifies a total absolute bound about 16 against
+32 on `[-11.5,11.5]`; output rounding dominates this bound.
+
+```sh
+julia --startup-file=no --project=. examples/hyperbolic_search.jl
 ```
 
 ## Reference CLI

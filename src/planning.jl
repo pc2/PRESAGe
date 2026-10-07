@@ -90,6 +90,10 @@ Coefficients and Horner stages default to `internal_format`. Supply a
 `PolynomialPrecision` to choose coefficient storage and stage formats separately;
 its coordinate format becomes the internal default. Fixed formats require nearest-even
 rounding and rejected overflow. Input and output formats remain independent.
+For `transformation=:sinh` or `:cosh`, degree d (0:15) describes both central
+q(a²) and reduced exp p(r); the central original degrees are 2d+1 and 2d.
+Floating interfaces and an explicit bounded domain are required. The complete
+certificate includes both half-scaled exponential terms and reconstruction.
 
 Sollya coefficient formats use fixed fractional bits or floating significand bits;
 generated coefficients must also fit the selected storage range exactly. Generation
@@ -156,6 +160,7 @@ function certified_polynomial(
     transformation == :odd && _validate_odd_spec(spec)
     transformation == :atan && _atan_geometry(spec)
     transformation == :exp && _exp_geometry(spec)
+    transformation in (:sinh, :cosh) && _hyperbolic_geometry(spec, transformation)
     transformation == :log && _log_geometry(spec)
     transformation == :reciprocal && _reciprocal_geometry(spec)
     transformation in (:sqrt, :rsqrt, :cbrt) && _root_geometry(spec, transformation)
@@ -303,6 +308,19 @@ function _certified_polynomial(
         candidate_ready,
     )
     transformation == :atan && return _certified_atan(
+        spec,
+        domain,
+        degree,
+        internal_format,
+        evaluation,
+        generation_precision,
+        proof_precision,
+        accuracy,
+        max_refinements;
+        precision_layout,
+        candidate_ready,
+    )
+    transformation in (:sinh, :cosh) && return _certified_hyperbolic(
         spec,
         domain,
         degree,

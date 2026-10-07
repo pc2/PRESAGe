@@ -227,7 +227,13 @@ function _polynomial_ranges(
             exact = _interval_mul(ranges[n.source], layout.scale_domain)
             scale = grids[n.source] - layout.scale_exponents[1]
         elseif n isa IR.ScaleByExponent
-            exact = _interval_mul(ranges[n.source], (_q(0), layout.scale_upper))
+            upper = get(
+                get(layout, :scale_uppers, Dict()),
+                i,
+                get(layout, :scale_upper, nothing),
+            )
+            upper === nothing && throw(ArgumentError("missing certified exponent scale"))
+            exact = _interval_mul(ranges[n.source], (_q(0), upper))
             # Exponents vary with the input. A single exact dyadic grid cannot
             # eliminate destination rounding across all these scales.
             scale = _polynomial_grid(f, exact) + 1
@@ -420,6 +426,8 @@ function certify_polynomial(
         return _certify_odd(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "atan" &&
         return _certify_atan(plan; precision, accuracy, max_refinements)
+    get(plan.settings, "transformation", "none") in ("sinh", "cosh") &&
+        return _certify_hyperbolic(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "exp" &&
         return _certify_exp(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "log" &&

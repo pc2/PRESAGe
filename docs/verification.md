@@ -833,14 +833,66 @@ rounding contribution; a feasible absolute target passes. Exp currently requires
 floating interfaces, a bounded interval and one shared kernel. Unproved residual
 coverage and possible overflow refuse certification. The uniform absolute bound
 does not establish correct rounding or an ulp guarantee. Stable bounded
-sinh/cosh reconstruction is next.
+sinh/cosh reconstruction is described below.
+
+## Sinh/cosh reconstruction
+
+[`examples/hyperbolic_search.jl`](../examples/hyperbolic_search.jl) generates
+binary16 sinh and cosh on `[-11.5,11.5]`, with absolute target 32. Kernel degree
+nine uses ten central Taylor coefficients and ten reduced exp coefficients in
+`FixedFormat(72,24)`. Three Horner evaluations share the declared stage formats.
+The tail scales by `2^(k-1)` and `2^(-k-1)` in binary64 before reconstruction
+and conversion to binary16. Both functions certify `16.00000003516688`.
+
+| Tail contribution | Certified upper bound |
+| --- | ---: |
+| Approximation after both exponent scalings | `3.476039e-8` |
+| Residual/coordinate errors after scaling | `2.174290e-10` |
+| Horner, scaling and reconstruction arithmetic | `1.890632e-10` |
+| Final output rounding | `16` |
+| Total | `16.00000003516688` |
+
+Central bounds are about `0.0004882812500190` for sinh and
+`0.0004882812500150` for cosh. The coefficient banks total 1,440 declared bits;
+three stage sets total 2,160 bits. Static IR contains 28 FMAs and two exponent
+scalings, plus dispatch and reconstruction. These counts are not device results.
+
+Every binary16 encoding is checked in both separate and fused evaluators against
+directed MPFR enclosures, with all visited numeric ranges and central/tail
+choices checked. Exhaustive compiled conformance covers portable/native sinh
+and AC/AC cosh. Directed tests cover all six portable/AC/AP fixed and native/AC
+floating combinations, raw and typed public interfaces, exponent transitions
+and branch neighbours. Both binary16 and binary64 tests include finite
+hyperbolic outputs beyond exp's output overflow point.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Certified sinh/cosh central and exponential tails | 3,134 | Fresh supervised generation, separate/FMA certificates, central and exponent boundaries, six backend combinations, stored recertification and finite results past exp overflow. |
+| Exhaustive binary16 sinh/cosh verification | 1,279,494 | Both functions and arithmetic modes over all encodings, directed MPFR bounds, lazy exceptional branches, visited ranges and two exhaustive compiled evaluators. |
+| Hyperbolic bounded branches and proof refusals | 602 | Central/tail/singleton/clipped/zero-only contracts, degree-zero generation, invalid identities/interfaces, mutated graphs, reduction failures, overflow and unmet budgets. |
+| Hyperbolic guard bits and custom precision | 624 | Floating/fixed internals, small custom formats, 100-bit inputs and 112-bit outputs, binary64 finite reconstruction beyond exp overflow, individual widths and official-header conformance. |
+| Hyperbolic search schema, precision search and CLI | 39 | Complete certified width reduction including both residual signs, configuration/report v11, actual CLI generation/replay and compiled AP/AC artifacts. |
+
+The five new groups pass 1,283,893 checks. Seven regression groups pass another
+327,350 checks, covering formats, plan/search schemas, IR and dynamic exp scaling,
+reduction and proof refusals. The targeted runs total twelve groups and 1,611,243
+checks with official vendor headers required. The standalone example and
+formatting pass. The complete runner was not repeated. The CLI fixtures were
+rerun after fixing their vendor include flags; the custom-precision group was
+rerun with the added binary64 overflow-transition cases.
+
+Hyperbolic contracts currently require floating interfaces, an explicit bounded
+interval and kernel degree 0:15. Central coefficients use a stored Taylor basis;
+tail coefficients use Sollya fpminimax. Both have direct stored-polynomial norm
+proofs. This is a uniform absolute bound, without an ulp or correct-rounding
+guarantee. Scaled erfc tails are next.
 
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
 rejected fixed overflow, including mixed interfaces and custom formats.
-Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log, atan-tail and exp
+Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log, atan-tail, exp and sinh/cosh
 kernels also have complete certificates.
 Segmented floating erf and other transformation families remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains

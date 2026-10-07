@@ -314,7 +314,7 @@ function _certified_exp(
     return _certify_exp(plan; precision = proof_precision, accuracy, max_refinements)
 end
 
-function _exp_reduction_bounds(plan, path, log2_bounds)
+function _exp_reduction_bounds(plan, path, log2_bounds; exponent_headroom = 1)
     0 < path.inverse_log2 < 2 && path.log2 > 0 ||
         throw(ArgumentError("invalid exp reduction constants"))
     ranges, rho = _polynomial_ranges(plan.program, path; stop_before = path.residual)
@@ -335,7 +335,7 @@ function _exp_reduction_bounds(plan, path, log2_bounds)
         product_error
     exact_overrides = Dict(path.residual => (-pre_radius, pre_radius))
     exponents = map(q -> numerator(q), ranges[path.exponent_node])
-    exponents[2] <= _emax(plan.spec.output_format) + 1 ||
+    exponents[2] <= _emax(plan.spec.output_format) + exponent_headroom ||
         throw(OverflowError("exp reconstruction may overflow"))
     # A zero lower scale encloses arbitrarily deep underflow without allocating
     # 2^k at the negative endpoint. Cap an entirely tiny upper scale conservatively.

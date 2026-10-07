@@ -9,7 +9,10 @@ not FPGA resource or timing estimates.
 function precision_cost(plan::PlanArtifact)
     precision = _stored_precision(plan)
     p = plan.program
-    rows = max(1, length(plan.segments))
+    rows =
+        get(plan.settings, "transformation", "none") in ("sinh", "cosh") ? 2 :
+        max(1, length(plan.segments))
+    evaluations = get(plan.settings, "transformation", "none") in ("sinh", "cosh") ? 3 : 1
     operations = [n for n in p.nodes if n isa Union{IR.Mul, IR.Add, IR.FMA}]
     operand_widths = [[_width(IR.format(p, i)) for i in IR.refs(n)] for n in operations]
     return (;
@@ -17,7 +20,8 @@ function precision_cost(plan::PlanArtifact)
                            sum(BigInt(_width(f)) for f in precision.coefficient_formats),
         coefficient_widths = [_width(f) for f in precision.coefficient_formats],
         stage_widths = [_width(f) for f in precision.stage_formats],
-        stage_bits = sum(BigInt(_width(f)) for f in precision.stage_formats),
+        stage_bits = BigInt(evaluations) *
+                     sum(BigInt(_width(f)) for f in precision.stage_formats),
         arithmetic_result_bits = sum(
             (BigInt(_width(n.format)) for n in operations);
             init = BigInt(0),
@@ -141,6 +145,29 @@ function _precision_proposals(result, step, minimum)
         return NamedTuple[]
     isempty(result.paths) && return NamedTuple[]
     ranges = _precision_ranges.(result.paths)
+    if get(result.plan.settings, "transformation", "none") in ("sinh", "cosh")
+        # Both residual signs execute the shared stage formats. Include their
+        # distinct ranges when proposing widths; every proposal is recertified.
+        pairs = Tuple{NamedTuple, Dict{Int, _Interval}}[]
+        for (p, r) in zip(layouts, ranges)
+            if p.tail
+                kmin, kmax = numerator.(r[p.exponent_node])
+                push!(pairs, (merge(p, (; reconstruction_bound = _pow2(Int(kmax - 1)))), r))
+                negative = merge(
+                    p.negative_kernel,
+                    (; reconstruction_bound = _pow2(Int(-kmin - 1))),
+                )
+                push!(pairs, (negative, r))
+            else
+                central =
+                    get(result.plan.settings, "transformation", "") == "sinh" ?
+                    merge(p, (; reconstruction_coordinate = p.argument)) : p
+                push!(pairs, (central, r))
+            end
+        end
+        layouts = first.(pairs)
+        ranges = last.(pairs)
+    end
     count = length(precision.coefficient_formats)
     proposals = NamedTuple[]
     for (kind, formats) in
