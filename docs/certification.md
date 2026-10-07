@@ -62,7 +62,7 @@ quantum, including underflow to zero. Dyadic grids, exact widening conversions
 and zero/unit identities eliminate unnecessary rounding allowances.
 
 Use `internal_format=FloatFormat(E,M+g)` for `g` extra fraction bits. The same
-format stores coefficients and rounds each Horner stage. Input conversion is
+format stores coefficients and rounds each Horner stage by default. Input conversion is
 exact when the wider format can represent the inputs. Final narrowing is
 bounded separately; if no output conversion exists, the final operation's
 rounding belongs to the arithmetic bound. More fraction bits do not enlarge
@@ -118,7 +118,7 @@ CPU conformance checks validate the emitted implementations locally.
 `certified_polynomial(spec; degree, internal_format, ...)` generates coefficients,
 builds the canonical Horner graph and returns its complete `CertificationResult`.
 It requires an explicit domain and a maximum degree in `0:32`. Coefficients and
-stages share the internal format; input and output formats remain independent.
+stages share the internal format by default; input and output formats remain independent.
 The supported arithmetic policies are the same as `certify_polynomial` above.
 
 ```julia
@@ -188,7 +188,8 @@ complete error certificate. Final output conversion is bounded separately.
 The canonical graph audit compares every threshold, row selector, centre and
 coefficient payload, scale exponent, arithmetic node, conversion and lazy guard.
 Metadata or a kernel label cannot authorize a changed graph. Coefficient rows
-share one format and one padded degree, using tables and a common evaluator.
+share one padded degree and a common evaluator. Their formats default to the
+coordinate format; individual formats are also supported as described below.
 All paths must prove their error budget; the reported total is their maximum.
 Certificate paths include input coverage, ideal and rounded coordinate domains,
 error contributions and reachable node ranges. Constant rows that skip coordinate
@@ -371,6 +372,80 @@ boundaries, exceptional values, ties and arbitrary-width arithmetic. Sampled
 reference errors are additional evidence and are reported separately. Correct
 rounding, near-zero ulp accuracy, synthesis-toolchain conformance and hardware
 performance require further work for polynomial evaluators.
+
+## Individual coefficient and stage precision
+
+`PolynomialPrecision(coordinate_format; coefficient_formats, stage_formats)`
+declares separate storage and arithmetic formats for degree 0–32 polynomial
+evaluators. Both lists have `d+1` entries in ascending power order:
+`a_0,…,a_d` and `h_0,…,h_d`. `h_d` is the initial coefficient load. Formats use
+one fixed or floating family, with independent input/output interfaces. Fixed
+arithmetic uses nearest-even rounding and rejected overflow. Lists are copied
+into tuples; each stage's format is shared across all segments.
+
+Pass `precision=layout` to `polynomial_plan`, `segmented_polynomial_plan` or
+`certified_polynomial`. The coordinate format becomes the internal default;
+an explicitly supplied internal format must match it. Generation accepts lists
+covering the requested maximum degree, truncating to the actual stored degree.
+Sollya receives each coefficient's fractional/significand precision separately.
+Each exported coefficient must fit its own declared storage range exactly.
+Coefficient generation precision and proof precision remain independent of
+these target formats.
+
+Before stage `k`, the evaluator explicitly converts the previous accumulator,
+coordinate and stored coefficient into `stage_formats[k+1]`. Fixed-to-fixed
+changes use `Quantize`; floating changes use `Convert`. Separate multiplication
+and addition each round, while FMA rounds once. Initial coefficient loading and
+final output conversion also execute explicitly when their formats differ.
+
+The certifier rebuilds the complete graph and tables from the stored layout,
+then compares payloads, format metadata, conversions, quantizers and arithmetic
+order. Every conversion and intermediate range is checked for overflow. For
+each stage, let `T_k` bound its actual rounded coordinate and `H_(k+1)` bound
+the ideal stored-polynomial accumulator. Error propagation is:
+
+```text
+C_d = 0
+V_d = initial coefficient conversion error
+C_k = T_k*C_(k+1) + (coordinate formation error + rho_tk)*H_(k+1)
+V_k = T_k*V_(k+1) + T_k*rho_hk + rho_ak + arithmetic rounding
+```
+
+The `rho` terms cover the coordinate, previous-accumulator and coefficient
+conversions. Arithmetic rounding is the separate product/addition sum or the
+single FMA bound. The stored-polynomial norm accounts for coefficient storage
+error, and final output rounding is added separately. Normalized branches retain
+their complete coverage and coordinate-formation proofs.
+
+### Bounded precision reduction
+
+`optimize_precision(baseline; max_attempts=64, job_timeout=60,
+total_timeout=300, bit_step=1, min_precision_bits=0)` accepts a certified bounded
+polynomial. It audits and freshly recertifies the baseline in an owned worker;
+this counts as the first attempt. It proposes fixed integer-range reductions,
+then fractional/significand reductions ordered by coordinate bounds and
+amplification through later stages. Estimates only order proposals.
+
+Coefficient format changes regenerate coefficients and their norm proof. Stage
+changes reuse exact stored coefficients, preserving constant payloads including
+negative zero, and recertify the complete evaluator.
+Only passing certificates with reduced declared storage/arithmetic widths are
+accepted. A failed reduction, worker failure or exhausted limit retains the last
+passing plan. The result's `stop_reason` distinguishes attempt/deadline/choice
+exhaustion and baseline failure. No globally optimal layout is claimed.
+
+Coordinate formats stay fixed. Floating fraction bits can shrink to one; exponent
+headroom stays unchanged. Fixed formats retain at least one integer bit, with
+integer widths checked across all rows. Additional rounding policies require
+their own proof and conformance coverage.
+
+`precision_cost(plan)` counts coefficient bits, per-coefficient/per-stage widths,
+static arithmetic result and operand bits, table bits and conversions.
+`write_precision_report` records before/after counts, exact plans, complete
+certificates and accepted/rejected history. These structural counts do not
+estimate DSP/BRAM use, throughput or timing. Plans with explicit layouts use
+schema v5; ordered search configurations use v3 with `precisions` aligned to
+internal format choices. Stored plans replay without another coefficient search.
 
 ## Exhaustive binary16 lookup tables
 

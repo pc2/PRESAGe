@@ -1,6 +1,10 @@
 # Recover the stored polynomial, then reconstruct the entire supported program.
 # No coefficient metadata or kernel label can substitute for this graph audit.
 function _polynomial_audit(plan)
+    if plan.precision !== nothing
+        isempty(plan.segments) || throw(ArgumentError("expected an untabled polynomial"))
+        return only(_precision_audit(plan).paths)
+    end
     spec, p = plan.spec, plan.program
     p !== nothing || throw(ArgumentError("missing polynomial program"))
     isempty(plan.segments) && plan.dispatch === nothing && isempty(p.tables) ||
@@ -117,7 +121,7 @@ end
 # Format-preserving zero/unit identities and widening conversions are exact even
 # when a single grid for an interval crossing zero loses significand information.
 function _polynomial_node_exact(p, n, f, ranges)
-    if n isa IR.Convert
+    if n isa Union{IR.Convert, IR.Quantize}
         source = IR.format(p, n.source)
         source == f && return true
         return source isa FloatFormat &&
@@ -179,7 +183,7 @@ function _polynomial_ranges(p, layout)
             ranges[i] = ranges[n.source]
             grids[i] = grids[n.source]
             continue
-        elseif n isa IR.Convert
+        elseif n isa Union{IR.Convert, IR.Quantize}
             exact, scale = ranges[n.source], grids[n.source]
         elseif n isa IR.ScalePow2
             exact = _interval_mul(ranges[n.source], _singleton(_pow2(n.exponent)))
@@ -220,7 +224,8 @@ end
 
 function _polynomial_arithmetic(p, layout, ranges, rho)
     output = layout.result == layout.final ? _q(0) : rho[layout.result]
-    isempty(layout.stages) && return _q(0), _q(0), output
+    seed_error = haskey(layout, :initial) ? get(rho, layout.initial, _q(0)) : _q(0)
+    isempty(layout.stages) && return _q(0), seed_error, output
     eta = if haskey(layout, :exponent)
         # The stored centre is exact in the ideal transformation. Input
         # conversion and subtraction errors scale together; scaling adds its
@@ -231,13 +236,24 @@ function _polynomial_arithmetic(p, layout, ranges, rho)
     else
         get(rho, layout.coordinate, _q(0))
     end
-    tbound = _interval_magnitude(ranges[layout.coordinate])
     exact = _singleton(layout.coefficients[end])
-    coordinate, arithmetic = _q(0), _q(0)
+    coordinate, arithmetic = _q(0), seed_error
     for stage in layout.stages
-        coordinate = tbound * coordinate + eta * _interval_magnitude(exact)
+        coordinate_node = get(stage, :coordinate, layout.coordinate)
+        tbound = _interval_magnitude(ranges[coordinate_node])
+        stage_eta =
+            eta + (
+                coordinate_node == layout.coordinate ? _q(0) :
+                get(rho, coordinate_node, _q(0))
+            )
+        coordinate = tbound * coordinate + stage_eta * _interval_magnitude(exact)
         rounding =
             rho[stage.result] + (stage.product === nothing ? _q(0) : rho[stage.product])
+        if haskey(stage, :operand)
+            stage.operand == stage.previous ||
+                (rounding += tbound * get(rho, stage.operand, _q(0)))
+            rounding += get(rho, stage.coefficient_value, _q(0))
+        end
         arithmetic = tbound * arithmetic + rounding
         exact = _interval_add(
             _interval_mul(exact, layout.domain),
@@ -313,8 +329,10 @@ function certify_polynomial(
     precision >= 64 || throw(ArgumentError("proof precision must be at least 64"))
     0 < accuracy < 1 || throw(ArgumentError("norm accuracy must be between zero and one"))
     0 <= max_refinements <= 8 || throw(ArgumentError("refinements must be in 0:8"))
-    get(plan.settings, "kernel", "") == "normalized_segmented_horner" &&
-        return _certify_segmented(plan; precision, accuracy, max_refinements)
+    (
+        plan.precision !== nothing ||
+        get(plan.settings, "kernel", "") == "normalized_segmented_horner"
+    ) && return _certify_segmented(plan; precision, accuracy, max_refinements)
     settings = Dict(
         "method" => "fixed_polynomial_horner",
         "precision" => string(precision),
@@ -419,11 +437,13 @@ function certify_plan(
 end
 
 function _has_supported_certificate(plan)
+    plan.precision !== nothing && return true
     get(plan.settings, "kernel", "") in (
         "erf_fixed_horner",
         "fixed_polynomial_horner",
         "floating_polynomial_horner",
         "normalized_segmented_horner",
+        "precision_polynomial_horner",
         "binary16_lut",
     ) && return true
     try

@@ -1,11 +1,16 @@
+_search_schema_version(config) =
+    any(!isnothing, config.precisions) ? 3 : config.segments == (1,) ? 1 : 2
+
 function _search_config_fields(config::PolynomialSearchConfig)
     fields = Dict{String, Any}(
         "order" =>
             config.segments == (1,) ? "degree_then_format" :
             "segment_then_degree_then_format",
         "degrees" => collect(config.degrees),
-        "internal_formats" =>
-            [Dict("format" => _format_data(f)) for f in config.internal_formats],
+        "internal_formats" => [
+            precision === nothing ? Dict("format" => _format_data(f)) :
+            Dict("format" => _format_data(f), "precision" => _precision_data(precision)) for (f, precision) in zip(config.internal_formats, config.precisions)
+        ],
         "settings" => Dict(
             "evaluation" => string(config.evaluation),
             "generation_precision" => config.generation_precision,
@@ -19,7 +24,7 @@ function _search_config_fields(config::PolynomialSearchConfig)
             "total_timeout_seconds" => config.total_timeout,
         ),
     )
-    config.segments == (1,) || (fields["segments"] = collect(config.segments))
+    _search_schema_version(config) == 1 || (fields["segments"] = collect(config.segments))
     return fields
 end
 
@@ -27,7 +32,7 @@ function _search_config_data(config::PolynomialSearchConfig)
     return merge(
         Dict(
             "schema" => "presage-search-config",
-            "schema_version" => config.segments == (1,) ? 1 : 2,
+            "schema_version" => _search_schema_version(config),
         ),
         _search_config_fields(config),
     )
@@ -57,18 +62,24 @@ function _read_search_config(data)
     get(data, "schema", nothing) == "presage-search-config" ||
         throw(ArgumentError("unknown search configuration schema"))
     version = get(data, "schema_version", nothing)
-    version isa Integer && !(version isa Bool) && version in (1, 2) ||
+    version isa Integer && !(version isa Bool) && version in (1, 2, 3) ||
         throw(ArgumentError("unsupported search configuration version"))
     (version == 1 ? !haskey(data, "segments") : haskey(data, "segments")) ||
         throw(ArgumentError("segment choices require search configuration v2"))
-    order = version == 1 ? "degree_then_format" : "segment_then_degree_then_format"
+    order =
+        version == 1 || (version == 3 && data["segments"] == [1]) ? "degree_then_format" :
+        "segment_then_degree_then_format"
     get(data, "order", order) == order || throw(ArgumentError("unsupported search order"))
     haskey(data, "degrees") && haskey(data, "internal_formats") ||
         throw(ArgumentError("search configuration requires degrees and internal_formats"))
     choices = data["internal_formats"]
     choices isa AbstractVector || throw(ArgumentError("internal_formats must be an array"))
     formats = map(choices) do choice
-        _search_keys(choice, ("format",), "internal format choice")
+        _search_keys(
+            choice,
+            version < 3 ? ("format",) : ("format", "precision"),
+            "internal format choice",
+        )
         haskey(choice, "format") ||
             throw(ArgumentError("internal choice requires a format"))
         value = choice["format"]
@@ -89,6 +100,13 @@ function _read_search_config(data)
             )
         end
     end
+    precisions = [
+        haskey(choice, "precision") ? _read_precision(choice["precision"]) : nothing for
+        choice in choices
+    ]
+    version == 3 &&
+        !any(!isnothing, precisions) &&
+        throw(ArgumentError("search configuration v3 requires precision layouts"))
     settings = get(data, "settings", Dict{String, Any}())
     limits = get(data, "limits", Dict{String, Any}())
     _search_keys(
@@ -111,6 +129,7 @@ function _read_search_config(data)
         return PolynomialSearchConfig(
             degrees = data["degrees"],
             internal_formats = formats,
+            precisions = precisions,
             segments = get(data, "segments", (1,)),
             evaluation = Symbol(get(settings, "evaluation", "separate")),
             generation_precision = get(settings, "generation_precision", 256),

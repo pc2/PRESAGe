@@ -47,9 +47,24 @@ _polynomial_domain(spec::FunctionSpec) =
 function polynomial_plan(
     spec::FunctionSpec,
     coefficients;
-    internal_format::Union{FloatFormat, FixedFormat} = spec.output_format,
+    precision::Union{Nothing, PolynomialPrecision} = nothing,
+    internal_format::Union{FloatFormat, FixedFormat} = precision === nothing ?
+                                                       spec.output_format :
+                                                       precision.coordinate_format,
     evaluation::Symbol = :separate,
 )
+    if precision !== nothing
+        internal_format == precision.coordinate_format || throw(
+            ArgumentError("internal format must match the precision coordinate format"),
+        )
+        return _precision_plan(
+            spec,
+            [collect(coefficients)],
+            precision,
+            evaluation;
+            segmented = false,
+        )
+    end
     f = internal_format
     nodes = IR.Node[IR.Input(spec.input_format)]
     coordinate = f == spec.input_format ? 1 : _push!(nodes, IR.Convert(1, f))

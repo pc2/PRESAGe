@@ -1,18 +1,19 @@
 # Local verification
 
-Verified on 6 October 2026 on macOS, Apple Silicon, using the sibling Sollya.jl
+Verified on 7 October 2026 on macOS, Apple Silicon, using the sibling Sollya.jl
 0.1.0 checkout and installed Sollya 8.0 (Homebrew `8.0_3`). CPU evaluators use
 LLVM/Clang 23.1.2; the CMake workflow uses CMake 4.4.3. Direct primitive checks
 use each Julia installation's own MPFR/GMP runtime.
 
 ## Results
 
-All **40 test groups pass: 1,261,240 checks on Julia 1.13.1**, with four
-threads and vendor-header tests required. Numerical/CPU groups passed through
-the offline `scripts/check.jl` runner; affected search/generation groups and all
-new segmentation groups passed in a separate rerun after the fix for a timeout
-before worker launch. The count is dominated by exhaustive encoding checks, not by function
-coverage or numerical certificates.
+All **46 test groups are verified: 1,269,303 checks on Julia 1.13.1**, with four
+threads and vendor-header tests required. The 40 existing groups passed through
+the offline `scripts/check.jl` runner. That process had loaded the package before
+the final precision fixes and stopped in the new artifact group; all six precision
+groups then passed in a fresh process against the final code, including 8,063 new
+checks. Formatting is clean. The count is dominated by exhaustive encoding checks,
+not by function coverage or numerical certificates.
 
 | Group | Checks | Coverage |
 | --- | ---: | --- |
@@ -56,6 +57,12 @@ coverage or numerical certificates.
 | Segmented graph and table audit | 32 | Rejected changes to comparisons, thresholds, indices, every centre/coefficient entry, table layout, scale, arithmetic, metadata and guards; matching changed coefficients require a fresh norm proof. |
 | Segment boundaries and exhaustive binary16 | 285,949 | Nonrepresentable binary32 endpoints and boundary neighbours, signed zeros, all 64 rows, every binary16 encoding against MPFR and portable/AC/AP C++ with lazy outside-domain behavior. |
 | Segment choices, CLI and replay | 1,304 | Exact version 2 configuration round trips and validation, single-polynomial budget failure followed by segmented success, compiled CLI output and identical stored-plan replay. |
+| Individual precision formats and exact artifacts | 30 | Immutable format lists, wide floating storage, exact schema v5 replay, independent interfaces, kernel-label independence, negative-zero payload preservation and invalid layout rejection. |
+| Precision conversion error and exhaustive CPU conformance | 1,782 | Every small input encoding, seed/coordinate/accumulator conversions, nonzero error contributions, positive/negative ties, separate/FMA, exact node ranges and portable/AC/AP C++ APIs. |
+| Precision overflow refusal and canonical graph audit | 22 | Changed quantizers, arithmetic order, coefficient tables and format metadata; fixed/floating conversion and arithmetic overflow refusal. |
+| Generated individual storage and stage formats | 5,200 | Fixed/floating segmented exp in separate/FMA modes, mathematical enclosures, all native CPU backends, width reductions against common-format baselines, schema v3 search history, decimal/rational equality and singleton layout truncation. |
+| Bounded certified precision optimization and reports | 693 | Fresh baseline proofs, accepted storage/stage reductions, rejected over-budget changes, exact report replay, unchanged floating exponent headroom, attempt/deadline limits and owned-worker cleanup. |
+| Precision configuration CLI and replay | 336 | Actual v3 CLI generation, v5 stored replay through portable/AP C++, retained certified outputs after a failed precision choice, distinct layout choices and malformed-field rejection. |
 
 The custom floating CMake/CTest build passes with binary128 interfaces, a
 custom 160-fraction-bit internal format and fused polynomial arithmetic,
@@ -330,6 +337,43 @@ generation clears stale reports. Search configuration round trips cover fixed,
 custom and wide floating formats, exact rational settings, defaults and rejected
 unknown/invalid fields.
 
+## Individual coefficient and stage precision
+
+The [precision example](../examples/precision_search.jl) generates a four-row
+degree-five fixed exp FMA evaluator on `[-1,1]`, with `Fixed(9,3)` input and
+`Fixed(24,4)` output. Its coordinate format remains `Fixed(32,6)`. Ascending
+coefficient widths are `[25,23,22,21,20,19]`; accumulator widths are
+`[29,28,27,26,25,24]`. Its complete uniform bound is about `1.439789e-6`, below
+`2^-18`, compared with about `5.409219e-7` for the common-format baseline.
+
+| Declared structural count | Common format | Individual formats |
+| --- | ---: | ---: |
+| Coefficient storage bits | 768 | 520 |
+| Stage-width sum, including initial load | 192 | 159 |
+| Static arithmetic result-width sum | 192 | 167 |
+| Static arithmetic operand-bit sum | 544 | 469 |
+| Centre/coefficient table bits | 896 | 648 |
+| Explicit conversions | 2 | 18 |
+
+Both fixed and floating separate/FMA fixtures reduce declared widths while
+retaining complete bounds. Every accepted small input is checked against a
+mathematical enclosure and every visited node's certified range; ordinary C++
+with official AC/AP headers matches the exact interpreter. Exhaustive small
+fixed/custom formats additionally exercise seed conversion, narrowing stage
+coordinates and accumulators, positive/negative halfway cases and lazy guards.
+Overflow and graph/table/format mutations are refused.
+
+The bounded optimizer starts with a fresh baseline certificate and accepts only
+certified reductions. Tests confirm separate coefficient regeneration and stage
+recertification, preservation of the last passing plan, exact report replay,
+attempt/deadline limits and rejection of a completed proof in a worker that
+continues running beyond its deadline. The CLI retains all individual formats
+and preserves valid generated outputs after a failed precision choice.
+
+These counts describe storage declarations and static IR widths. Extra
+conversions are visible in the report; no FPGA area, timing or throughput
+improvement is established by local software verification.
+
 ## Floating polynomial certificates
 
 Degree-thirteen erf and exp kernels on `[-1,1]` have uniform certificates with
@@ -370,8 +414,10 @@ and floating internals against identical binary32 contracts using FMA:
 The stored exp floating plan was regenerated with certification and compiled
 through CMake/CTest in `build/floating-certified-cmake`. CTest passes against
 the exact interpreter; the floating-only executable has no GMP linkage.
-Coefficients and stages still share one internal format. Precision search,
-individual widths and segmented floating certification remain later work.
+These fixtures use a common internal format. Individual widths, precision search
+and normalized segmented polynomial certification are now supported. The
+specialized magnitude/tail segmented floating erf graph remains outside the
+uniform proof.
 
 ## Segmented floating candidate checks
 
@@ -432,7 +478,7 @@ rejected fixed overflow, including mixed interfaces and custom formats.
 Segmented floating erf and general transformations remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains
 unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces;
-a separate report records the
+schema v5 adds individual coefficient/stage precision; a separate report records the
 numerical proof. Native floating CPU arithmetic supports binary32/binary64 with
 nearest-even rounding; official AC arithmetic supports custom and wide formats.
 Binary16 interfaces and exact conversions are supported,

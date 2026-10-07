@@ -181,7 +181,9 @@ fixed overflow. It covers conversions, each arithmetic quantizer, output roundin
 subnormals, exponent limits and every numerical node's range. Coefficients and internal widths remain explicit
 choices; an inadequate width or conservative interval can refuse a proof.
 Extra fraction bits use `internal_format=FloatFormat(E,M+g)`. Coefficients and
-stages currently share that format. See [the numerical proof](certification.md#polynomial-kernels).
+stages share that format by default. `PolynomialPrecision` supplies individual
+storage and stage formats with explicit conversions and quantizers. See
+[the numerical proof](certification.md#individual-coefficient-and-stage-precision).
 
 ## Fresh erf candidate
 

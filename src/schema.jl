@@ -1,4 +1,4 @@
-const _SCHEMA_VERSION = 4
+const _SCHEMA_VERSION = 5
 _has_fixed(p::IR.Program) =
     any(f -> f isa FixedFormat, p.types) || any(t -> t.format isa FixedFormat, p.tables)
 _rational_text(q::Rational) = "$(numerator(q))/$(denominator(q))"
@@ -58,10 +58,52 @@ function _spec_data(s::FunctionSpec)
     return spec
 end
 
+_precision_data(p::PolynomialPrecision) = Dict(
+    "coordinate_format" => _format_data(p.coordinate_format),
+    "coefficient_formats" =>
+        [Dict("format" => _format_data(f)) for f in p.coefficient_formats],
+    "stage_formats" => [Dict("format" => _format_data(f)) for f in p.stage_formats],
+)
+
+function _read_precision(data)
+    data isa AbstractDict &&
+        Set(keys(data)) ==
+        Set(("coordinate_format", "coefficient_formats", "stage_formats")) ||
+        throw(ArgumentError("invalid polynomial precision fields"))
+    function format(value)
+        if value isa AbstractDict
+            fields = ("kind", "width", "integer_bits", "signed", "rounding", "overflow")
+            Set(keys(value)) == Set(fields) ||
+                throw(ArgumentError("invalid fixed precision fields"))
+        end
+        return _read_format(value)
+    end
+    function formats(name)
+        items = data[name]
+        items isa AbstractVector || throw(ArgumentError("$name must be an array"))
+        return map(items) do item
+            item isa AbstractDict && Set(keys(item)) == Set(("format",)) ||
+                throw(ArgumentError("invalid precision format entry"))
+            format(item["format"])
+        end
+    end
+    try
+        return PolynomialPrecision(
+            format(data["coordinate_format"]);
+            coefficient_formats = formats("coefficient_formats"),
+            stage_formats = formats("stage_formats"),
+        )
+    catch err
+        err isa Union{MethodError, TypeError, KeyError} || rethrow()
+        throw(ArgumentError("invalid precision format: " * sprint(showerror, err)))
+    end
+end
+
 function _plan_data(p::PlanArtifact)
     fixedio = p.spec.input_format isa FixedFormat || p.spec.output_format isa FixedFormat
     guarded = p.program !== nothing && any(n -> n isa IR.Guard, p.program.nodes)
     version =
+        p.precision !== nothing ? 5 :
         fixedio || guarded ? 4 : p.program === nothing ? 1 : _has_fixed(p.program) ? 3 : 2
     d = Dict{String, Any}(
         "schema" => "presage-plan",
@@ -71,6 +113,7 @@ function _plan_data(p::PlanArtifact)
     )
     isempty(p.settings) || (d["settings"] = p.settings)
     p.program === nothing || (d["program"] = _program_data(p.program))
+    p.precision === nothing || (d["precision"] = _precision_data(p.precision))
     if !isempty(p.segments)
         d["segments"] = [
             Dict(
@@ -106,6 +149,9 @@ function _read_plan(d)
     haskey(d, "program") &&
         d["schema_version"] < 2 &&
         throw(ArgumentError("arithmetic programs require schema v2"))
+    haskey(d, "precision") &&
+        d["schema_version"] < 5 &&
+        throw(ArgumentError("individual precision requires plan schema v5"))
     s = d["spec"]
     domain = if haskey(s, "domain")
         length(s["domain"]) == 2 || throw(ArgumentError("need two domain bounds"))
@@ -164,6 +210,7 @@ function _read_plan(d)
         segments,
         settings = get(d, "settings", Dict{String, String}()),
         program,
+        precision = haskey(d, "precision") ? _read_precision(d["precision"]) : nothing,
     )
 end
 read_plan(io::IO) = _read_plan(TOML.parse(read(io, String)))

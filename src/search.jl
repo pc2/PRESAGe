@@ -1,16 +1,19 @@
 """
-    PolynomialSearchConfig(; degrees, internal_formats, segments=(1,), evaluation=:separate,
+    PolynomialSearchConfig(; degrees, internal_formats, precisions=nothing, segments=(1,), evaluation=:separate,
         generation_precision=256, proof_precision=256, accuracy=1//1024,
         max_refinements=2, max_attempts=64, job_timeout=60, total_timeout=300)
 
 Finite, ordered choices and limits for `search_polynomial`. Visit segment counts,
 then degrees, then internal formats, each in the supplied order.
 Formats are explicit: no integer or exponent range is changed automatically.
+Optional `precisions` align one `PolynomialPrecision` (or `nothing` for shared
+formats) with each internal format choice. Their lists cover the largest degree.
 Timeouts are positive, finite seconds and include process startup.
 """
 struct PolynomialSearchConfig
     degrees::Tuple{Vararg{Int}}
     internal_formats::Tuple{Vararg{Union{FloatFormat, FixedFormat}}}
+    precisions::Tuple{Vararg{Union{Nothing, PolynomialPrecision}}}
     segments::Tuple{Vararg{Int}}
     evaluation::Symbol
     generation_precision::Int
@@ -23,6 +26,7 @@ struct PolynomialSearchConfig
     function PolynomialSearchConfig(;
         degrees,
         internal_formats,
+        precisions = nothing,
         segments = (1,),
         evaluation::Symbol = :separate,
         generation_precision::Integer = 256,
@@ -43,9 +47,20 @@ struct PolynomialSearchConfig
             )
         all(f -> f isa Union{FloatFormat, FixedFormat}, internal_formats) ||
             throw(ArgumentError("internal choices must be floating or fixed formats"))
-        length(unique(degrees)) == length(degrees) &&
-            length(unique(internal_formats)) == length(internal_formats) ||
+        length(unique(degrees)) == length(degrees) ||
             throw(ArgumentError("search choices must not contain duplicates"))
+        layouts =
+            precisions === nothing ? fill(nothing, length(internal_formats)) : precisions
+        layouts isa Union{Tuple, AbstractVector} &&
+            length(layouts) == length(internal_formats) &&
+            all(p -> p isa Union{Nothing, PolynomialPrecision}, layouts) ||
+            throw(ArgumentError("precision choices must match the internal format list"))
+        length(unique(collect(zip(internal_formats, layouts)))) ==
+        length(internal_formats) ||
+            throw(ArgumentError("search choices must not contain duplicates"))
+        for (format, layout) in zip(internal_formats, layouts)
+            _validate_precision_request(layout, maximum(degrees), format)
+        end
         segments isa Union{Tuple, AbstractVector} && !isempty(segments) ||
             throw(ArgumentError("segments must be a nonempty finite vector or tuple"))
         foreach(_validate_segment_count, segments)
@@ -78,6 +93,7 @@ struct PolynomialSearchConfig
         new(
             Tuple(Int.(degrees)),
             Tuple(internal_formats),
+            Tuple(layouts),
             Tuple(Int.(segments)),
             evaluation,
             Int(generation_precision),
@@ -96,6 +112,7 @@ struct SearchAttempt
     degree::Int
     internal_format::Union{FloatFormat, FixedFormat}
     segments::Int
+    precision::Union{Nothing, PolynomialPrecision}
     status::Symbol
     elapsed_seconds::Float64
     plan::Union{Nothing, PlanArtifact}
@@ -133,20 +150,33 @@ function _polynomial_worker_main(args)
     request = deserialize(joinpath(directory, "request"))
     config = request.config
     try
-        result = _certified_polynomial(
-            request.spec,
-            request.domain,
-            request.degree,
-            request.internal_format,
-            config.evaluation,
-            config.generation_precision,
-            config.proof_precision,
-            config.accuracy,
-            config.max_refinements;
-            segments = request.segments,
-            candidate_ready = plan ->
-                _worker_save(joinpath(directory, "candidate"), _plan_data(plan)),
-        )
+        stored = get(request, :stored_plan, nothing)
+        result = if stored === nothing
+            _certified_polynomial(
+                request.spec,
+                request.domain,
+                request.degree,
+                request.internal_format,
+                config.evaluation,
+                config.generation_precision,
+                config.proof_precision,
+                config.accuracy,
+                config.max_refinements;
+                segments = request.segments,
+                precision_layout = request.precision,
+                candidate_ready = plan ->
+                    _worker_save(joinpath(directory, "candidate"), _plan_data(plan)),
+            )
+        else
+            plan = _reformat_polynomial(_read_plan(stored), request.precision)
+            _worker_save(joinpath(directory, "candidate"), _plan_data(plan))
+            certify_plan(
+                plan;
+                precision = config.proof_precision,
+                accuracy = config.accuracy,
+                max_refinements = config.max_refinements,
+            )
+        end
         # Encode the IR with its existing schema: raw Julia serialization does
         # not reliably reconstruct tuples containing Type{Bool} in IR.Program.
         _worker_save(
@@ -221,6 +251,7 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
                     request.degree,
                     request.internal_format,
                     request.segments,
+                    request.precision,
                     :timeout,
                     _elapsed(started),
                     nothing,
@@ -303,6 +334,7 @@ function _run_polynomial_job(request, search_started; worker_command, process_st
             request.degree,
             request.internal_format,
             request.segments,
+            request.precision,
             status,
             elapsed,
             plan,
@@ -366,13 +398,13 @@ function _search_polynomial(
     )
     for segments in config.segments,
         degree in config.degrees,
-        internal_format in config.internal_formats
+        (internal_format, precision) in zip(config.internal_formats, config.precisions)
 
         _search_remaining(started, config.total_timeout) <= 0 &&
             return finish(:search_limit, nothing, :total_deadline)
         length(attempts) >= config.max_attempts &&
             return finish(:search_limit, nothing, :attempt_limit)
-        request = (; spec, config, domain, degree, internal_format, segments)
+        request = (; spec, config, domain, degree, internal_format, segments, precision)
         attempt, deadline =
             _run_polynomial_job(request, started; worker_command, process_started)
         push!(attempts, attempt)
@@ -396,6 +428,8 @@ function _search_data(result::PolynomialSearchResult)
             "reason" => attempt.reason,
         )
         config.segments == (1,) || (data["segments"] = attempt.segments)
+        attempt.precision === nothing ||
+            (data["precision"] = _precision_data(attempt.precision))
         attempt.plan === nothing || (data["plan"] = _plan_data(attempt.plan))
         attempt.certificate === nothing ||
             (data["certificate"] = _certificate_data(attempt.certificate))
@@ -403,7 +437,7 @@ function _search_data(result::PolynomialSearchResult)
     end
     data = Dict{String, Any}(
         "schema" => "presage-search",
-        "schema_version" => config.segments == (1,) ? 1 : 2,
+        "schema_version" => _search_schema_version(config),
         "spec" => _spec_data(result.spec),
         "status" => string(result.status),
         "stop_reason" => string(result.stop_reason),

@@ -1,7 +1,8 @@
 function _check_generated_coefficients(coefficients, format)
     for (i, coefficient) in enumerate(coefficients)
         stored = try
-            _polynomial_value(_polynomial_round(coefficient, format), format)
+            f = format isa Union{Tuple, AbstractVector} ? format[i] : format
+            _polynomial_value(_polynomial_round(coefficient, f), f)
         catch err
             err isa Union{ArgumentError, OverflowError} || rethrow()
             throw(ArgumentError("coefficient of x^$(i - 1) exceeds its storage format"))
@@ -45,8 +46,9 @@ function _generated_polynomial_coefficients(
             if domain[1] == domain[2]
                 # Remez/fpminimax need a nondegenerate interval. A point enclosure
                 # supplies a constant candidate; its error is still certified.
-                word = _polynomial_round((lower + upper) / 2, format)
-                return [_polynomial_value(word, format)]
+                f0 = format isa Union{Tuple, AbstractVector} ? first(format) : format
+                word = _polynomial_round((lower + upper) / 2, f0)
+                return [_polynomial_value(word, f0)]
             end
             # An exact polynomial that already fits needs no approximation search.
             exact = try
@@ -57,8 +59,11 @@ function _generated_polynomial_coefficients(
                 nothing
             end
             exact === nothing || return exact
-            arithmetic = format isa FixedFormat ? :fixed : :floating
-            bits = format isa FixedFormat ? _fraction(format) : format.fraction_bits + 1
+            formats =
+                format isa Union{Tuple, AbstractVector} ? collect(format) :
+                fill(format, degree + 1)
+            arithmetic = first(formats) isa FixedFormat ? :fixed : :floating
+            bits = [f isa FixedFormat ? _fraction(f) : f.fraction_bits + 1 for f in formats]
             polynomial = keep(
                 Sollya.fpminimax(f, degree, bits, interval; error = :absolute, arithmetic),
             )
@@ -71,13 +76,15 @@ function _generated_polynomial_coefficients(
 end
 
 """
-    certified_polynomial(spec; degree, internal_format=spec.output_format,
+    certified_polynomial(spec; degree, internal_format=spec.output_format, precision=nothing,
                          segments=1, evaluation=:separate, generation_precision=256,
                          proof_precision=256, accuracy=1//1024, max_refinements=2)
 
 Generate and certify one bounded polynomial evaluator without supplied coefficients.
-The contract requires an explicit finite domain. Degree is an upper limit in `0:32`; coefficients
-and Horner stages share `internal_format`. Fixed formats require nearest-even
+The contract requires an explicit finite domain. Degree is an upper limit in `0:32`.
+Coefficients and Horner stages default to `internal_format`. Supply a
+`PolynomialPrecision` to choose coefficient storage and stage formats separately;
+its coordinate format becomes the internal default. Fixed formats require nearest-even
 rounding and rejected overflow. Input and output formats remain independent.
 
 Sollya coefficient formats use fixed fractional bits or floating significand bits;
@@ -99,7 +106,10 @@ function certified_polynomial(
     spec::FunctionSpec;
     degree::Integer,
     segments::Integer = 1,
-    internal_format::Union{FloatFormat, FixedFormat} = spec.output_format,
+    precision::Union{Nothing, PolynomialPrecision} = nothing,
+    internal_format::Union{FloatFormat, FixedFormat} = precision === nothing ?
+                                                       spec.output_format :
+                                                       precision.coordinate_format,
     evaluation::Symbol = :separate,
     generation_precision::Integer = 256,
     proof_precision::Integer = 256,
@@ -117,6 +127,7 @@ function certified_polynomial(
         max_refinements,
     )
     _validate_segment_request(spec, segments, internal_format)
+    _validate_precision_request(precision, degree, internal_format)
     return _certified_polynomial(
         spec,
         domain,
@@ -128,7 +139,22 @@ function certified_polynomial(
         _q(accuracy),
         Int(max_refinements);
         segments = Int(segments),
+        precision_layout = precision,
     )
+end
+
+function _validate_precision_request(precision, degree, format)
+    precision === nothing && return nothing
+    format == precision.coordinate_format ||
+        throw(ArgumentError("internal format must match the precision coordinate format"))
+    length(precision.coefficient_formats) >= degree + 1 ||
+        throw(ArgumentError("precision layout is shorter than the requested degree"))
+    for f in precision.coefficient_formats
+        bits = f isa FixedFormat ? _fraction(f) : f.fraction_bits + 1
+        typemin(Cint) <= bits <= typemax(Cint) ||
+            throw(ArgumentError("coefficient precision must fit a C int"))
+    end
+    return nothing
 end
 
 function _validate_segment_request(spec, segments, format)
@@ -221,6 +247,7 @@ function _certified_polynomial(
     accuracy,
     max_refinements;
     segments = 1,
+    precision_layout = nothing,
     candidate_ready = identity,
 )
     settings = Dict(
@@ -230,15 +257,24 @@ function _certified_polynomial(
     )
     segments > 1 && (settings["segments"] = string(segments))
     candidate = try
+        storage =
+            precision_layout === nothing ? internal_format :
+            _precision_prefix(precision_layout, degree + 1).coefficient_formats
         if segments == 1
             coefficients = _generated_polynomial_coefficients(
                 spec,
                 domain,
                 Int(degree),
-                internal_format,
+                storage,
                 Int(generation_precision),
             )
-            polynomial_plan(spec, coefficients; internal_format, evaluation)
+            polynomial_plan(
+                spec,
+                coefficients;
+                internal_format,
+                evaluation,
+                precision = precision_layout,
+            )
         else
             geometry = _segment_geometry(spec, segments, internal_format)
             rows = [
@@ -246,7 +282,7 @@ function _certified_polynomial(
                     spec,
                     geometry.normalized_domains[i],
                     degree,
-                    internal_format,
+                    storage,
                     generation_precision;
                     normalization = (
                         center = geometry.centers[i],
@@ -254,7 +290,13 @@ function _certified_polynomial(
                     ),
                 ) for i = 1:segments
             ]
-            segmented_polynomial_plan(spec, rows; internal_format, evaluation)
+            segmented_polynomial_plan(
+                spec,
+                rows;
+                internal_format,
+                evaluation,
+                precision = precision_layout,
+            )
         end
     catch err
         err isa Union{Sollya.SollyaError, ArgumentError, OverflowError} || rethrow()
@@ -275,6 +317,7 @@ function _certified_polynomial(
         spec;
         program = candidate.program,
         segments = candidate.segments,
+        precision = candidate.precision,
         settings = merge(candidate.settings, settings),
     )
     candidate_ready(plan)

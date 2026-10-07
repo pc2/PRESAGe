@@ -38,6 +38,15 @@ can be used with the same CLI command and exp contract. Generation and proof of
 all rows share one attempt deadline; stored segmented plans replay without
 another coefficient search.
 
+For individual coefficient/stage formats, set `precisions=[layout,…]` in
+`PolynomialSearchConfig`, aligned with `internal_formats`. Each layout must
+cover the largest requested degree and use that choice's coordinate format.
+`write_search_config` writes schema v3, which the same CLI reads. Explicit
+precision plans use schema v5 and retain all target formats during replay.
+See the [precision example](../examples/precision_search.jl), which also writes
+a configuration for CLI use. Precision optimization has its own Julia API and
+report; emit its selected stored plan through the existing replay command.
+
 ## Options
 
 With `--search-config`, the CLI accepts `--name`,

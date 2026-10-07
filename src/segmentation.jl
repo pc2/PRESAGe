@@ -152,7 +152,7 @@ function _segmented_layout(spec, rows, format, evaluation)
 end
 
 """
-    segmented_polynomial_plan(spec, coefficient_rows; internal_format=spec.output_format,
+    segmented_polynomial_plan(spec, coefficient_rows; internal_format=spec.output_format, precision=nothing,
                               evaluation=:separate)
 
 Build an uncertified normalized evaluator on an explicit interval, using 2–64
@@ -160,14 +160,30 @@ equal segments (a power of two). Rows contain ascending coefficients in the
 normalized coordinate, not in the original input. The coordinate is
 `t = (x - stored_center) * 2^exponent`; centres, scaling, coefficient tables and
 input-format dispatch predicates are stored in the IR. Coefficients are rounded
-to the shared internal format. Empty representable branches are rejected.
+to the shared internal format by default. `PolynomialPrecision` separates
+coefficient storage, coordinate and stage formats. Empty representable branches are rejected.
 """
 function segmented_polynomial_plan(
     spec::FunctionSpec,
     coefficient_rows;
-    internal_format::Union{FloatFormat, FixedFormat} = spec.output_format,
+    precision::Union{Nothing, PolynomialPrecision} = nothing,
+    internal_format::Union{FloatFormat, FixedFormat} = precision === nothing ?
+                                                       spec.output_format :
+                                                       precision.coordinate_format,
     evaluation::Symbol = :separate,
 )
+    if precision !== nothing
+        internal_format == precision.coordinate_format || throw(
+            ArgumentError("internal format must match the precision coordinate format"),
+        )
+        return _precision_plan(
+            spec,
+            coefficient_rows,
+            precision,
+            evaluation;
+            segmented = true,
+        )
+    end
     layout = _segmented_layout(spec, coefficient_rows, internal_format, evaluation)
     return PlanArtifact(
         spec;
@@ -181,6 +197,7 @@ function segmented_polynomial_plan(
 end
 
 function _segmented_audit(plan)
+    plan.precision === nothing || return _precision_audit(plan)
     p, spec = plan.program, plan.spec
     p === nothing && throw(ArgumentError("missing segmented program"))
     plan.dispatch === nothing || throw(ArgumentError("unsupported external dispatch"))
@@ -216,12 +233,14 @@ end
 
 function _certify_segmented(plan; precision, accuracy, max_refinements)
     settings = Dict(
-        "method" => "normalized_segmented_horner",
+        "method" =>
+            plan.precision === nothing ? "normalized_segmented_horner" :
+            "precision_polynomial_horner",
         "precision" => string(precision),
         "norm_accuracy" => _rational_text(_q(accuracy)),
     )
     layout = try
-        _segmented_audit(plan)
+        plan.precision === nothing ? _segmented_audit(plan) : _precision_audit(plan)
     catch err
         err isa Union{ArgumentError, KeyError, OverflowError} || rethrow()
         return _certificate_failure(
@@ -240,12 +259,14 @@ function _certify_segmented(plan; precision, accuracy, max_refinements)
                     _polynomial_arithmetic(plan.program, path, ranges, rho)
                 norm = Sollya.with_objects() do keep
                     p = keep(_stored_polynomial(path.coefficients))
-                    f = _normalized_function(
-                        keep,
-                        plan.spec.expression,
-                        path.center,
-                        path.exponent,
-                    )
+                    f =
+                        haskey(path, :exponent) ?
+                        _normalized_function(
+                            keep,
+                            plan.spec.expression,
+                            path.center,
+                            path.exponent,
+                        ) : keep(Sollya.sollya(_exact_expression(plan.spec.expression)))
                     domain = keep(Sollya.interval(path.domain...))
                     Sollya.bounds(domain) == path.domain || throw(
                         ArgumentError(
@@ -272,7 +293,7 @@ function _certify_segmented(plan; precision, accuracy, max_refinements)
                 push!(
                     paths,
                     PathCertificate(
-                        path.input_domain,
+                        get(path, :input_domain, path.domain),
                         true,
                         norm,
                         coordinate,
@@ -292,7 +313,7 @@ function _certify_segmented(plan; precision, accuracy, max_refinements)
     status = total <= plan.spec.absolute_error ? :certified : :bound_exceeds_budget
     reason =
         status == :certified ?
-        "Audited dispatch covers every representable contract input; all paths meet the target" :
-        "Conservative segmented uniform bound exceeds the target"
+        "Audited evaluator covers every representable contract input; all paths meet the target" :
+        "Conservative uniform evaluator bound exceeds the target"
     return CertificationResult(plan, status, total, Tuple(paths), nothing, settings, reason)
 end

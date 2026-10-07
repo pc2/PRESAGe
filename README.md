@@ -14,7 +14,8 @@ covering every finite input. Fixed polynomial kernels can also be certified on
 bounded domains. Floating and mixed fixed/floating polynomial kernels also have
 uniform certificates, including custom formats and extra internal fraction bits.
 Bounded generation also supports normalized segments with complete dispatch,
-coordinate and per-path error proofs.
+coordinate and per-path error proofs. Coefficient storage and Horner stage formats
+can be chosen individually and reduced through a bounded certified search.
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
@@ -39,7 +40,7 @@ write_certificate("certificate.toml", result)
 ```
 
 This makes one attempt with the selected degree and shared coefficient/stage
-format. Fixed and floating internals and independent input/output formats are
+format by default. Fixed and floating internals and independent input/output formats are
 supported. Generation precision, proof precision and norm tightness are separate
 settings. Decimal/scientific literals retain exact rational semantics.
 The result retains a generated plan when its bound exceeds the budget or its
@@ -72,12 +73,39 @@ available plans, certificate contributions and failure reasons. See
 [search example](examples/bounded_search.jl).
 
 Add `segments=[1,4,8]` to search normalized segment counts before degrees and
-formats. Counts are powers of two up to 64; coefficients share one internal
-format, coefficient tables and one Horner evaluator. `certified_polynomial(...; segments=4)`
+formats. Counts are powers of two up to 64; coefficient tables feed one shared
+Horner evaluator. `certified_polynomial(...; segments=4)`
 makes one segmented attempt. Every executed threshold and table payload is
 audited, with input conversion/subtraction/scaling and final output rounding
 included in the uniform bound. See [coverage proofs](docs/certification.md#normalized-segments-and-coverage)
 and the [segmented example](examples/segmented_search.jl).
+
+### Individual coefficient and stage formats
+
+`PolynomialPrecision` separates coordinate arithmetic, coefficient storage and
+accumulator formats. Lists are in ascending power order, including the initial
+highest coefficient load. Each stage has a common format across segments.
+
+```julia
+precision = PolynomialPrecision(FixedFormat(32,6);
+    coefficient_formats=[FixedFormat(24,4), FixedFormat(20,3)],
+    stage_formats=[FixedFormat(28,4), FixedFormat(24,3)])
+affine = FunctionSpec("x/2+1/4"; input_format=FixedFormat(8,3),
+    output_format=FixedFormat(16,4), domain=(-1,1))
+result = certified_polynomial(affine; degree=1, precision)
+reduced = optimize_precision(result; max_attempts=16,
+    bit_step=2, job_timeout=30, total_timeout=120)
+write_precision_report("precision-search.toml", reduced)
+```
+
+Every conversion, overflow check and rounding contribution enters the complete
+certificate. `optimize_precision` regenerates coefficients after storage changes
+and recertifies every candidate in an owned worker. It keeps the last passing
+plan when limits or failed reductions stop the search. `precision_cost` reports
+declared storage, stage and operand widths; FPGA performance remains unmeasured.
+Search configurations accept `precisions=[precision,…]` alongside their internal
+format choices. See [precision semantics](docs/certification.md#individual-coefficient-and-stage-precision)
+and the [segmented precision example](examples/precision_search.jl).
 
 ## Generation from a contract
 
@@ -145,9 +173,9 @@ result = certify_polynomial(plan)
 
 The [floating polynomial example](examples/floating_polynomial.jl) generates
 bounded erf and exp approximations and certifies fixed and floating internals
-against matching binary32 contracts. Coefficients and stages currently share
-one internal format. Ordered search is available; individual coefficient/stage
-widths are planned.
+against matching binary32 contracts. `PolynomialPrecision` allows independent
+coefficient and stage fraction widths; floating exponent headroom is a separate
+choice and remains unchanged by precision optimization.
 
 ## Local setup
 

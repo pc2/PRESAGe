@@ -77,6 +77,7 @@ struct PlanArtifact
     segments::Vector{Segment}
     settings::Dict{String, String}
     program::Union{Nothing, IR.Program}
+    precision::Union{Nothing, PolynomialPrecision}
     function PlanArtifact(
         spec::FunctionSpec;
         program::Union{Nothing, IR.Program} = nothing,
@@ -84,9 +85,13 @@ struct PlanArtifact
         dispatch::Union{Nothing, Dispatch} = nothing,
         segments = Segment[],
         settings = Dict{String, String}(),
+        precision::Union{Nothing, PolynomialPrecision} = nothing,
     )
         status in (:contract, :candidate) ||
             throw(ArgumentError("artifact cannot claim certification"))
+        precision === nothing ||
+            program !== nothing ||
+            throw(ArgumentError("precision metadata requires an evaluator program"))
         if program !== nothing
             status == :candidate ||
                 throw(ArgumentError("an evaluator program is a candidate"))
@@ -105,6 +110,6 @@ struct PlanArtifact
         ss = collect(Segment, segments)
         all(i -> ss[i - 1].upper <= ss[i].lower, 2:length(ss)) ||
             throw(ArgumentError("segments must be ordered and nonoverlapping"))
-        new(spec, status, dispatch, ss, Dict{String, String}(settings), program)
+        new(spec, status, dispatch, ss, Dict{String, String}(settings), program, precision)
     end
 end

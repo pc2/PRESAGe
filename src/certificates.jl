@@ -343,6 +343,8 @@ function _certificate_data(result::CertificationResult)
     )
     result.total_bound === nothing ||
         (d["total_bound"] = _rational_text(result.total_bound))
+    result.plan.precision === nothing ||
+        (d["precision"] = _precision_data(result.plan.precision))
     if !isempty(result.paths)
         d["paths"] = [
             Dict(
@@ -362,7 +364,9 @@ function _certificate_data(result::CertificationResult)
                 ],
             ) for p in result.paths
         ]
-        if get(result.settings, "method", "") == "normalized_segmented_horner"
+        if get(result.settings, "method", "") in
+           ("normalized_segmented_horner", "precision_polynomial_horner") &&
+           !isempty(result.plan.segments)
             layout = _segmented_audit(result.plan)
             for (report, path, certificate) in zip(d["paths"], layout.paths, result.paths)
                 coordinate = Dict{String, Any}(
@@ -390,6 +394,7 @@ function _certificate_data(result::CertificationResult)
             "fixed_polynomial_horner",
             "floating_polynomial_horner",
             "normalized_segmented_horner",
+            "precision_polynomial_horner",
         )
             input = result.plan.spec.input_format
             output = result.plan.spec.output_format
@@ -409,7 +414,7 @@ function _certificate_data(result::CertificationResult)
                     "canonical quiet NaN before polynomial evaluation",
                 "overflow" => "all reachable arithmetic nodes and output conversions bounded",
                 "dispatch" =>
-                    get(result.settings, "method", "") == "normalized_segmented_horner" ?
+                    !isempty(result.plan.segments) ?
                     "canonical input-format thresholds; adjacent representable path endpoints; both signed zeros share a path" :
                     "single Horner path",
             )

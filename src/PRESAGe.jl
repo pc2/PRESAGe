@@ -22,6 +22,7 @@ export FloatFormat,
     FunctionSpec,
     erf_spec,
     PlanArtifact,
+    PolynomialPrecision,
     Segment,
     Dispatch,
     write_plan,
@@ -65,10 +66,16 @@ export FloatFormat,
     ImplementationModel,
     select_implementation,
     implementation_cost,
+    precision_cost,
+    optimize_precision,
+    PrecisionAttempt,
+    PrecisionOptimizationResult,
+    write_precision_report,
     write_certificate
 
 include("formats.jl")
 include("fixed.jl")
+include("precision_formats.jl")
 include("ir.jl")
 include("contracts.jl")
 include("schema.jl")
@@ -87,8 +94,10 @@ include("certificates.jl")
 include("lut.jl")
 include("polynomial_certificates.jl")
 include("segmentation.jl")
+include("precision_kernels.jl")
 include("planning.jl")
 include("search.jl")
 include("search_schema.jl")
+include("precision_optimization.jl")
 
 end
