@@ -1106,6 +1106,33 @@ and the certificate comparison currently uses the supplied global bound.
 Captured device results can use the same checker later; no hardware execution
 or synthesis is claimed. Sampling is separate from full-domain certification.
 
+## Fixed C++ kernels
+
+The kernel emitter and separate host adapter pass four groups with 2,113 checks:
+
+| Group | Checks | Coverage |
+| --- | ---: | --- |
+| AP CPU scaling regression | 4 | Exact sign extension before heavy downscaling, in all four rounding modes. |
+| Fixed kernel arithmetic, branches and intermediate values | 4 | 81 graphs and 50,726 input records per backend; complete successful traces, exact typed/raw outputs and rejection statuses agree with the interpreter. |
+| Validate before writing | 23 | Unsupported floating graphs, widths/toolchains/banks and protected destinations; no PRESAGe host dependencies in the header. |
+| Bundles, standalone replay, streams and generation | 2,082 | Actual AP/AC C++17 executables, certificate/error checks, all 512 input encodings in status mode, strict input padding/truncation, CLI artifacts and preservation on failed emission. |
+
+The graph matrix includes all fixed rounding/overflow combinations, exact FMA
+versus separate rounding, mixed operand scales, 65/129/257-bit interfaces,
+wide integer operations and shift counts, all comparisons/classifications,
+unsigned/fixed tables, cyclic bank padding, lazy guards/selects, rejection order,
+normalized segments and individual coefficient/stage formats. Ordinary C++17
+compilation uses official headers with exceptions and RTTI disabled and no
+GMP/MPFR linkage. Two existing vendor-matrix regression checks also pass,
+covering 16,384 inputs per CPU backend.
+Both kernel CMake builds and their numerical CTests pass; the existing CPU build
+and both of its CTests also pass. Julia formatting and whitespace checks are
+clean. The complete package runner was not repeated.
+
+See [kernel interfaces and supported scope](kernels.md). Floating kernel
+interfaces and transformations remain pending. Public-header compilation
+does not establish vendor compiler or synthesis acceptance.
+
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported

@@ -3,7 +3,7 @@ const _VENDOR_WIDTH_LIMIT = 4096
 
 function _vendor_type(w, i, s, mode, overflow, backend)
     1 <= w <= _VENDOR_WIDTH_LIMIT && abs(BigInt(i)) <= _VENDOR_WIDTH_LIMIT ||
-        throw(ArgumentError("vendor intermediate exceeds the 4096-bit CPU limit"))
+        throw(ArgumentError("vendor intermediate exceeds the 4096-bit limit"))
     prefix = backend == :ap_fixed ? "AP" : "AC"
     # RND_INF means nearest with a particular tie rule, not directed upward.
     quantizer =
@@ -22,11 +22,18 @@ function _cpp_vendor_constant(bits, f, backend)
     return "hls_bits<$(_cpp_type(f,backend)),$(f.width)>(\"$(string(bits;base=16))\")"
 end
 
-function _vendor_round(expression, source, f, backend)
+function _vendor_round(expression, source, f, backend; quantizer = "hls_quantize")
     w, i, s = source
+    if backend == :ap_fixed && i < 1
+        # Public AP simulation reads beyond the source MSB when rounding away
+        # more fraction bits than its payload contains. Exact sign/zero extension
+        # supplies that bit without changing the value or the binary point.
+        padded = _vendor_type(w + 1 - i, 1, s, :down, :wrap, backend)
+        expression = "$padded($expression)"
+    end
     integer = max(i + !s, f.integer_bits + !f.signed) + 1
     wide = _vendor_type(integer + _fraction(f), integer, true, f.rounding, :wrap, backend)
-    return "hls_quantize<$(_cpp_type(f,backend)),$wide,$(f.width),$(f.signed),$(_cpp_mode(f.rounding)),$(_cpp_overflow(f.overflow))>($expression)"
+    return "$quantizer<$(_cpp_type(f,backend)),$wide,$(f.width),$(f.signed),$(_cpp_mode(f.rounding)),$(_cpp_overflow(f.overflow))>($expression)"
 end
 _vendor_shape(f::FixedFormat) = (f.width, f.integer_bits, f.signed)
 
@@ -37,9 +44,15 @@ function _vendor_float_shape(f::FloatFormat)
     return (integer + fraction, integer, true)
 end
 
-function _cpp_vendor_expr(p, i, backend)
+function _cpp_vendor_expr(
+    p,
+    i,
+    backend;
+    call = j -> "n$j()",
+    quantizer = "hls_quantize",
+    reinterpret = "hls_reinterpret",
+)
     n, f = p.nodes[i], IR.format(p, i)
-    call(j) = "n$j()"
     if n isa Union{IR.Convert, IR.Quantize, IR.ScalePow2}
         source = IR.format(p, n.source)
         if f isa FloatFormat
@@ -55,11 +68,11 @@ function _cpp_vendor_expr(p, i, backend)
         expression = if source isa FloatFormat
             "hls_from_float<$scaled,$(w-integer)>($(call(n.source)))"
         elseif exponent != 0
-            "hls_reinterpret<$scaled,$w>($(call(n.source)))"
+            "$reinterpret<$scaled,$w>($(call(n.source)))"
         else
             call(n.source)
         end
-        return _vendor_round(expression, (w, scaled_integer, signed), f, backend)
+        return _vendor_round(expression, (w, scaled_integer, signed), f, backend; quantizer)
     end
     a, b = IR.format(p, n.a), IR.format(p, n.b)
     fa, fb = _fraction(a), _fraction(b)
@@ -81,17 +94,17 @@ function _cpp_vendor_expr(p, i, backend)
     end
     # Store the native expression in a full-width, exact temporary before narrowing.
     exact = _vendor_type(shape..., :down, :wrap, backend)
-    return _vendor_round("$exact($expression)", shape, f, backend)
+    return _vendor_round("$exact($expression)", shape, f, backend; quantizer)
 end
 
-function _cpp_vendor_include(backend)
+function _cpp_vendor_include(backend; context = "CPU evaluation")
     backend == :ac_fixed && return "#include <ac_fixed.h>"
     return """
     #ifndef AP_INT_MAX_W
     #define AP_INT_MAX_W 4096
     #endif
     #if AP_INT_MAX_W < 4096
-    #error "PRESAGe ap_fixed CPU evaluation requires AP_INT_MAX_W >= 4096"
+    #error "PRESAGe ap_fixed $context requires AP_INT_MAX_W >= 4096"
     #endif
     // The public simulation repo declares std::complex outside libc++'s inline
     // namespace. PRESAGe uses scalar arithmetic, so skip those specializations.

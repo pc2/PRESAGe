@@ -44,6 +44,8 @@ export FloatFormat,
     EvaluationTrace,
     emit_cpp,
     emit_harness,
+    emit_kernel,
+    emit_kernel_harness,
     polynomial_plan,
     odd_polynomial_plan,
     reciprocal_polynomial_plan,
@@ -114,6 +116,7 @@ include("cpp.jl")
 include("cpp_ac_float.jl")
 include("kernels.jl")
 include("fixed_kernels.jl")
+include("cpp_kernel.jl")
 include("costs.jl")
 include("certificates.jl")
 include("lut.jl")

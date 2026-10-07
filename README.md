@@ -54,6 +54,10 @@ Portable sampled verification uses Julia-generated reference bundles and one
 standalone C++ checker, shared by local runs and saved runner outputs. It reports
 error enclosures and witnesses separately from certificates; see
 [sampled verification](docs/sampled-verification.md).
+Fixed input/output graphs also have a C++17 kernel emitter with official AP/AC
+types and explicit rejection status. It preserves the stored IR's rounding,
+overflow and lazy branches and uses a separate host byte-stream adapter.
+See [fixed kernels](docs/kernels.md); vendor synthesis remains pending.
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.

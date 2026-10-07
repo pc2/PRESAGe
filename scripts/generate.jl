@@ -6,7 +6,7 @@ include(joinpath(@__DIR__, "generation_artifacts.jl"))
 
 function generate_main(args)
     length(args) >= 2 || error(
-        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false]",
+        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false]",
     )
     source, directory = args[1:2]
     options = Dict{String, String}()
@@ -35,6 +35,8 @@ function generate_main(args)
             "implementation",
             "lut-max-bits",
             "search-config",
+            "target",
+            "toolchain",
         ) || error("unknown option $key")
         haskey(options, key) && error("duplicate option $key")
         options[key] = value
@@ -42,6 +44,17 @@ function generate_main(args)
     backend = Symbol(get(options, "backend", "ac_fixed"))
     backend in PRESAGe._CPP_BACKENDS ||
         error("backend must be portable, ap_fixed or ac_fixed")
+    target = Symbol(get(options, "target", "cpu"))
+    target in (:cpu, :kernel) || error("target must be cpu or kernel")
+    toolchain = Symbol(get(options, "toolchain", "generic"))
+    toolchain in PRESAGe._KERNEL_TOOLCHAINS ||
+        error("toolchain must be generic, vitis or oneapi")
+    target == :cpu &&
+        haskey(options, "toolchain") &&
+        error("toolchain requires target=kernel")
+    target == :kernel &&
+        haskey(options, "float-backend") &&
+        error("float-backend does not apply to fixed kernels")
     float_backend = Symbol(get(options, "float-backend", "auto"))
     float_backend in PRESAGe._CPP_FLOAT_BACKENDS ||
         error("float-backend must be auto, native or ac_std_float")
@@ -59,7 +72,15 @@ function generate_main(args)
     plan = if haskey(options, "search-config")
         source == "erf" && error("search-config requires a bounded contract file")
         all(
-            k -> k in ("search-config", "name", "backend", "float-backend", "certify"),
+            k -> k in (
+                "search-config",
+                "name",
+                "backend",
+                "float-backend",
+                "certify",
+                "target",
+                "toolchain",
+            ),
             keys(options),
         ) || error("search settings belong in the search configuration file")
         certify || error("bounded search requires certification")
@@ -214,6 +235,8 @@ function generate_main(args)
                 "norm-accuracy",
                 "backend",
                 "float-backend",
+                "target",
+                "toolchain",
             ),
             keys(options),
         ) || error("generation options require the erf source")
@@ -237,10 +260,21 @@ function generate_main(args)
     name = get(options, "name", "evaluator")
     artifacts = Dict{String, String}()
     try
-        artifacts["evaluator.hpp"] =
-            _generation_text((io, p) -> emit_cpp(io, p; name, backend, float_backend), plan)
-        artifacts["evaluate.cpp"] =
-            _generation_text((io, program) -> emit_harness(io, program; name), plan.program)
+        if target == :kernel
+            artifacts["evaluator.hpp"] = _generation_text(
+                (io, p) -> emit_kernel(io, p; name, backend, toolchain),
+                plan,
+            )
+            artifacts["evaluate.cpp"] =
+                _generation_text((io, p) -> emit_kernel_harness(io, p; name), plan.program)
+        else
+            artifacts["evaluator.hpp"] = _generation_text(
+                (io, p) -> emit_cpp(io, p; name, backend, float_backend),
+                plan,
+            )
+            artifacts["evaluate.cpp"] =
+                _generation_text((io, p) -> emit_harness(io, p; name), plan.program)
+        end
         artifacts["plan.toml"] = _generation_text(write_plan, plan)
         result === nothing ||
             (artifacts["certificate.toml"] = _generation_text(write_certificate, result))
