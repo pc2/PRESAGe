@@ -885,3 +885,55 @@ require floating interfaces, a bounded signed interval and degree 0:32. All
 three coefficient banks and Horner graphs use the declared precision lists.
 This establishes a uniform absolute bound, without an ulp or correct-rounding
 guarantee; it does not establish full-domain erfc support.
+
+## Bounded periodic reduction
+
+`transformation=:sin` or `:cos` requires matching primitive expressions, floating
+interfaces, an explicit bounded interval and kernel degree d in 0:15. Two stored
+polynomials describe `S(r)=r*q(r²)` and `C(r)=p(r²)`, of original degrees 2d+1 and
+2d. The audit reconstructs every selection, reduction, cast, kernel, quadrant,
+sign, zero and guard node from the contract and actual stored payloads. Unsupported
+graphs and arithmetic policies refuse certification. Precision optimization and
+stored replay repeat the complete proof.
+
+Let P be stored pi/2, U be stored 2/pi, X bound accepted |x|, and K bound the
+selected integer |k|. Directed Sollya bounds enclose true pi/2 by `[L,H]`.
+The exactly widened input selects `k=roundInteger(round(x*U))`. Let delta bound
+the product rounding plus the integer conversion error. Then
+
+`|r0| <= X*max(|1-U*L|,|1-U*H|) + delta*H`, where `r0=x-k*(true pi/2)`.
+
+This must be at most one, the stored-polynomial norm radius. The quadrant identity
+holds for every integer k: selection need not match the nearest true quadrant at
+a rounding transition. The proof requires a bounded residual and correct integer
+modulo/sign operations. Four conditional paths, labelled k modulo four, cover the
+same accepted interval and partition runtime execution by those bits.
+
+Correlation between x and k also gives a tighter bound for the exact implemented
+residual before its quantizer:
+
+`X*|1-U*P| + (delta+rho_kcast)*|P| + rho_product`.
+
+The separate product contribution is zero for FMA. This range replaces an
+uncorrelated subtraction interval. The implemented residual error is bounded by
+`eta = K*max(|P-L|,|P-H|) + |P|*rho_kcast + rho_product + rho_residual + rho_argument`.
+Selection rounding establishes the domain; the same selected integer appears in
+both the ideal identity and executed residual, so it adds no separate eta term.
+Every rho is derived from the actual range, format, grid and operation.
+
+The squared-coordinate error is at most `eta*(R+1)+rho_square`, where R bounds
+the actual rounded argument. Horner propagation includes this error and every
+operand, coefficient and stage cast. For the odd kernel, its coordinate and
+arithmetic bounds are multiplied by R; argument error times the ideal q bound
+and final reconstruction rounding are added. The even kernel needs no final
+argument multiplication. Exact quadrant restoration preserves these bounds.
+Final output conversion is budgeted separately, including subnormal rounding.
+Sollya proves norms of the expanded stored S/C polynomials against sin/cos on
+`[-1,1]`; sampling is not used as proof.
+
+The total is the maximum complete conditional-path bound. Zero-only contracts
+are exact. Sin preserves both zero signs; cos returns one; NaNs, infinities and
+excluded finite inputs return canonical quiet NaN before reduction. Unproved
+residual domains, possible overflow and unmet budgets refuse certification.
+This gives a uniform absolute-error bound. Large-argument reduction, ulp targets
+and correct rounding remain separate work.

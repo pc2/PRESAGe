@@ -940,14 +940,65 @@ three degree 0:32 kernels and an absolute-error target. The single normalized
 scaled-tail polynomial is tied to its stored domain; a wider domain can need
 higher degree, different coefficients or another architecture. Unsupported
 ranges fail explicitly. This does not establish full-domain erfc, relative/ulp
-accuracy or correct rounding. Bounded sin/cos periodic reduction is next.
+accuracy or correct rounding. Bounded sin/cos periodic reduction is described below.
+
+## Bounded sin/cos periodic reduction
+
+[`examples/periodic_search.jl`](../examples/periodic_search.jl) generates both
+binary16 functions on `[-32,32]` with target `1/512`. Kernel degree five uses
+six coefficients per parity bank in `FixedFormat(56,8)`, with binary64 reduction
+and reconstruction. Both complete bounds are `0.0004882833282255482`, dominated
+by output rounding. The static graph has eleven FMAs and four multiplications;
+coefficient and declared stage storage each total 672 bits. Only the chosen
+parity kernel executes for an input. These counts are not FPGA resource or
+throughput measurements.
+
+The proof covers the stored pi/2 and reciprocal constants, rounded integer
+selection, correlated residual formation, squared coordinates, both Horner
+kernels, exact quadrant/sign restoration and final output conversion. Transition
+checks use predecessor/successor inputs around multiples of pi/2 and halfway
+quadrant boundaries. All binary16 encodings are checked against directed MPFR
+references and visited-node ranges; both generated AC evaluators are exhausted.
+Directed tests also compile portable/AP arithmetic, native/AC floating arithmetic,
+public typed APIs and stored artifacts. Infinity, NaN, excluded finite and signed
+zero branches execute lazily.
+
+Further checks cover binary32, binary64, custom formats with 80 fraction bits,
+individual coefficient/stage widths, supervised precision reduction, exact replay,
+malformed graphs/constants, unsupported contracts, singleton/clipped domains and
+degree-zero kernels. Fixed payload bitcasts are verified for signed/unsigned
+formats, fractional payloads and 130-bit words. Quadrant fields grow automatically
+with the domain; sufficient stored-constant and arithmetic precision must still
+be proved. A bounded `[-2^70,2^70]` contract exercises an integer field above
+64 bits with wider internal fractions and official-header C++.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Periodic kernels and exact quadrant restoration | 5,940 | Fresh search, separate/FMA proofs, pi/2 and halfway-transition neighbours, all quadrants, lazy specials and compiled portable/AP/AC evaluators. |
+| Exhaustive binary16 periodic verification | 589,830 | Both functions over all encodings, directed MPFR bounds, visited ranges and two exhaustive compiled AC evaluators. |
+| Periodic binary32, custom floats and individual precision | 17,776 | Binary32/binary64, custom/wide fractions, individual coefficient/stage formats, stage replay and public-header conformance. |
+| Periodic proof refusals and lazy exceptional inputs | 103 | Invalid constants/reductions, zero-only and positive contracts, unsupported interfaces/degrees/segments, graph mutations and insufficient arithmetic precision. |
+| Fixed payload bitcast and periodic artifacts | 3,014 | Signed/unsigned and 130-bit payloads, version rejection, supervised accepted precision reduction, actual CLI generation and exact AP replay. |
+| Periodic wide quadrants and small contracts | 6,224 | Singleton/clipped contracts, degree-zero kernels, unsupported fixed interfaces and certified integer quadrants above 64 bits on `[-2^70,2^70]`. |
+
+The six groups pass 622,887 checks with official headers required. Seven
+regression groups pass another 327,350 checks, covering formats, plan/search
+schemas, IR, dynamic scaling and bounded exp reduction/refusals. Together these
+are 950,237 checks. Formatting is clean. The complete runner was not repeated;
+the groups were run individually, with failed test setup assertions corrected
+and their affected groups rerun.
+
+These are uniform absolute-error certificates for explicitly bounded floating
+contracts. An efficient general large-argument reducer, ulp contracts and correct
+rounding remain separate work. The next numerical extension is asin/acos endpoint
+transformation, reusing the certified root machinery.
 
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
 rejected fixed overflow, including mixed interfaces and custom formats.
-Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log, atan-tail, exp, sinh/cosh and scaled erfc
+Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log, atan-tail, exp, sinh/cosh, scaled erfc and bounded sin/cos
 kernels also have complete certificates.
 Segmented floating erf and other transformation families remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains
@@ -955,7 +1006,8 @@ unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces
 schema v5 adds individual coefficient/stage precision, v6 adds exponent
 reconstruction, v7 adds sqrt/rsqrt exponent splitting, v8 adds cbrt and v9
 adds exact exponent extraction for log; v10 adds rounded floating reciprocals
-for atan tails; v11 adds dynamic integer-exponent reconstruction for exp. A
+for atan tails; v11 adds dynamic integer-exponent reconstruction for exp and
+v12 adds fixed payload bitcasts for periodic quadrants. A
 separate report records the
 numerical proof. Native floating CPU arithmetic supports binary32/binary64 with
 nearest-even rounding; official AC arithmetic supports custom and wide formats.

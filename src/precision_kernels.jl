@@ -157,6 +157,8 @@ function _precision_plan(spec, rows, precision, evaluation; segmented)
 end
 
 function _precision_audit(plan)
+    get(plan.settings, "transformation", "none") in ("sin", "cos") &&
+        return _periodic_audit(plan)
     get(plan.settings, "transformation", "none") == "erfc" && return _erfc_audit(plan)
     get(plan.settings, "transformation", "none") == "odd" && return _odd_audit(plan)
     get(plan.settings, "transformation", "none") == "atan" && return _atan_audit(plan)
@@ -244,6 +246,8 @@ function _stored_precision(plan)
 end
 
 function _reformat_polynomial(plan, precision)
+    get(plan.settings, "transformation", "none") in ("sin", "cos") &&
+        return _reformat_periodic(plan, precision)
     get(plan.settings, "transformation", "none") == "erfc" &&
         return _reformat_erfc(plan, precision)
     get(plan.settings, "transformation", "none") in ("sinh", "cosh") &&

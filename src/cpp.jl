@@ -30,6 +30,13 @@ function _cpp_encode_bits(expression, f, backend, float_backend = :native)
     return "fixed_bits_from_units<$(_cpp_storage(f))>($units,$(f.width),$(f.signed))"
 end
 _cpp_hex(bits) = "0x" * string(UInt64(bits); base = 16) * "ULL"
+function _cpp_fixed_bitcast(p, n, backend, word_type)
+    source = IR.format(p, n.source)
+    units =
+        backend == :portable ? "integer(n$(n.source)())" :
+        "hls_units<$(source.width),$(source.signed)>(n$(n.source)())"
+    return "fixed_bits_from_units<$word_type>($units,$(source.width),$(source.signed))"
+end
 function _cpp_name(name::AbstractString)
     occursin(r"^[A-Za-z][A-Za-z_0-9]*$", name) ||
         throw(ArgumentError("name must be a simple identifier"))
@@ -130,6 +137,8 @@ function _cpp_expr(p, i, backend = :portable)
     elseif n isa IR.Guard
         return "([&]() { if (!$(call(n.condition))) throw std::domain_error(\"input outside declared domain\"); return $(call(n.source)); }())"
     elseif n isa IR.BitCast
+        IR.format(p, n.source) isa FixedFormat &&
+            return _cpp_fixed_bitcast(p, n, backend, _cpp_type(f))
         if f isa FloatFormat
             return "std::bit_cast<$(_cpp_type(f))>(static_cast<$(_cpp_storage(f))>($(call(n.source))))"
         end

@@ -1,4 +1,6 @@
-const _SCHEMA_VERSION = 11
+const _SCHEMA_VERSION = 12
+_has_fixed_bitcast(p::IR.Program) =
+    any(n -> n isa IR.BitCast && IR.format(p, n.source) isa FixedFormat, p.nodes)
 _has_cube_reduction(p::IR.Program) = any(
     n -> n isa Union{IR.RootArgument, IR.ScaleByInputExponent} && n.divisor == 3,
     p.nodes,
@@ -117,6 +119,7 @@ function _plan_data(p::PlanArtifact)
     fixedio = p.spec.input_format isa FixedFormat || p.spec.output_format isa FixedFormat
     guarded = p.program !== nothing && any(n -> n isa IR.Guard, p.program.nodes)
     version =
+        p.program !== nothing && _has_fixed_bitcast(p.program) ? 12 :
         p.program !== nothing && any(n -> n isa IR.ScaleByExponent, p.program.nodes) ? 11 :
         p.program !== nothing && any(n -> n isa IR.FloatReciprocal, p.program.nodes) ? 10 :
         p.program !== nothing && any(n -> n isa IR.FloatExponent, p.program.nodes) ? 9 :
@@ -215,6 +218,10 @@ function _read_plan(d)
         )
     end
     program = haskey(d, "program") ? _read_program(d["program"]) : nothing
+    program !== nothing &&
+        _has_fixed_bitcast(program) &&
+        d["schema_version"] < 12 &&
+        throw(ArgumentError("fixed payload bitcast requires schema v12"))
     program !== nothing &&
         any(n -> n isa IR.ScaleByExponent, program.nodes) &&
         d["schema_version"] < 11 &&

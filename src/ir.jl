@@ -341,10 +341,13 @@ function _type(n::Node, types, tables)
         return types[n.source]
     elseif n isa BitCast
         source = types[n.source]
-        source isa Union{FloatFormat, UIntFormat} && _width(source) == _width(n.format) ||
+        source isa Union{FloatFormat, FixedFormat, UIntFormat} &&
+            _width(source) == _width(n.format) ||
             throw(ArgumentError("bitcast widths differ"))
-        (source isa FloatFormat) != (n.format isa FloatFormat) ||
-            throw(ArgumentError("bitcast needs float/unsigned types"))
+        (
+            (source isa ArithmeticFormat && n.format isa UIntFormat) ||
+            (source isa UIntFormat && n.format isa FloatFormat)
+        ) || throw(ArgumentError("bitcast needs arithmetic/unsigned types"))
         return n.format
     elseif n isa ExtractBits
         f = types[n.source]

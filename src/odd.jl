@@ -25,12 +25,18 @@ function _validate_transformation(transformation, degree, segments)
         :sinh,
         :cosh,
         :erfc,
+        :sin,
+        :cos,
     ) || throw(ArgumentError("unsupported polynomial transformation"))
     if transformation in (:odd, :atan)
         1 <= degree <= 31 && isodd(degree) ||
             throw(ArgumentError("odd polynomial degree must be odd and in 1:31"))
         segments == 1 ||
             throw(ArgumentError("odd transformation currently uses one central kernel"))
+    elseif transformation in (:sin, :cos)
+        0 <= degree <= 15 || throw(ArgumentError("periodic kernel degree must be in 0:15"))
+        segments == 1 ||
+            throw(ArgumentError("periodic reduction uses one sin/cos kernel pair"))
     elseif transformation in (:sinh, :cosh)
         0 <= degree <= 15 ||
             throw(ArgumentError("hyperbolic kernel degree must be in 0:15"))

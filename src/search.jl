@@ -24,6 +24,10 @@ are combined in a widened floating format before output conversion.
 For `transformation=:erfc`, three coefficient banks describe central erfc,
 normalized exp(a²)*erfc(a) and reduced exp. The complete proof includes the
 rounded square, both tail kernels, exponential scaling and negative reflection.
+For `transformation=:sin` or `:cos`, degrees 0:15 describe sin/cos parity
+kernels. Prove the bounded reduction with stored pi/2 constants, then restore
+the function by exact integer quadrant bits and signs. Large-argument reduction
+requires a separate multiword design.
 For `transformation=:atan`, use one shared odd kernel on `[0,1]`, with
 exact central/tail dispatch, a rounded reciprocal and stored pi/2 reconstruction.
 For `transformation=:log`, the kernel approximates log(m) on `[1,2]` and
@@ -407,6 +411,7 @@ function _search_polynomial(
     config.transformation == :atan && _atan_geometry(spec)
     config.transformation == :exp && _exp_geometry(spec)
     config.transformation == :erfc && _erfc_geometry(spec)
+    config.transformation in (:sin, :cos) && _periodic_geometry(spec, config.transformation)
     config.transformation in (:sinh, :cosh) &&
         _hyperbolic_geometry(spec, config.transformation)
     config.transformation == :log && _log_geometry(spec)

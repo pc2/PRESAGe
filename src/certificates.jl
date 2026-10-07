@@ -666,6 +666,48 @@ function _certificate_data(result::CertificationResult)
             ],
         )
     end
+    if get(result.settings, "method", "") == "periodic_polynomial_horner" &&
+       result.total_bound !== nothing
+        layout = _periodic_audit(result.plan)
+        path = first(layout.paths)
+        d["coverage"] = Dict(
+            "input_domain" => _rational_text.(collect(layout.geometry.accepted_domain)),
+            "inputs" => "all representable finite inputs in the bounded interval",
+            "dispatch" => "four exact integer quadrants; each certificate path is conditional on k modulo four",
+            "zeros" =>
+                layout.geometry.transformation == :sin ?
+                "signed zeros preserved when included" : "exact one when included",
+            "invalid_inputs" => "NaNs, infinities and excluded finite inputs return canonical quiet NaN before reduction",
+            "overflow" => "all reachable selection, reduction, kernel and output operations bounded",
+        )
+        d["transformation"] = Dict(
+            "kind" => string(layout.geometry.transformation),
+            "identity" => "x=k*pi/2+r; sin/cos restored from sin(r), cos(r) and integer k modulo four",
+            "norm_domain" => ["-1/1", "1/1"],
+            "kernels" => ["r*q(r*r)", "p(r*r)"],
+            "reduction_format" => _format_data(path.reduction_format),
+            "quadrant_format" => _format_data(path.quadrant_format),
+            "quadrant_node" => path.quadrant_node,
+            "stored_pi2_node" => path.pi2_node,
+            "stored_inverse_pi2_node" => path.inverse_node,
+            "selection" => "nearest-even integer conversion of rounded x*stored(2/pi); residual domain is proved for this integer",
+            "pi2_error_bound" => get(result.settings, "pi2_error_bound", ""),
+            "ideal_residual_radius" =>
+                get(result.settings, "ideal_residual_radius", ""),
+            "residual_error_bound" => get(result.settings, "residual_error_bound", ""),
+            "zero_only" => layout.geometry.zero_only,
+            "paths" => [
+                Dict(
+                    "quadrant" => p.quadrant,
+                    "kernel" => p.sin_kernel ? "sin" : "cos",
+                    "negative_sign" => p.negative_sign,
+                ) for p in layout.paths
+            ],
+        )
+        for (report, path) in zip(get(d, "paths", []), layout.paths)
+            report["quadrant"] = path.quadrant
+        end
+    end
     result.tail_bound === nothing || (
         d["tail"] = Dict(
             "magnitude_lower" => "4/1",

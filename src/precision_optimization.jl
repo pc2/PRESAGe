@@ -11,10 +11,11 @@ function precision_cost(plan::PlanArtifact)
     p = plan.program
     rows =
         get(plan.settings, "transformation", "none") == "erfc" ? 3 :
-        get(plan.settings, "transformation", "none") in ("sinh", "cosh") ? 2 :
+        get(plan.settings, "transformation", "none") in ("sinh", "cosh", "sin", "cos") ? 2 :
         max(1, length(plan.segments))
     evaluations =
-        get(plan.settings, "transformation", "none") in ("sinh", "cosh", "erfc") ? 3 : 1
+        get(plan.settings, "transformation", "none") in ("sinh", "cosh", "erfc") ? 3 :
+        get(plan.settings, "transformation", "none") in ("sin", "cos") ? 2 : 1
     operations = [n for n in p.nodes if n isa Union{IR.Mul, IR.Add, IR.FMA}]
     operand_widths = [[_width(IR.format(p, i)) for i in IR.refs(n)] for n in operations]
     return (;

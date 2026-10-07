@@ -32,7 +32,7 @@ endpoints are rounded inward for input comparisons.
 | `ScalePow2` | Multiply by an exact power of two, then round once. |
 | `Compare`, `Classify`, `Select` | Arithmetic comparisons and classification; only the selected branch executes. |
 | `Guard` | Reject a false domain condition before evaluating its arithmetic source. |
-| `BitCast`, `ExtractBits`, `BitOp` | Equal-width float/unsigned bit casts, field extraction, masked unsigned operations. Shifts at or above the operand width return zero. |
+| `BitCast`, `ExtractBits`, `BitOp` | Equal-width float/unsigned bit casts or fixed payload to unsigned, field extraction, masked unsigned operations. Shifts at or above the operand width return zero. |
 
 Floating arithmetic operands must have the node's format; insert conversions explicitly.
 Fixed operands may have different scales; the operation's result format defines
@@ -368,3 +368,31 @@ and NaNs return canonical NaN before numerical evaluation. Branches are lazy.
 Structural cost reports count three coefficient banks, three Horner stage sets
 and one dynamic exponent scaling. Individual width proposals account for both
 tail kernels and their reconstruction factors.
+
+## Bounded periodic reduction arithmetic
+
+Sin/cos exactly widen the input into a reduction format covering input, output
+and coordinate precision, with at least binary64 precision. Multiply by stored
+2/pi, round to a signed fixed integer k, and convert k into the reduction format.
+Form `r=x-k*stored(pi/2)` using the declared separate or fused arithmetic. Convert
+r into the coordinate format, square it, and evaluate the two stored parity
+kernels `sin(r)=r*q(r²)` and `cos(r)=p(r²)`. All conversions and quantizers are IR
+nodes. Alternating Taylor coefficients seed generation; the stored-polynomial
+norm proof decides whether they meet the contract.
+
+`BitCast` can expose a fixed value's exact two's-complement payload as a same-width
+unsigned word. This operation changes no bits and performs no numerical conversion.
+For integral k, the low two bits equal k modulo four, including negative k.
+The low bit selects the parity kernel; the high bit selects sin's sign. Cos's
+sign is the exclusive-or of the two bits. Negation in the widened floating format
+is exact. Only the chosen kernel and sign branch execute.
+
+The integer field is inferred from the bounded input domain, using BigInt payloads
+above 64 bits and official vendor integers in C++. Certification also proves that
+the rounded selection leaves the ideal residual in `[-1,1]`; field size alone does
+not establish reduction accuracy. Wider internal fractions can extend the proved
+bounded range. An efficient general large-argument reducer requires a separate
+multiword design. Sin preserves signed zeros; cos returns
+exact one. NaNs, infinities and excluded finite inputs return canonical quiet NaN
+before numerical evaluation. Structural costs count two coefficient banks and
+two Horner stage sets; no FPGA performance is inferred.

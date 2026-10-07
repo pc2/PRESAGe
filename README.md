@@ -40,6 +40,9 @@ past exp's output overflow point. See the [hyperbolic example](examples/hyperbol
 Erfc combines a central polynomial with a normalized scaled positive tail and
 certified exp reconstruction, including square rounding, underflow and the
 negative-input identity. See the [erfc example](examples/erfc_search.jl).
+Sin/cos support bounded periodic reduction with proved integer quadrants,
+two reduced parity kernels and exact quadrant/sign restoration.
+See the [periodic example](examples/periodic_search.jl).
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
@@ -612,6 +615,36 @@ coordinate precision can require regenerating them.
 
 ```sh
 julia --startup-file=no --project=. examples/erfc_search.jl
+```
+
+## Bounded sin/cos periodic reduction
+
+```julia
+spec = FunctionSpec("sin(x)"; input_format=IEEE16,
+    domain=(-32,32), absolute_error=1//512)
+config = PolynomialSearchConfig(degrees=[5],
+    internal_formats=[FixedFormat(56,8)], transformation=:sin,
+    evaluation=:fma, job_timeout=60, total_timeout=90)
+search = search_polynomial(spec, config)
+@assert search.status == :certified
+```
+
+Use `cos(x)` with `transformation=:cos` for cos. The evaluator selects an
+integer k, forms `r=x-k*stored(pi/2)` and evaluates `r*q(r²)` or `p(r²)` according
+to k modulo four. Stored constants, reduction rounding, both kernels and output
+conversion enter the complete absolute-error certificate. The proof establishes
+the ideal residual in `[-1,1]`; a failed domain or overflow proof refuses the
+candidate. The quadrant and sign operations are exact, including negative k.
+
+Degree d (0:15) describes the parity kernels, whose original degrees are 2d+1
+and 2d. Individual coefficient/stage lists apply to both banks and both Horner
+graphs. Sin preserves signed zeros; cos returns one. NaNs, infinities and excluded
+finite inputs return NaN before reduction. Bounded floating interfaces, fixed or
+floating internals, custom formats, precision search and replay are supported.
+Large-argument reduction remains a separate multiword design and proof.
+
+```sh
+julia --startup-file=no --project=. examples/periodic_search.jl
 ```
 
 ## Reference CLI

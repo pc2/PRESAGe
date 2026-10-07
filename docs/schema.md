@@ -359,3 +359,26 @@ Coverage records four signed central/tail intervals and exact exceptional
 branches. Path contributions include both polynomial norms, square/reduction
 and normalized-coordinate errors, all reconstruction arithmetic and output
 rounding, including subnormals. Failed proofs do not claim coverage.
+
+## Version 12 fixed payload bitcasts and periodic artifacts
+
+Plan v12 adds a same-width `BitCast` from a fixed arithmetic value to `uint(W)`.
+The result is the stored raw two's-complement payload, including its fractional
+bits; it is not a numerical conversion. Existing float/unsigned bitcasts retain
+their semantics. Readers reject this fixed-source operation in earlier versions.
+
+Bounded sin/cos plans use this operation to extract an integral quadrant modulo
+four. Search configuration/report v13 uses `transformation="sin"` or `"cos"`,
+`segments=[1]` and `degree_then_format` ordering. Degree d (0:15) and the d+1
+coefficient/stage lists describe both parity kernels. All stored constants,
+casts, selection, residual, kernel dispatch, signs and lazy guards are executable
+IR; replay retains their payloads exactly.
+
+Certificate v2 uses method `periodic_polynomial_horner`. Transformation fields
+record the identity, norm domain, reduction and integer formats, constant nodes,
+proved ideal residual radius and implemented residual error. Each path explicitly
+records its quadrant 0:3. The four conditional path domains overlap numerically;
+their exact quadrant conditions partition runtime execution. Coverage records
+all bounded representable finite inputs and lazy exceptional branches. Failed
+proofs do not claim coverage. Neither schema nor integer field size implies a
+large-argument reduction guarantee.

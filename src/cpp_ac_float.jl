@@ -154,6 +154,8 @@ function _cpp_ac_expr(p, i, backend)
     elseif n isa IR.Guard
         return "([&]() { if (!$(call(n.condition))) throw std::domain_error(\"input outside declared domain\"); return $(call(n.source)); }())"
     elseif n isa IR.BitCast
+        p.types[n.source] isa FixedFormat &&
+            return _cpp_fixed_bitcast(p, n, backend, _cpp_ac_type(f, backend))
         return f isa FloatFormat ?
                "ac_float_from_bits<$(_cpp_ac_type(f,backend))>($(call(n.source)))" :
                "$(_cpp_ac_type(f,backend))(FloatBits<$(_cpp_ac_type(p.types[n.source],backend))>::bits($(call(n.source))))"

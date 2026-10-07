@@ -99,6 +99,9 @@ scaled positive tail and reduced exp. Three coefficient banks share storage
 formats and three Horner graphs share stage formats. Floating interfaces and
 an explicit bounded domain are required; square and reconstruction errors are
 included in the certificate.
+For `transformation=:sin` or `:cos`, degree d (0:15) describes two parity
+kernels of original degrees 2d+1 and 2d. Floating bounded interfaces, proved
+integer quadrant selection and complete residual/kernel/output bounds are required.
 
 Sollya coefficient formats use fixed fractional bits or floating significand bits;
 generated coefficients must also fit the selected storage range exactly. Generation
@@ -166,6 +169,7 @@ function certified_polynomial(
     transformation == :atan && _atan_geometry(spec)
     transformation == :exp && _exp_geometry(spec)
     transformation == :erfc && _erfc_geometry(spec)
+    transformation in (:sin, :cos) && _periodic_geometry(spec, transformation)
     transformation in (:sinh, :cosh) && _hyperbolic_geometry(spec, transformation)
     transformation == :log && _log_geometry(spec)
     transformation == :reciprocal && _reciprocal_geometry(spec)
@@ -327,6 +331,19 @@ function _certified_polynomial(
         candidate_ready,
     )
     transformation in (:sinh, :cosh) && return _certified_hyperbolic(
+        spec,
+        domain,
+        degree,
+        internal_format,
+        evaluation,
+        generation_precision,
+        proof_precision,
+        accuracy,
+        max_refinements;
+        precision_layout,
+        candidate_ready,
+    )
+    transformation in (:sin, :cos) && return _certified_periodic(
         spec,
         domain,
         degree,
