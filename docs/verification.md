@@ -7,17 +7,23 @@ use each Julia installation's own MPFR/GMP runtime.
 
 ## Results
 
-The reciprocal change passes **six new groups with 472,715 checks** on Julia
-1.13.1, with four threads and official vendor headers required. It covers exact
-normalization, direct exponent reconstruction, complete reciprocal certificates,
-all binary16 encodings, proof refusals, individual precision and CLI replay.
-Another **21 regression groups pass with 778,671 checks**, covering formats,
-schemas, IR, CPU emission, binary16 LUT/fixed kernels, fixed interfaces, official
-AC/AP arithmetic, wide floats and fixed/floating polynomial certificates.
-Together these runs verify **27 groups and 1,251,386 checks** for this change.
-Two partial regression invocations stopped at missing test-helper setup; fresh
-runs with those helpers passed every affected group. The complete package runner
-was not repeated for this change.
+The cbrt change passes **ten new groups with 451,880 checks** on Julia 1.13.1,
+with four threads and official vendor headers required. It covers exact division
+by three, argument widening, direct reconstruction, signed certificates, every
+binary16 encoding, custom/nonuniform precision, supervised optimization,
+CLI replay and Sollya/MPFR reference semantics.
+Another **20 regression groups pass with 1,123,640 checks**, covering formats,
+schemas, IR, all reciprocal and sqrt/rsqrt groups, adaptive references and exact
+expression semantics. Together these runs verify **30 groups and 1,575,520
+checks** for this change. The complete package runner was not repeated.
+The first wider fixed fixture refused certification because its conservative
+Horner range exceeded its integer width; a fresh run with more integer headroom
+and the same 88 fractional bits passed. The standalone cbrt example also runs
+successfully. Formatting is clean.
+
+The preceding sqrt/rsqrt change verified 24 groups and 1,548,520 checks,
+including eight new groups with 521,283 checks. The reciprocal change verified
+27 groups and 1,251,386 checks. Those earlier results remain recorded below.
 
 The preceding complete gate verified **50 groups with 1,487,066 checks**, with four
 threads and vendor-header tests required. The offline `scripts/check.jl` runner
@@ -28,7 +34,7 @@ saved-certificate rejection checks remain enforced. The four odd-kernel groups
 contribute 217,761 checks. Formatting is clean. The count is dominated by
 exhaustive encoding checks, not by function coverage or numerical certificates.
 
-| New group | Checks | Coverage |
+| Reciprocal group | Checks | Coverage |
 | --- | ---: | --- |
 | Exact floating magnitude normalization | 192,924 | All binary16 and small custom words; both signs; subnormal significand shifts; exact rational reconstruction; 128/256-bit formats, 300/4096-bit fractions and cheap extreme-exponent decomposition. |
 | Exponent reconstruction IR and official CPU headers | 39 | Exhaustive finite nonzero binary16/small custom identity reconstruction; wide words; portable/native/AC/AP interfaces; direct fixed-to-float scaling; a subnormal midpoint exposing double rounding; overflow, invalid normalization, host rounding and AC exponent headroom. |
@@ -569,21 +575,110 @@ evaluators. The standalone example and CLI replay also run successfully.
 
 The reciprocal contract currently accepts one bounded interval strictly on
 one side of zero, with floating interfaces. Overflow refuses certification.
-Full-domain reciprocal special values, disconnected domains and root/log/tail
+Full-domain reciprocal special values, disconnected domains and cbrt/log/tail
 reductions remain pending. AC reconstruction requires sufficient intermediate
 exponent headroom within its 30-bit limit; arbitrary significand widths remain
 available within the existing CPU width limits.
+
+## Sqrt and rsqrt exponent reduction
+
+[`examples/root_search.jl`](../examples/root_search.jl) generates both functions
+for binary16 input/output on `[0,65504]`, covering every positive finite input.
+Degree eleven uses `Fixed(80,24)` internals, twelve coefficients, eleven FMAs,
+one exact root-argument formation and one direct exponent reconstruction.
+These counts include no lookup table and make no hardware performance claim.
+
+| Contribution | sqrt bound | rsqrt bound |
+| --- | ---: | ---: |
+| Approximation after exponent scaling | `5.271950e-6` | `0.001955457` |
+| Coordinate conversion | `0` | `0` |
+| Arithmetic after exponent scaling | `1.235915e-9` | `3.954927e-8` |
+| Reconstruction/output rounding | `0.125` | `2` |
+| Total | `0.12500527318529048` | `2.0019554959649266` |
+| Contract target | `0.25` | `4` |
+
+The finite proof excludes zero from its numerical paths. Both signed zeros use
+exact branches when zero belongs to the contract: sqrt preserves the sign,
+rsqrt returns the corresponding signed infinity. Positive infinity produces
+infinity or zero respectively; negative inputs/infinity, NaNs and finite inputs
+outside the contract return canonical NaN before normalization or arithmetic.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Exact root argument and floor exponent splitting | 192,753 | All binary16 and small custom encodings; exact rational identity, negative odd exponents, Int endpoints, BigInt exponents and 4096-bit fractions. |
+| Root reconstruction IR and single output quantizer | 9 | Compiled exact arguments and quotient scales; direct fixed-to-half subnormal midpoint in portable/AC/AP and native/AC floating paths; plan v7 and rejection by earlier schemas. |
+| Certified sqrt and rsqrt reduced kernels | 266 | Full positive binary16 contracts, separate/FMA arithmetic, every reachable range, both floating backends and all fixed backends, serialized recertification and exponent-scaled proof contributions. |
+| Exhaustive binary16 sqrt and rsqrt verification | 325,632 | All 65,536 encodings for each function; exact rational squared inequalities establish the error independently; native/AC/AP C++ and lazy special-value branches agree. |
+| Root zero branches and graph proof refusal | 80 | Zero-only contracts, excluded zeros, infinity policy, invalid domains/interfaces, graph/identity mutations, possible overflow and unmet budgets. |
+| Root precision search and configuration replay | 42 | Supervised reduction with complete recertification, compiled selected plans and search configuration/report v6. |
+| Root floating and wide mixed precision | 2,494 | Exhaustive small custom inputs with floating internals; 100-fraction-bit inputs, 112-bit output fractions, 96-bit fixed kernels and nonzero coordinate error; nonuniform stages and exact negative-zero coefficients. |
+| Root CLI generation and stored replay | 7 | Actual contract/config generation with AP C++, stored rsqrt recertification/replay with AC C++, schema/report/certificate payloads and compiled artifacts. |
+
+Numerical contracts currently require floating interfaces, a bounded
+nonnegative interval and one kernel. Possible output overflow refuses a finite
+certificate. These are absolute-error certificates, without a correct-rounding
+or ulp guarantee. Log reconstruction and atan tails remain pending.
+
+## Signed cbrt exponent reduction
+
+[`examples/cbrt_search.jl`](../examples/cbrt_search.jl) generates `cbrt(x)` for
+binary16 input/output on `[-65504,65504]`, covering both signs of every finite
+input. Degree thirteen uses `Fixed(96,24)` internals, fourteen coefficients,
+thirteen FMAs, one exact argument formation and one direct exponent scaling.
+The coefficient/stage declarations each total 1,344 bits; these structural
+counts make no FPGA resource or throughput claim.
+
+| Contribution | Certified upper bound |
+| --- | ---: |
+| Approximation after exponent scaling | `2.686640e-5` |
+| Coordinate conversion | `0` |
+| Arithmetic after exponent scaling | `2.645557e-10` |
+| Reconstruction/output rounding | `0.03125` |
+| Total | `0.03127686665682863` |
+| Contract target | `0.0625` |
+
+All 65,536 encodings are checked in Julia and compiled native, AC and AP C++.
+Exact rational inequalities `(y-B)^3 ≤ x ≤ (y+B)^3` independently establish
+the numerical error, and every visited numeric range is checked. Signed zeros
+and infinities retain their signs through lazy branches; NaNs and finite inputs
+outside a bounded contract return canonical NaN before kernel evaluation.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Exact cube root argument and exponent splitting | 192,676 | All binary16 and smallest custom words; exact rational identities, subnormals, negative remainders, 100/4096-bit fractions and automatic argument exponent widening. |
+| Cube root IR reconstruction and official CPU headers | 24 | Exhaustive binary16/small custom argument construction; wide AC words; direct fixed-to-half subnormal midpoint in portable/AC/AP and native/AC floating paths; invalid divisors refused. |
+| Certified signed cbrt mantissa kernel | 371 | Both signs, separate/FMA kernels, exponent transitions, special values, all fixed/floating CPU backend combinations and serialized recertification. |
+| Exhaustive binary16 cbrt verification | 258,045 | Every encoding, exact cubic error inequalities, all visited ranges, sign restoration and native/AC/AP CPU agreement. |
+| Cbrt signed domains, zeros and proof refusal | 181 | Positive/negative/cross-zero intervals, zero-only generation, excluded zeros, identity/graph mutations, invalid interfaces/segmentation, output overflow and unmet budgets. |
+| Cbrt custom floating and individual precision | 283 | Smallest exponent input with floating internals; 100-fraction-bit input and 112-fraction-bit output, 136-bit fixed arithmetic with coordinate error; nonuniform stages and exact negative-zero coefficients. |
+| Cbrt precision search, CLI generation and replay | 37 | Supervised width reduction with fresh proof, search configuration/report v7, plan v8, actual CLI generation, AP artifact compilation and AC replay. |
+| Cbrt inferred coordinate format | 213 | Direct use of the widened argument format as the coordinate, audited coefficient positions, exact serialization, every small input and compiled typed/raw interfaces. |
+| Cbrt Sollya and MPFR references | 42 | Directed positive fractional-power bounds and odd extension agree with native MPFR on both signs; independent exact cubes, zeros, infinities and NaNs. |
+| Cbrt expression parsing and ordinary polynomial proof | 8 | Canonical primitive mapping; unsupported compositions rejected; ordinary positive-domain proof; signed identity evaluators refused and untransformed signed generation fails explicitly. |
+
+The default Sollya reference previously recovered `cbrt(x)` as `x`, producing
+an incorrect result such as `-8` for `cbrt(-8)`. Explicit mapping and signed
+endpoint reversal correct that path. The parser now refuses unsupported cbrt
+compositions; signed ordinary polynomial requests require the root transformation.
+
+Cbrt currently requires floating interfaces, a bounded signed interval and one
+kernel. Internal or output overflow refuses certification. The absolute bound
+does not imply correct rounding or an ulp guarantee. Log reconstruction and
+atan tails are next.
 
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
 rejected fixed overflow, including mixed interfaces and custom formats.
-Bounded odd sin/sinh/atan/erf kernels also have complete certificates.
+Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt and signed cbrt kernels
+also have complete certificates.
 Segmented floating erf and other transformation families remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains
 unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces;
-schema v5 adds individual coefficient/stage precision; a separate report records the
+schema v5 adds individual coefficient/stage precision, v6 adds exponent
+reconstruction, v7 adds sqrt/rsqrt exponent splitting and v8 adds cbrt; a
+separate report records the
 numerical proof. Native floating CPU arithmetic supports binary32/binary64 with
 nearest-even rounding; official AC arithmetic supports custom and wide formats.
 Binary16 interfaces and exact conversions are supported,

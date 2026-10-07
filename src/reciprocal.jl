@@ -258,13 +258,37 @@ function _certify_reciprocal(plan; precision, accuracy, max_refinements)
             settings,
         )
     end
+    return _certify_reduced_kernel(
+        plan,
+        layout,
+        settings,
+        "1/x",
+        (_q(1) / 2, _q(1));
+        precision,
+        accuracy,
+        max_refinements,
+    )
+end
+
+# Normalization is exact. The audited kernel's norm, coordinate and arithmetic
+# errors scale by the largest reconstruction factor, before one output rounding.
+function _certify_reduced_kernel(
+    plan,
+    layout,
+    settings,
+    expression,
+    image;
+    precision,
+    accuracy,
+    max_refinements,
+)
     path = only(layout.paths)
     certificate = try
         ranges, rho =
             _polynomial_ranges(plan.program, path; stop_before = path.reconstruction)
-        # Since 1/m is positive, replacing a computed p by |p| cannot increase
-        # its error: ||p|-1/m| ≤ |p-1/m|. Sign copying is exact, even when a
-        # conservative Horner interval extends below zero.
+        # The target kernel is positive, so replacing p by |p| cannot increase
+        # its error. Sign copying is exact, even when a conservative Horner
+        # interval extends below zero.
         kernel_coordinate, kernel_arithmetic, _ =
             _polynomial_arithmetic(plan.program, path, ranges, rho)
         coordinate = kernel_coordinate * path.reconstruction_bound
@@ -273,7 +297,7 @@ function _certify_reciprocal(plan; precision, accuracy, max_refinements)
         norm = Sollya.with_session(Sollya.Session(; precision)) do
             Sollya.with_objects() do keep
                 p = keep(_stored_polynomial(path.coefficients))
-                f = keep(Sollya.sollya("1/x"))
+                f = keep(Sollya.sollya(expression))
                 interval = keep(Sollya.interval(path.domain...))
                 Sollya.bounds(interval) == path.domain ||
                     throw(ArgumentError("native proof domain enlargement"))
@@ -281,16 +305,17 @@ function _certify_reciprocal(plan; precision, accuracy, max_refinements)
                 bound = (_q(0), _q(0))
                 for refinement = 0:max_refinements
                     raw = _polynomial_norm(p, f, interval, tightness)
-                    0 <= raw[1] <= raw[2] ||
-                        throw(ArgumentError("invalid reciprocal norm enclosure"))
+                    0 <= raw[1] <= raw[2] || throw(
+                        ArgumentError("invalid reduced kernel norm enclosure"),
+                    )
                     # The certified function image plus the complete kernel
                     # error bounds the last rounded Horner value. This removes
                     # cancellation lost by interval Horner before reconstruction.
                     error = raw[2] + kernel_coordinate + kernel_arithmetic
-                    lo = max(ranges[path.final][1], _q(1) / 2 - error)
-                    hi = min(ranges[path.final][2], _q(1) + error)
+                    lo = max(ranges[path.final][1], image[1] - error)
+                    hi = min(ranges[path.final][2], image[2] + error)
                     lo <= hi ||
-                        throw(ArgumentError("inconsistent reciprocal kernel range"))
+                        throw(ArgumentError("inconsistent reduced kernel range"))
                     format = IR.format(plan.program, path.final)
                     enclosure = (
                         _polynomial_value(
@@ -308,7 +333,7 @@ function _certify_reciprocal(plan; precision, accuracy, max_refinements)
                         range_overrides = Dict(path.final => enclosure),
                     )
                     output = rho[path.reconstruction]
-                    # [1,2] and the largest exponent scale can enlarge the
+                    # The reduced interval and largest exponent scale can enlarge the
                     # accepted domain. Their lower norm endpoint is therefore
                     # not a lower bound on the original contract's error.
                     bound = (_q(0), raw[2] * path.reconstruction_bound)
@@ -349,6 +374,6 @@ function _certify_reciprocal(plan; precision, accuracy, max_refinements)
         settings,
         status == :certified ?
         "Exact magnitude normalization, audited mantissa kernel and reconstructed evaluator bound meet the target" :
-        "Conservative reciprocal evaluator bound exceeds the target",
+        "Conservative reconstructed evaluator bound exceeds the target",
     )
 end

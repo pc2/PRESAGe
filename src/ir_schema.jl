@@ -18,6 +18,12 @@ function _node_data(n::IR.Node)
     d = Dict{String, Any}("op" => string(nameof(typeof(n))))
     for field in fieldnames(typeof(n))
         value = getfield(n, field)
+        field == :divisor &&
+            (
+                (n isa IR.ScaleByInputExponent && value == 1) ||
+                (n isa IR.RootArgument && value == 2)
+            ) &&
+            continue
         d[string(field)] =
             field == :format ? _type_data(value) :
             field == :bits ? _ir_hex(value) : value isa Symbol ? string(value) : value
@@ -42,6 +48,7 @@ const _IR_NODES = Dict(
         IR.BitOp,
         IR.ScalePow2,
         IR.FloatMantissa,
+        IR.RootArgument,
         IR.ScaleByInputExponent,
         IR.CopySign,
         IR.Classify,
@@ -53,7 +60,9 @@ function _read_node(d)
     args = Any[]
     for field in fieldnames(t)
         field == :rounding && continue
-        value = d[string(field)]
+        value =
+            field == :divisor ? get(d, "divisor", t == IR.RootArgument ? 2 : 1) :
+            d[string(field)]
         push!(
             args,
             field == :format ? _read_ir_type(value) :

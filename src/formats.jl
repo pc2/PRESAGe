@@ -112,6 +112,24 @@ function normalize_float(bits::Integer, f::FloatFormat)
     return (mantissa, exponent)
 end
 
+"""Split an exponent as `e=divisor*q+r`, using floor division and `0≤r<divisor`."""
+function split_exponent(exponent::Integer, divisor::Integer = 2)
+    divisor >= 1 || throw(ArgumentError("exponent divisor must be positive"))
+    return fldmod(exponent, divisor)
+end
+
+_root_argument_format(f, divisor) =
+    FloatFormat(max(f.exponent_bits, divisor == 3 ? 3 : 2), f.fraction_bits)
+
+function _root_argument(bits, f, divisor = 2)
+    divisor in (2, 3) || throw(ArgumentError("root divisor must be 2 or 3"))
+    mantissa, exponent = normalize_float(bits, f)
+    _, remainder = split_exponent(exponent, divisor)
+    out = _root_argument_format(f, divisor)
+    fraction = _float_word(mantissa & _word_mask(f.fraction_bits), out)
+    return (_float_word(_bias(out) + remainder, out) << out.fraction_bits) | fraction
+end
+
 function _increment(
     q::BigInt,
     remainder::BigInt,

@@ -79,7 +79,7 @@ template<class Out,class Wide> Out ac_scale_exact(const Wide& value,std::int64_t
     factor.set_data(raw);
     return ac_float_convert<Out>(value.template mult<AC_RND_CONV,false>(factor));
 }
-template<class Out,int Multiplier,class In,class Input>
+template<class Out,int Multiplier,int Divisor,class In,class Input>
 Out ac_float_reconstruct(const In& value,const Input& input) {
     using S = FloatBits<In>;
     using I = FloatBits<Input>;
@@ -90,9 +90,9 @@ Out ac_float_reconstruct(const In& value,const Input& input) {
     using Wide = ac_std_float<1+E+S::fraction,E>;
     auto x = as_ac_float(value);
     auto wide = x.template convert<Wide::width,E,AC_RND_CONV>();
-    return ac_scale_exact<Out>(wide,Multiplier*normalize_float(input).exponent);
+    return ac_scale_exact<Out>(wide,Multiplier*input_exponent<Divisor>(input));
 }
-template<class Out,int Width,int IntegerBits,bool Signed,int Multiplier,class Source,class Input>
+template<class Out,int Width,int IntegerBits,bool Signed,int Multiplier,int Divisor,class Source,class Input>
 Out ac_fixed_reconstruct(const Source& source,const Input& input) {
     using I = FloatBits<Input>;
     constexpr std::uint64_t bound = Width + (std::uint64_t(1) << (I::exponent-1)) + I::fraction + 2;
@@ -104,7 +104,7 @@ Out ac_fixed_reconstruct(const Source& source,const Input& input) {
     for (int bit=0;bit<Width;++bit) exact[bit] = bool(source[bit]);
     Wide wide;
     wide.template assign_from<AC_RND_CONV>(exact);
-    return ac_scale_exact<Out>(wide,Multiplier*normalize_float(input).exponent);
+    return ac_scale_exact<Out>(wide,Multiplier*input_exponent<Divisor>(input));
 }
 template<class Out,int Width,int IntegerBits,bool Signed,int Mode,class Source>
 Out ac_float_from_fixed(const Source& source) {

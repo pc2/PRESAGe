@@ -8,7 +8,8 @@ using ..PRESAGe:
     _float_word,
     round_ieee,
     round_fixed,
-    _fixed_mask
+    _fixed_mask,
+    _root_argument_format
 
 export UIntFormat,
     Node,
@@ -28,6 +29,7 @@ export UIntFormat,
     BitOp,
     ScalePow2,
     FloatMantissa,
+    RootArgument,
     ScaleByInputExponent,
     CopySign,
     Classify,
@@ -197,11 +199,23 @@ end
 struct FloatMantissa <: Node
     source::Int
 end
-"""Round source * 2^(multiplier * exponent(input)) directly to a floating format."""
+"""Exact m*2^r where abs(source)=m*2^e and e=divisor*q+r, using floor division.
+Retain fraction bits; widen the exponent field when necessary to represent t.
+"""
+struct RootArgument <: Node
+    source::Int
+    divisor::Int
+    function RootArgument(source::Integer, divisor::Integer = 2)
+        divisor in (2, 3) || throw(ArgumentError("root divisor must be 2 or 3"))
+        new(Int(source), Int(divisor))
+    end
+end
+"""Round source * 2^(multiplier * floor(exponent(input)/divisor)) directly to a floating format."""
 struct ScaleByInputExponent <: Node
     source::Int
     input::Int
     multiplier::Int
+    divisor::Int
     format::FloatFormat
     rounding::Symbol
     function ScaleByInputExponent(
@@ -210,11 +224,22 @@ struct ScaleByInputExponent <: Node
         multiplier::Integer,
         format::FloatFormat;
         rounding::Symbol = :nearest_even,
+        divisor::Integer = 1,
     )
         multiplier in (-1, 1) || throw(ArgumentError("exponent multiplier must be ±1"))
-        new(Int(source), Int(input), Int(multiplier), format, _rounding(rounding))
+        divisor in (1, 2, 3) || throw(ArgumentError("exponent divisor must be 1, 2 or 3"))
+        new(
+            Int(source),
+            Int(input),
+            Int(multiplier),
+            Int(divisor),
+            format,
+            _rounding(rounding),
+        )
     end
 end
+ScaleByInputExponent(source, input, multiplier, divisor, format; rounding = :nearest_even) =
+    ScaleByInputExponent(source, input, multiplier, format; divisor, rounding)
 """Copy the sign bit of a floating value without arithmetic or rounding."""
 struct CopySign <: Node
     source::Int
@@ -231,6 +256,7 @@ refs(n::Select) = (n.condition, n.yes, n.no)
 refs(n::Guard) = (n.condition, n.source)
 refs(n::Union{Convert, Quantize, BitCast, ExtractBits, ScalePow2, Classify}) = (n.source,)
 refs(n::FloatMantissa) = (n.source,)
+refs(n::RootArgument) = (n.source,)
 refs(n::ScaleByInputExponent) = (n.source, n.input)
 refs(n::CopySign) = (n.source, n.sign)
 refs(n::TableLoad) = (n.index,)
@@ -313,10 +339,11 @@ function _type(n::Node, types, tables)
         n.kind in (:nan, :infinity, :finite, :zero, :negative) ||
             throw(ArgumentError("invalid classification"))
         return Bool
-    elseif n isa FloatMantissa
+    elseif n isa Union{FloatMantissa, RootArgument}
         types[n.source] isa FloatFormat ||
             throw(ArgumentError("mantissa normalization needs a floating source"))
-        return types[n.source]
+        return n isa RootArgument ? _root_argument_format(types[n.source], n.divisor) :
+               types[n.source]
     elseif n isa ScaleByInputExponent
         types[n.source] isa ArithmeticFormat && types[n.input] isa FloatFormat || throw(
             ArgumentError("exponent reconstruction needs arithmetic/floating operands"),

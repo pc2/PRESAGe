@@ -468,6 +468,46 @@ function _certificate_data(result::CertificationResult)
             )
         end
     end
+    if get(result.settings, "method", "") == "root_polynomial_horner"
+        path = only(_root_audit(result.plan).paths)
+        kind = result.plan.settings["transformation"]
+        cube = kind == "cbrt"
+        d["coverage"] = Dict(
+            "input_domain" => _rational_text.(collect(path.accepted_domain)),
+            "inputs" =>
+                cube ? "all representable finite inputs in the interval" :
+                "all representable positive finite inputs in the interval",
+            "zeros" =>
+                kind == "rsqrt" ?
+                "exact signed infinities when zero is in the contract" :
+                "both signed zeros preserved when zero is in the contract",
+            "positive_infinity" =>
+                kind == "rsqrt" ? "positive zero" : "positive infinity",
+            "invalid_inputs" =>
+                cube ? "NaNs return canonical quiet NaN" :
+                "negative finite inputs, negative infinity and NaNs return canonical quiet NaN",
+            "outside_domain" => "finite inputs outside the bounded domain return canonical quiet NaN",
+            "overflow" => "all reachable nonzero finite arithmetic nodes and output conversions bounded",
+        )
+        cube && (d["coverage"]["infinities"] = "both signed infinities preserved")
+        d["transformation"] = Dict(
+            "kind" => kind,
+            "exponent_divisor" => path.divisor,
+            "argument_format" => _format_data(path.argument_format),
+            "identity" =>
+                "abs(x)=m*2^e; e=$(path.divisor)q+r (floor division); t=m*2^r; " * (
+                    cube ? "cbrt(x)=sign(x)*cbrt(t)*2^q" :
+                    kind == "sqrt" ? "sqrt(x)=sqrt(t)*2^q" : "rsqrt(x)=rsqrt(t)*2^-q"
+                ),
+            "norm_domain" => _rational_text.(collect(path.domain)),
+            "input_exponents" => collect(path.exponents),
+            "maximum_error_scale" => _rational_text(path.reconstruction_bound),
+            "normalization" => "exact for every finite nonzero magnitude, including subnormals",
+            "reconstruction_node" => path.reconstruction,
+            "rounding" => "directly from the final Horner stage to the output format",
+            "zero_only" => path.zero_only,
+        )
+    end
     result.tail_bound === nothing || (
         d["tail"] = Dict(
             "magnitude_lower" => "4/1",

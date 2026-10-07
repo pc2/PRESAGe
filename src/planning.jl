@@ -24,6 +24,10 @@ function _generated_polynomial_coefficients(
     precision;
     normalization = nothing,
 )
+    _primitive(spec.expression) == :cbrt &&
+        spec.domain !== nothing &&
+        spec.domain[1] < 0 &&
+        throw(ArgumentError("signed cbrt domains require transformation=:cbrt"))
     Sollya.with_session(Sollya.Session(; precision)) do
         Sollya.with_objects() do keep
             f =
@@ -105,6 +109,13 @@ With `transformation=:odd`, generate `x*q(x²)` for bounded sin, sinh, atan or e
 The requested degree is an odd original-function degree in `1:31`; precision
 lists describe the `(degree+1)÷2` coefficients/stages of q. Only one kernel is
 supported. Its proof includes square and reconstruction rounding and exact zeros.
+With `transformation=:sqrt` or `:rsqrt`, generate a kernel on `[1,4]`, split
+`e=2q+r` using floor division, and reconstruct directly into the floating output.
+The bounded nonnegative contract covers positive finite inputs numerically;
+zeros in the contract and positive infinity use exact lazy branches.
+With `transformation=:cbrt`, split `e=3q+r`, generate the positive kernel on
+`[1,8]`, and restore the original sign. Bounded signed intervals, signed zeros
+and signed infinities are supported through audited identities and lazy branches.
 With `transformation=:reciprocal`, generate `1/m` on `[1,2]` and reconstruct
 with the exact input exponent. Floating interfaces and a bounded domain strictly
 on one side of zero are required. Fixed/floating stages round directly into the
@@ -138,6 +149,7 @@ function certified_polynomial(
     _validate_transformation(transformation, degree, segments)
     transformation == :odd && _validate_odd_spec(spec)
     transformation == :reciprocal && _reciprocal_geometry(spec)
+    transformation in (:sqrt, :rsqrt, :cbrt) && _root_geometry(spec, transformation)
     _validate_segment_request(spec, segments, internal_format)
     _validate_precision_request(
         precision,
@@ -291,6 +303,20 @@ function _certified_polynomial(
         proof_precision,
         accuracy,
         max_refinements;
+        precision_layout,
+        candidate_ready,
+    )
+    transformation in (:sqrt, :rsqrt, :cbrt) && return _certified_root(
+        spec,
+        domain,
+        degree,
+        internal_format,
+        evaluation,
+        generation_precision,
+        proof_precision,
+        accuracy,
+        max_refinements;
+        transformation,
         precision_layout,
         candidate_ready,
     )

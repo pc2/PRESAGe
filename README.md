@@ -19,6 +19,12 @@ can be chosen individually and reduced through a bounded certified search.
 Bounded sin, sinh, atan and erf also support certified `x*q(x²)` kernels.
 Bounded reciprocal kernels normalize floating inputs exactly, including
 subnormals, approximate `1/m` on `[1,2]` and certify exponent reconstruction.
+Sqrt and rsqrt use exact `e=2q+r` splitting and kernels on `[1,4]`, with
+complete reconstruction bounds and lazy zero/infinity/invalid-input branches.
+See the [root example](examples/root_search.jl) and [proof](docs/certification.md#sqrt-and-rsqrt-exponent-splitting).
+Cbrt extends this pipeline to bounded signed domains with `e=3q+r`, a positive
+kernel on `[1,8]`, exact sign restoration and signed zero/infinity branches.
+See the [cbrt example](examples/cbrt_search.jl).
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.

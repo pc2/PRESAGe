@@ -93,3 +93,16 @@ their explicit status. Existing output/sidecars are refused. Readers should
 require a complete manifest and inspect status counts before using a dataset.
 Fixed domain/overflow/nonfinite failures also abort publication and retain their
 statuses. Datasets must remain unchanged during reference generation.
+
+
+## Real cube root
+
+The `cbrt(x)` primitive uses `x^(1/3)` on the exact input magnitude for Sollya
+bounds. Negative inputs negate and reverse the directed endpoints using the
+established odd identity. Signed zeros and infinities retain the primitive
+policy; direct MPFR uses `mpfr_cbrt` and is checked against this path.
+Sollya 8 has no native cbrt call, and parser recovery can produce a different
+expression. PRESAGe therefore maps this primitive explicitly and rejects cbrt
+compositions instead of accepting parser recovery. Ordinary polynomial
+approximation supports a nonnegative cbrt interval; signed domains require the
+explicit `transformation=:cbrt` pipeline.

@@ -83,6 +83,8 @@ function _cpp_ac_expr(p, i, backend)
         return "canonical($(call(n.a)).template fma<AC_RND_CONV,false>($(call(n.b)),$(call(n.c))))"
     elseif n isa IR.FloatMantissa
         return "normalize_float($(call(n.source))).mantissa"
+    elseif n isa IR.RootArgument
+        return "root_argument<$(_cpp_ac_type(f,backend)),$(n.divisor)>($(call(n.source)))"
     elseif n isa IR.ScaleByInputExponent
         source = p.types[n.source]
         if source isa FloatFormat || backend != :portable
@@ -98,12 +100,12 @@ function _cpp_ac_expr(p, i, backend)
         end
         if source isa FixedFormat
             if backend == :portable
-                exponent = "($(n.multiplier) * normalize_float($(call(n.input))).exponent)"
+                exponent = "($(n.multiplier) * input_exponent<$(n.divisor)>($(call(n.input))))"
                 return "float_from_fixed<$(_cpp_ac_type(f,backend))>($(call(n.source)),std::int64_t($(_fraction(source)))-$exponent,0)"
             end
-            return "ac_fixed_reconstruct<$(_cpp_ac_type(f,backend)),$(source.width),$(source.integer_bits),$(source.signed),$(n.multiplier)>($(call(n.source)),$(call(n.input)))"
+            return "ac_fixed_reconstruct<$(_cpp_ac_type(f,backend)),$(source.width),$(source.integer_bits),$(source.signed),$(n.multiplier),$(n.divisor)>($(call(n.source)),$(call(n.input)))"
         end
-        return "ac_float_reconstruct<$(_cpp_ac_type(f,backend)),$(n.multiplier)>($(call(n.source)),$(call(n.input)))"
+        return "ac_float_reconstruct<$(_cpp_ac_type(f,backend)),$(n.multiplier),$(n.divisor)>($(call(n.source)),$(call(n.input)))"
     elseif n isa IR.CopySign
         return "copy_float_sign($(call(n.source)),$(call(n.sign)))"
     elseif n isa IR.Compare

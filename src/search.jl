@@ -11,6 +11,10 @@ Optional `precisions` align one `PolynomialPrecision` (or `nothing` for shared
 formats) with each internal format choice. Their lists cover the largest degree.
 For `transformation=:odd`, degrees are odd original-function degrees in `1:31`,
 precision lists describe q in `x*q(x²)`, and segments must be `(1,)`.
+For `transformation=:sqrt` or `:rsqrt`, they describe a kernel on `[1,4]`,
+with exact floor exponent splitting and direct output reconstruction.
+For `transformation=:cbrt`, the kernel uses `[1,8]`, floor division by three
+and original sign restoration; bounded signed domains are supported.
 For `transformation=:reciprocal`, degrees and precision lists describe `1/m` on
 `[1,2]`; one mantissa kernel uses exact exponent reconstruction. Floating
 interfaces and a bounded domain strictly on one side of zero are required.
@@ -388,6 +392,8 @@ function _search_polynomial(
     # Validate all choices, including ones beyond the attempt limit.
     config.transformation == :odd && _validate_odd_spec(spec)
     config.transformation == :reciprocal && _reciprocal_geometry(spec)
+    config.transformation in (:sqrt, :rsqrt, :cbrt) &&
+        _root_geometry(spec, config.transformation)
     domain = nothing
     for format in config.internal_formats
         domain = _validate_polynomial_request(

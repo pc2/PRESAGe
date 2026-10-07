@@ -139,6 +139,7 @@ function _precision_proposals(result, step, minimum)
     get(result.plan.settings, "transformation", "none") == "odd" &&
         all(p -> p.input_domain == (0, 0), layouts) &&
         return NamedTuple[]
+    isempty(result.paths) && return NamedTuple[]
     ranges = _precision_ranges.(result.paths)
     count = length(precision.coefficient_formats)
     proposals = NamedTuple[]

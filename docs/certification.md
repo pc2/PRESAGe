@@ -578,3 +578,121 @@ entries cannot retain a certificate. Reports use method
 Generation through `certified_erf` selects a LUT or fixed polynomial by the
 configurable table-bit threshold; explicit selection bypasses that threshold.
 This selection policy contains no measured FPGA performance assumptions.
+
+## Sqrt and rsqrt exponent splitting
+
+`transformation=:sqrt` and `:rsqrt` support the established expressions `sqrt(x)`
+and `1/sqrt(x)` with floating interfaces and an explicit bounded nonnegative
+domain. Whitespace is allowed. Degree 0–32 kernels use fixed or floating
+internals, separate/FMA evaluation and individual coefficient/stage formats.
+The option is available in supervised search and certified precision reduction;
+it currently uses one kernel.
+
+For each positive finite input, including subnormals:
+
+```text
+x = m*2^e, 1 ≤ m < 2
+q = floor(e/2), r = e - 2q, r ∈ {0,1}
+t = m*2^r, 1 ≤ t < 4
+sqrt(x)  = sqrt(t)*2^q
+rsqrt(x) = rsqrt(t)*2^-q
+```
+
+Normalization and t formation are exact bit operations. In particular,
+`e=-3` gives `q=-2,r=1`. Generation and the stored-polynomial norm use `[1,4]`.
+Let N be its approximation upper bound, C the coordinate error and V the
+complete Horner rounding error. Let S be the largest exact reconstruction
+factor on accepted positive inputs and R the final output rounding bound:
+
+```text
+total = S*(N+C+V) + R
+```
+
+The exact function images, `[1,2]` for sqrt and `[1/2,1]` for rsqrt, enlarged
+by `N+C+V`, tighten the rounded accumulator range before reconstruction. The
+source is scaled directly into the output format; there is no intermediate
+output conversion. Taking its magnitude cannot increase error against a
+positive target. Possible internal or output overflow refuses certification.
+The reduced interval and maximum scale can enlarge the accepted domain, so
+the reported original-domain approximation lower bound is zero.
+
+The graph audit reconstructs every coefficient, conversion, arithmetic stage,
+normalization, exponent split, sign operation and exceptional/domain branch.
+On positive finite inputs, numerical ranges cover every visited arithmetic
+node. These aliases never authorize arbitrary Select graphs. Exact cases use
+lazy branches and do not execute normalization or Horner:
+
+| Input | sqrt output | rsqrt output |
+| --- | --- | --- |
+| `+0`, when zero is in the contract | `+0` | `+∞` |
+| `-0`, when zero is in the contract | `-0` | `-∞` |
+| `+∞` | `+∞` | `+0` |
+| Negative finite, `-∞`, NaN | Canonical quiet NaN | Canonical quiet NaN |
+| Finite input outside the bounded domain | Canonical quiet NaN | Canonical quiet NaN |
+
+The finite absolute-error certificate applies to positive inputs. It does not
+assign a finite numerical error to the rsqrt pole; the signed infinities are
+exact exceptional outputs. A zero-only contract proves those branches with
+no numerical paths and cannot be invalidated by unreachable arithmetic.
+
+`root_polynomial_plan(spec, coefficients; transformation, precision, evaluation)`
+builds an uncertified candidate from supplied ascending coefficients of the
+reduced kernel. [The example](../examples/root_search.jl) searches and emits
+both functions over all positive finite binary16 values. These polynomial
+contracts have absolute bounds, without a correct-rounding or ulp guarantee.
+
+## Cbrt exponent splitting
+
+`transformation=:cbrt` supports the established real cube root `cbrt(x)` with
+floating input/output and any explicit bounded signed interval, including
+intervals crossing zero. The existing root planner supports fixed/floating
+internals, separate/FMA evaluation, individual coefficients/stages and
+supervised precision reduction. It currently uses one degree 0–32 kernel.
+
+For finite nonzero x:
+
+```text
+abs(x) = m*2^e, 1 ≤ m < 2
+e = 3q+r, q = floor(e/3), r ∈ {0,1,2}
+t = m*2^r, 1 ≤ t < 8
+cbrt(x) = sign(x)*cbrt(t)*2^q
+```
+
+Argument formation is exact, including subnormals. Negative exponents retain
+nonnegative remainders: `e=-1` gives `q=-1,r=2`. For two-bit exponent formats,
+only the reduced argument's exponent field widens to three bits; every fraction
+bit remains exact. Coordinate conversion and every subsequent rounding still
+belong to the certificate.
+
+Generation and the norm proof use the positive real function `x^(1/3)` on
+`[1,8]`. The exact primitive identity authorizes odd sign extension; a supplied
+fractional-power expression on a signed domain does not authorize this
+transformation. The proof compares the actual stored polynomial with this
+positive kernel, then uses the same complete reconstructed bound as sqrt:
+`S*(N+C+V)+R`, with `S=max(2^q)` over accepted nonzero inputs. Its exact image
+`[1,2]`, enlarged by the complete kernel error, bounds the final accumulator.
+Taking its magnitude cannot increase error against a positive target; copying
+the original input sign is exact. Reconstruction rounds directly into the output.
+Possible internal or output overflow refuses certification.
+
+Signed input ranges cover every visited numeric node on the nonzero path.
+Zeros in the bounded contract preserve both signs through a lazy conversion
+branch; both signed infinities are returned exactly. NaNs and finite inputs
+outside the contract return canonical quiet NaN before normalization or Horner.
+Zero-only contracts have an exact bound of zero and no numerical paths.
+These exact branches complete the finite-domain absolute-error claim, including
+zero, without evaluating the positive approximation there.
+
+Independent exhaustive checks use the strict monotonicity of cubing:
+`(y-B)^3 ≤ x ≤ (y+B)^3` proves `abs(y-cbrt(x)) ≤ B` using exact rationals.
+The [example](../examples/cbrt_search.jl) generates and certifies both signs of
+every finite binary16 input. No correct-rounding or ulp guarantee is claimed.
+
+
+The shared expression parser maps the exact `cbrt(x)` primitive to the positive
+fractional-power function for native Sollya calls. Sollya references evaluate
+its magnitude and reverse/negate bounds for negative inputs; direct MPFR uses
+its real cube-root primitive. Unsupported cbrt compositions are rejected, and
+ordinary polynomial proofs on signed cbrt domains require the explicit root
+transformation. Parser recovery cannot authorize an identity evaluator as a
+cube-root approximation.

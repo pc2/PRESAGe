@@ -33,3 +33,22 @@ template<class T,class Sign> T copy_float_sign(const T& value,const Sign& sign) 
     const bool negative = ((S::bits(sign) >> (S::width-1)) & 1) != 0;
     return F::from_bits(Word((F::bits(value) & ~mask) | (negative ? mask : Word(0))));
 }
+template<int Divisor,class T> std::int64_t input_exponent(const T& input) {
+    static_assert(Divisor>=1 && Divisor<=3);
+    const auto exponent = normalize_float(input).exponent;
+    return exponent/Divisor - (exponent%Divisor < 0);
+}
+template<class Out,int Divisor,class T> Out root_argument(const T& input) {
+    static_assert(Divisor==2 || Divisor==3);
+    using S = FloatBits<T>;
+    using F = FloatBits<Out>;
+    using Word = typename F::Word;
+    static_assert(F::fraction==S::fraction);
+    constexpr std::int64_t bias = (std::int64_t(1) << (F::exponent-1))-1;
+    const auto normalized = normalize_float(input);
+    const auto raw_remainder = normalized.exponent%Divisor;
+    const auto remainder = raw_remainder < 0 ? raw_remainder+Divisor : raw_remainder;
+    const Word mask = (Word(1) << F::fraction)-1;
+    const Word fraction = Word(S::bits(normalized.mantissa)) & mask;
+    return F::from_bits(Word((Word(bias+remainder) << F::fraction) | fraction));
+}

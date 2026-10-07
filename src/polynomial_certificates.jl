@@ -149,7 +149,7 @@ _dyadic_fraction(q) =
 function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = Dict())
     ranges, rho = Dict{Int, _Interval}(), Dict{Int, Rational{BigInt}}()
     grids = Dict{Int, Int}()
-    needed = Set([p.output])
+    needed = Set(get(layout, :range_roots, (p.output,)))
     for i in reverse(eachindex(p.nodes))
         i in needed && union!(needed, IR.refs(p.nodes[i]))
     end
@@ -190,7 +190,7 @@ function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = 
             ranges[i] = ranges[n.source]
             grids[i] = grids[n.source]
             continue
-        elseif n isa IR.FloatMantissa
+        elseif n isa Union{IR.FloatMantissa, IR.RootArgument}
             ranges[i] = layout.mantissa_domain
             grids[i] = IR.format(p, n.source).fraction_bits
             rho[i] = _q(0)
@@ -202,7 +202,9 @@ function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = 
             lo, hi = ranges[n.source]
             magnitude =
                 (lo <= 0 <= hi ? _q(0) : min(abs(lo), abs(hi)), max(abs(lo), abs(hi)))
-            ranges[i] = layout.negative ? (-magnitude[2], -magnitude[1]) : magnitude
+            ranges[i] =
+                get(layout, :both_signs, false) ? (-magnitude[2], magnitude[2]) :
+                layout.negative ? (-magnitude[2], -magnitude[1]) : magnitude
             grids[i] = grids[n.source]
             rho[i] = _q(0)
             continue
@@ -255,8 +257,14 @@ function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = 
             f isa FixedFormat ? _pow2(-_fraction(f) - 1) : _float_rounding_bound(exact, f)
         end
     end
-    stop_before === nothing &&
-        (ranges[p.output] = ranges[get(layout, :output_source, layout.result)])
+    if stop_before === nothing
+        for (node, source) in
+            sort!(collect(get(layout, :range_aliases, Dict())); by = first)
+            ranges[node], grids[node] = ranges[source], grids[source]
+            rho[node] = _q(0)
+        end
+        ranges[p.output] = ranges[get(layout, :output_source, layout.result)]
+    end
     return ranges, rho
 end
 
@@ -372,6 +380,20 @@ function certify_polynomial(
         return _certify_odd(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "reciprocal" &&
         return _certify_reciprocal(plan; precision, accuracy, max_refinements)
+    get(plan.settings, "transformation", "none") in ("sqrt", "rsqrt", "cbrt") &&
+        return _certify_root(plan; precision, accuracy, max_refinements)
+    if _primitive(plan.spec.expression) == :cbrt &&
+       (plan.spec.domain === nothing || plan.spec.domain[1] < 0)
+        return _certificate_failure(
+            plan,
+            :unsupported_domain,
+            "signed cbrt domains require transformation=:cbrt";
+            settings = Dict(
+                "precision" => string(precision),
+                "norm_accuracy" => _rational_text(_q(accuracy)),
+            ),
+        )
+    end
     (
         plan.precision !== nothing ||
         get(plan.settings, "kernel", "") == "normalized_segmented_horner"

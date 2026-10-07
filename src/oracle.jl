@@ -108,6 +108,12 @@ end
 # numbers by exact rationals before parsing, leaving names and binary/hex tokens
 # intact. The saved FunctionSpec retains the user's mathematical expression.
 function _exact_expression(text::String)
+    _primitive(text) == :cbrt && return "x^(1/3)"
+    occursin(r"\bcbrt\s*\(", text) && throw(
+        ArgumentError(
+            "Sollya does not support cbrt compositions; use the explicit cbrt transformation",
+        ),
+    )
     tokens =
         r"0[xX][0-9a-fA-F]+(?:\.[0-9a-fA-F]*)?(?:[pP][+-]?\d+)?|[A-Za-z_][A-Za-z_0-9]*|(?:\d+\.\d*|\.\d+|\d+)(?:[eEbB][+-]?\d+)?"
     return replace(
@@ -383,13 +389,23 @@ end
 
 function _sollya_bounds(o::ReferenceOracle, x::Rational{BigInt}, precision::Int)
     Sollya.with_session(Sollya.Session(; precision)) do
-        range = Sollya.enclosure(o.expression, x)
+        cube = o.primitive == :cbrt
+        range = Sollya.enclosure(o.expression, cube ? abs(x) : x)
         try
             lo = Sollya.infimum(range)
             try
                 hi = Sollya.supremum(range)
                 try
-                    return (_sollya_bound(lo), _sollya_bound(hi))
+                    bounds = (_sollya_bound(lo), _sollya_bound(hi))
+                    # The real cube root is odd. Negation reverses interval
+                    # endpoints and preserves their exact dyadic values.
+                    if cube && x < 0
+                        return map(reverse(bounds)) do b
+                            b.kind == :infinity ? _infinite_bound(!b.negative) :
+                            DyadicBound(-b.significand, b.exponent; negative = !b.negative)
+                        end
+                    end
+                    return bounds
                 finally
                     close(hi)
                 end

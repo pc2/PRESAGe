@@ -28,6 +28,7 @@ endpoints are rounded inward for input comparisons.
 | `Mul`, `Add` | Each operation rounds separately into its declared format. |
 | `FMA` | Exact product plus sum, followed by one rounding. |
 | `Convert`, `Quantize` | Explicit float/fixed conversions, fractional quantisation and overflow policy. |
+| `RootArgument` | Exact `t=m*2^r`, where `abs(x)=m*2^e` and `e=d*q+r` uses floor division. `d=2` gives `[1,4)`; `d=3` gives `[1,8)`. |
 | `ScalePow2` | Multiply by an exact power of two, then round once. |
 | `Compare`, `Classify`, `Select` | Arithmetic comparisons and classification; only the selected branch executes. |
 | `Guard` | Reject a false domain condition before evaluating its arithmetic source. |
@@ -236,3 +237,22 @@ configured limits and returns a uniform certificate for the resulting fixed
 program. Its default starts at 31 fractional bits; coefficient and arithmetic
 scales can be selected separately. Fixed Mul/Add and FMA retain their distinct
 rounding order. See [the numerical proof](certification.md).
+
+For root reconstruction, `ScaleByInputExponent(...; divisor=2)` multiplies by
+`2^(multiplier*floor(e/2))`, with one final rounding. Negative odd exponents
+use a nonnegative remainder: `split_exponent(-3) == (-2,1)`. `RootArgument`
+constructs its result exactly by changing the normalized exponent field.
+Normalization rejects zero/NaN/infinity when reached; canonical sqrt/rsqrt
+plans guard those cases with lazy branches first. AC and AP fixed sources and
+AC floating sources are widened exactly before reconstruction. The portable
+fixed path uses its independent integer adapter.
+
+
+`RootArgument(source,3)` and `ScaleByInputExponent(...; divisor=3)` express
+cube-root reduction. Negative exponents use floor division:
+`split_exponent(-1,3) == (-1,2)`. Argument formation retains every fraction bit
+and automatically widens a two-bit exponent field to three bits, sufficient
+for `[1,8)`. The result type is inferred by the IR and stored through its node
+semantics. Native/AC C++ uses the same integer quotient/remainder and exact
+field construction. Cbrt restores the original input sign after direct scaling;
+its lazy branches preserve both signed zeros and infinities.

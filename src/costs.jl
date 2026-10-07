@@ -47,7 +47,10 @@ function implementation_cost(plan::PlanArtifact)
         fmas = count(n -> n isa IR.FMA, p.nodes),
         conversions = count(n -> n isa Union{IR.Convert, IR.Quantize}, p.nodes),
         comparisons = count(n -> n isa IR.Compare, p.nodes),
-        normalizations = count(n -> n isa IR.FloatMantissa, p.nodes),
+        normalizations = count(
+            n -> n isa Union{IR.FloatMantissa, IR.RootArgument},
+            p.nodes,
+        ),
         exponent_scalings = count(n -> n isa IR.ScaleByInputExponent, p.nodes),
         sign_copies = count(n -> n isa IR.CopySign, p.nodes),
     )

@@ -226,3 +226,38 @@ maximum error scaling, reconstruction node and excluded-input policy. Path
 domains describe original inputs; numerical ranges include the certified
 mantissa-kernel enclosure and reconstructed output. The existing certificate
 schema v2 carries these fields. Replay audits and proves the entire graph again.
+
+## Root exponent splitting
+
+Root searches use configuration/report v6, with `transformation="sqrt"` or
+`"rsqrt"`, `segments=[1]` and `degree_then_format` ordering. Degrees and precision
+lists describe the polynomial on `[1,4]` in ascending powers.
+
+Plans using `RootArgument` or `ScaleByInputExponent` with `divisor=2` use v7.
+The divisor is omitted for the existing v6 reciprocal operation, where it
+means one. Earlier versions reject root operations. All coefficients, stages,
+exponent reconstruction and lazy exceptional branches are stored in the IR.
+
+Root certificates retain report v2 and use method `root_polynomial_horner`.
+The transformation table records the identity, reduced domain, input exponent
+range and maximum error scale. Positive finite paths carry numerical bounds;
+coverage separately records exact zeros/infinities and invalid/outside inputs.
+A zero-only contract has an exact bound of zero and no numerical paths.
+
+## Cube root reduction
+
+Cbrt searches use configuration/report v7, with `transformation="cbrt"`,
+`segments=[1]` and `degree_then_format` ordering. Degree and precision lists
+describe the ascending positive kernel on `[1,8]`; the original expression must
+be `cbrt(x)`, with whitespace allowed.
+
+Plans using `RootArgument(...,3)` or `ScaleByInputExponent(...; divisor=3)`
+use v8. `RootArgument` omits its default divisor of two in existing v7 plans;
+its output retains input fraction bits and widens the exponent field when
+necessary. Older plan versions reject division by three.
+
+Certificate v2 retains method `root_polynomial_horner`, records transformation
+`cbrt`, its exponent divisor, reduced argument format and maximum error scale.
+Numerical paths describe the original signed input interval; zero branches
+are exact. Coverage explicitly includes both signed infinities and NaN handling.
+Exact replay audits every normalization, coefficient, stage, sign and branch.

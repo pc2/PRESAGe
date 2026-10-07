@@ -161,10 +161,14 @@ function _interpret(p::IR.Program, bits::Integer, trace::Bool)
         elseif n isa IR.FloatMantissa
             mantissa, _ = normalize_float(visit(n.source).bits, f)
             _float(mantissa, f)
+        elseif n isa IR.RootArgument
+            source = visit(n.source)
+            _float(_root_argument(source.bits, source.format, n.divisor), f)
         elseif n isa IR.ScaleByInputExponent
             input = visit(n.input)
             _, exponent = normalize_float(input.bits, input.format)
-            _scale(visit(n.source), n.multiplier * exponent, f, n.rounding)
+            quotient, _ = split_exponent(exponent, n.divisor)
+            _scale(visit(n.source), n.multiplier * quotient, f, n.rounding)
         elseif n isa IR.CopySign
             source, sign = visit(n.source), visit(n.sign)
             negative = sign.bits & _sign(sign.format) != 0

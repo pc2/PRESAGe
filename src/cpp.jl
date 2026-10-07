@@ -82,8 +82,10 @@ function _cpp_expr(p, i, backend = :portable)
         return "canonical(std::ldexp($(call(n.source)),$(n.exponent)))"
     elseif n isa IR.FloatMantissa
         return "normalize_float($(call(n.source))).mantissa"
+    elseif n isa IR.RootArgument
+        return "root_argument<$(_cpp_type(f)),$(n.divisor)>($(call(n.source)))"
     elseif n isa IR.ScaleByInputExponent
-        exponent = "($(n.multiplier) * normalize_float($(call(n.input))).exponent)"
+        exponent = "($(n.multiplier) * input_exponent<$(n.divisor)>($(call(n.input))))"
         source = IR.format(p, n.source)
         if source isa FixedFormat
             units =
