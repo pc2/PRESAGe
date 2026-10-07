@@ -28,7 +28,7 @@ if(NOT PRESAGE_TOOLCHAIN MATCHES "^(generic|vitis|oneapi)$")
   message(FATAL_ERROR "PRESAGE_TOOLCHAIN must be generic, vitis or oneapi")
 endif()
 if(PRESAGE_TARGET STREQUAL "kernel" AND NOT PRESAGE_PLAN)
-  message(FATAL_ERROR "Kernel generation requires PRESAGE_PLAN with fixed interfaces and arithmetic")
+  message(FATAL_ERROR "Kernel generation requires PRESAGE_PLAN with fixed arithmetic or encoded tables")
 endif()
 set(PRESAGE_EVALUATION separate CACHE STRING "Horner arithmetic: separate or fma")
 set(PRESAGE_INTERNAL fixed CACHE STRING "Internal arithmetic: fixed, single or double")
@@ -62,8 +62,8 @@ if(PRESAGE_PLAN)
   set(options)
   execute_process(
     COMMAND "${PRESAGE_JULIA}" --startup-file=no "--project=${CMAKE_CURRENT_SOURCE_DIR}"
-      -e "using PRESAGe; p=read_plan(ARGS[1]).program; p===nothing && error(\"plan has no evaluator\"); print(PRESAGe._has_fixed(p) ? \"ON\" : \"OFF\", \" \", PRESAGe._resolved_float_backend(p,Symbol(ARGS[2]))==:ac_std_float ? \"ON\" : \"OFF\")"
-      "${PRESAGE_PLAN}" "${PRESAGE_FLOAT_BACKEND}"
+      -e "using PRESAGe; p=read_plan(ARGS[1]).program; p===nothing && error(\"plan has no evaluator\"); kernel=ARGS[3]==\"kernel\"; print(!kernel && PRESAGe._has_fixed(p) ? \"ON\" : \"OFF\", \" \", !kernel && PRESAGe._resolved_float_backend(p,Symbol(ARGS[2]))==:ac_std_float ? \"ON\" : \"OFF\")"
+      "${PRESAGE_PLAN}" "${PRESAGE_FLOAT_BACKEND}" "${PRESAGE_TARGET}"
     RESULT_VARIABLE inspect_result OUTPUT_VARIABLE resources OUTPUT_STRIP_TRAILING_WHITESPACE)
   if(NOT inspect_result EQUAL 0)
     message(FATAL_ERROR "Could not inspect evaluator plan dependencies")

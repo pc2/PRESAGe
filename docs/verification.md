@@ -1129,9 +1129,36 @@ Both kernel CMake builds and their numerical CTests pass; the existing CPU build
 and both of its CTests also pass. Julia formatting and whitespace checks are
 clean. The complete package runner was not repeated.
 
-See [kernel interfaces and supported scope](kernels.md). Floating kernel
-interfaces and transformations remain pending. Public-header compilation
-does not establish vendor compiler or synthesis acceptance.
+See [kernel interfaces and supported scope](kernels.md). Public-header
+compilation does not establish vendor compiler or synthesis acceptance.
+
+## Encoded floating kernel interfaces
+
+Four additional groups pass 118 checks with official AP/AC headers required:
+
+| Group | Checks | Coverage |
+| --- | ---: | --- |
+| Conversion and branch conformance | 4 | 479 graphs and 1,567,420 input records per backend; successful intermediate traces, typed/raw outputs and rejection statuses match the exact interpreter. |
+| Capability validation | 20 | Unsupported floating arithmetic, normalization and widths fail before writing; emitted headers contain no PRESAGe host dependencies. |
+| Maximum conversion work widths | 4 | Signed/unsigned 4096-bit fixed inputs and 4095-bit fixed destinations, all rounding modes and both backends. |
+| Mixed plans, erf and captured-output replay | 90 | Certified binary16/32 interfaces, separate/FMA fixed internals, complete binary16 input streams and standalone numerical checks of actual AP/AC outputs. |
+
+The matrix exhausts binary16 encodings for conversion, comparison,
+classification, payload-preserving bit casts/CopySign and banked floating LUTs.
+Small custom formats cover every fixed rounding/overflow policy and both signs.
+Boundary checks cover binary32/64/128/256, custom significands/exponents,
+subnormal transitions, signed zeros, NaNs/infinities, directed floating overflow
+and extreme static scaling. Very wide exponent fields use finite encodings near
+one to keep the exact rational interpreter bounded.
+
+Ordinary C++17 compilation disables exceptions/RTTI and links no GMP/MPFR into
+the kernels. Fixed-to-float negative magnitudes use width-preserving complement
+and increment; the affected fixed-input matrix passes again after this change.
+Both CMake kernel builds and numerical CTests also pass for a certified
+binary128-input/binary32-output plan. The existing four fixed-kernel groups pass
+2,113 checks. Formatting and whitespace checks pass; the full package runner was
+not repeated. Floating arithmetic and normalization/reconstruction remain
+outside kernel emission. Actual vendor compilation and synthesis remain pending.
 
 ## Limits
 

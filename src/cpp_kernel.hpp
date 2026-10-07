@@ -7,7 +7,7 @@ enum class Status : unsigned char {
 };
 
 template <class T, int Width, class U> inline T copy_bits(const U &source) {
-    T result = 0;
+    T result = T(0);
     for (int bit = 0; bit < Width; ++bit)
         result[bit] = bool(source[bit]);
     return result;
@@ -16,7 +16,7 @@ template <class T, int Width, class U> inline T copy_bits(const U &source) {
 template <class T, int Width, std::size_t N>
 inline T from_chunks(const unsigned long long (&words)[N]) {
     static_assert(N == (Width + 63) / 64, "incorrect constant word count");
-    T result = 0;
+    T result = T(0);
     for (int bit = 0; bit < Width; ++bit)
         result[bit] = (words[bit / 64] >> (bit % 64)) & 1ULL;
     return result;

@@ -25,7 +25,7 @@ end
 function kernel_bytes(io, value, width)
     PRESAGe._write_word(io, value, cld(width, 8), :little)
 end
-kernel_width(f) = f == Bool ? 1 : f.width
+kernel_width(f) = f == Bool ? 1 : f isa FloatFormat ? PRESAGe._width(f) : f.width
 
 function kernel_expected(p, words)
     output = IOBuffer()
@@ -37,11 +37,11 @@ function kernel_expected(p, words)
                 err isa DomainError ? 1 :
                 err isa OverflowError ? 2 : err isa BoundsError ? 3 : rethrow()
             write(output, UInt8(status))
-            kernel_bytes(output, 0, IR.format(p).width)
+            kernel_bytes(output, 0, kernel_width(IR.format(p)))
             continue
         end
         write(output, UInt8(0))
-        kernel_bytes(output, trace.bits, IR.format(p).width)
+        kernel_bytes(output, trace.bits, kernel_width(IR.format(p)))
         for (i, f) in enumerate(p.types)
             ready = haskey(trace.values, i)
             write(output, UInt8(ready))
@@ -103,11 +103,11 @@ template<class T> T read_word(int width) {
                 println(io, "for (int k=0; k<$(length(fixture.words)); ++k) {")
                 println(
                     io,
-                    "auto raw = read_word<InputBits>($(IR.format(p,p.input).width));",
+                    "auto raw = read_word<InputBits>($(kernel_width(IR.format(p,p.input))));",
                 )
                 println(
                     io,
-                    "Input input = copy_bits<Input,$(IR.format(p,p.input).width)>(raw);",
+                    "Input input = copy_bits<Input,$(kernel_width(IR.format(p,p.input)))>(raw);",
                 )
                 println(io, "Context context(input); auto value = context.n$(p.output)();")
                 println(
@@ -120,11 +120,11 @@ template<class T> T read_word(int width) {
                 )
                 println(
                     io,
-                    "if (result.valid() && (copy_bits<OutputBits,$(IR.format(p).width)>(value) != result.bits || copy_bits<OutputBits,$(IR.format(p).width)>(typed.value) != result.bits)) std::exit(5);",
+                    "if (result.valid() && (copy_bits<OutputBits,$(kernel_width(IR.format(p)))>(value) != result.bits || copy_bits<OutputBits,$(kernel_width(IR.format(p)))>(typed.value) != result.bits)) std::exit(5);",
                 )
                 println(
                     io,
-                    "std::cout.put(static_cast<char>(result.status)); write_word(result.bits,$(IR.format(p).width));",
+                    "std::cout.put(static_cast<char>(result.status)); write_word(result.bits,$(kernel_width(IR.format(p))));",
                 )
                 println(io, "if (!result.valid()) continue;")
                 for (j, f) in enumerate(p.types)
@@ -151,7 +151,7 @@ template<class T> T read_word(int width) {
                 kernel_bytes(
                     input,
                     word,
-                    IR.format(fixture.program, fixture.program.input).width,
+                    kernel_width(IR.format(fixture.program, fixture.program.input)),
                 )
             end
             write(expected, kernel_expected(fixture.program, fixture.words))
@@ -160,7 +160,15 @@ template<class T> T read_word(int width) {
         actual = read(pipeline(`$exe`; stdin = input))
         expected_bytes = take!(expected)
         @test length(actual) == length(expected_bytes)
-        @test actual == expected_bytes
+        mismatch = findfirst(
+            i -> actual[i] != expected_bytes[i],
+            1:min(length(actual), length(expected_bytes)),
+        )
+        @test mismatch === nothing
+        if mismatch !== nothing
+            @info "Kernel trace mismatch" backend byte = mismatch actual = actual[mismatch] expected =
+                expected_bytes[mismatch]
+        end
     end
 end
 
@@ -410,7 +418,7 @@ end
 
 @testset "Kernel emission validates before writing" begin
     good = IR.Program([IR.Input(FixedFormat(8, 4))])
-    float = IR.Program([IR.Input(IEEE32)])
+    float = IR.Program([IR.Input(IEEE32), IR.Add(1, 1, IEEE32)])
     for options in (
         (; backend = :portable),
         (; backend = :ac_fixed, toolchain = :vitis),

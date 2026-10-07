@@ -54,7 +54,7 @@ function generate_main(args)
         error("toolchain requires target=kernel")
     target == :kernel &&
         haskey(options, "float-backend") &&
-        error("float-backend does not apply to fixed kernels")
+        error("float-backend is a CPU option; kernels use encoded floating interfaces")
     float_backend = Symbol(get(options, "float-backend", "auto"))
     float_backend in PRESAGe._CPP_FLOAT_BACKENDS ||
         error("float-backend must be auto, native or ac_std_float")

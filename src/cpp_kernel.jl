@@ -8,9 +8,13 @@ function _kernel_type(f::IR.UIntFormat, backend)
 end
 _kernel_type(f::FixedFormat, backend) = _cpp_type(f, backend)
 _kernel_type(::Type{Bool}, backend) = "bool"
-_kernel_type(::FloatFormat, backend) = throw(
-    ArgumentError("kernel emission currently requires fixed input, output and arithmetic"),
-)
+function _kernel_type(f::FloatFormat, backend)
+    word = _kernel_type(IR.UIntFormat(_width(f)), backend)
+    return "EncodedFloat<$word,$(f.exponent_bits),$(f.fraction_bits)>"
+end
+_kernel_width(f::Union{FixedFormat, FloatFormat}) = _width(f)
+_kernel_width(f::IR.UIntFormat) = f.width
+_kernel_width(::Type{Bool}) = 1
 
 function _kernel_chunks(bits, width)
     return join(
@@ -24,7 +28,7 @@ end
 
 function _kernel_constant(bits, f, backend)
     f == Bool && return bits == 0 ? "false" : "true"
-    width = f.width
+    width = _kernel_width(f)
     return "([]() { const unsigned long long words[] = {$(_kernel_chunks(bits,width))}; return from_chunks<$(_kernel_type(f,backend)),$width>(words); }())"
 end
 
@@ -40,6 +44,17 @@ function _kernel_validate(p, backend, toolchain)
         backend != :ac_fixed &&
         throw(ArgumentError("oneapi kernels require ac_fixed"))
     foreach(f -> _kernel_type(f, backend), p.types)
+    for n in p.nodes
+        if n isa Union{IR.Convert, IR.Quantize, IR.ScalePow2} &&
+           n.format isa FixedFormat &&
+           IR.format(p, n.source) isa FloatFormat
+            n.format.width < _VENDOR_WIDTH_LIMIT || throw(
+                ArgumentError(
+                    "float-to-fixed conversion needs a guard bit within the 4096-bit vendor limit",
+                ),
+            )
+        end
+    end
     for t in p.tables
         _kernel_type(t.format, backend)
         length(t.values) <= typemax(Cint) ||
@@ -63,7 +78,31 @@ function _kernel_expr(p, i, backend)
         return _kernel_constant(n.bits, f, backend)
     elseif n isa IR.TableLoad
         return "load$(n.table)($(call(n.index)))"
-    elseif n isa Union{IR.Mul, IR.Add, IR.FMA, IR.Convert, IR.Quantize, IR.ScalePow2}
+    elseif n isa Union{IR.Convert, IR.Quantize, IR.ScalePow2}
+        source = IR.format(p, n.source)
+        scale = n isa IR.ScalePow2 ? n.exponent : 0
+        mode = _cpp_mode(n.rounding)
+        if source isa FloatFormat && f isa FixedFormat
+            return "float_to_fixed<$(_kernel_type(f,backend)),$(f.width),$(f.integer_bits),$(f.signed),$mode,$(_cpp_overflow(f.overflow)),$scale>($(call(n.source)),status)"
+        elseif source isa FixedFormat && f isa FloatFormat
+            return "fixed_to_float<$(_kernel_type(f,backend)),$(source.width),$(source.integer_bits),$(source.signed),$mode,$scale>($(call(n.source)))"
+        elseif source isa FloatFormat && f isa FloatFormat
+            return "float_convert<$(_kernel_type(f,backend)),$mode,$scale>($(call(n.source)))"
+        end
+        return _cpp_vendor_expr(
+            p,
+            i,
+            backend;
+            call,
+            quantizer = "quantize",
+            reinterpret = "copy_bits",
+        )
+    elseif n isa Union{IR.Mul, IR.Add, IR.FMA}
+        f isa FixedFormat || throw(
+            ArgumentError(
+                "floating arithmetic is not supported by the kernel emitter; use fixed internal arithmetic",
+            ),
+        )
         return _cpp_vendor_expr(
             p,
             i,
@@ -73,6 +112,10 @@ function _kernel_expr(p, i, backend)
             reinterpret = "copy_bits",
         )
     elseif n isa IR.Compare
+        if IR.format(p, n.a) isa FloatFormat
+            predicate = findfirst(==(n.predicate), (:eq, :ne, :lt, :le, :gt, :ge)) - 1
+            return "float_compare<$predicate>($(call(n.a)),$(call(n.b)))"
+        end
         op = Dict(
             :eq => "==",
             :ne => "!=",
@@ -83,7 +126,7 @@ function _kernel_expr(p, i, backend)
         )[n.predicate]
         return "($(call(n.a)) $op $(call(n.b)))"
     elseif n isa IR.BitCast
-        return "copy_bits<$(_kernel_type(f,backend)),$(f.width)>($(call(n.source)))"
+        return "copy_bits<$(_kernel_type(f,backend)),$(_kernel_width(f))>($(call(n.source)))"
     elseif n isa IR.ExtractBits
         return "$(_kernel_type(f,backend))($(call(n.source)) >> $(n.offset))"
     elseif n isa IR.BitOp
@@ -99,9 +142,21 @@ function _kernel_expr(p, i, backend)
         end
         return "$(_kernel_type(f,backend))($(call(n.a)) $op $(call(n.b)))"
     elseif n isa IR.Classify
+        if IR.format(p, n.source) isa FloatFormat
+            method = Dict(
+                :finite => "is_finite",
+                :negative => "negative",
+                :zero => "is_zero",
+                :nan => "is_nan",
+                :infinity => "is_infinite",
+            )[n.kind]
+            return "$(call(n.source)).$method()"
+        end
         return n.kind == :finite ? "true" :
                n.kind == :negative ? "($(call(n.source)) < 0)" :
                n.kind == :zero ? "($(call(n.source)) == 0)" : "false"
+    elseif n isa IR.CopySign
+        return "float_copy_sign($(call(n.source)),$(call(n.sign)))"
     elseif n isa Union{IR.Select, IR.Guard}
         return "" # Emit explicitly to retain lazy branches and rejection order.
     end
@@ -109,7 +164,8 @@ function _kernel_expr(p, i, backend)
 end
 
 function _kernel_table(io, number, t, backend, toolchain)
-    rows, chunks = cld(length(t.values), t.banks), cld(t.format.width, 64)
+    width = _kernel_width(t.format)
+    rows, chunks = cld(length(t.values), t.banks), cld(width, 64)
     type = _kernel_type(t.format, backend)
     println(io, "    static constexpr unsigned table$(number)_banks = $(t.banks);")
     println(io, "    static constexpr bool table$(number)_unroll = $(t.unroll);")
@@ -132,7 +188,7 @@ function _kernel_table(io, number, t, backend, toolchain)
     )
     for bank = 1:(t.banks)
         values = [
-            "{$(_kernel_chunks(index <= length(t.values) ? t.values[index] : 0,t.format.width))}"
+            "{$(_kernel_chunks(index <= length(t.values) ? t.values[index] : 0,width))}"
             for index = bank:(t.banks):(rows * t.banks)
         ]
         println(io, "            {", join(values, ","), "},")
@@ -147,19 +203,16 @@ function _kernel_table(io, number, t, backend, toolchain)
     println(io, "        unsigned row = index.to_uint() / $(t.banks);")
     println(io, "        unsigned bank = index.to_uint() % $(t.banks);")
     if t.unroll
-        println(io, "        $type result = 0;")
+        println(io, "        $type result = $type(0);")
         for bank = 0:(t.banks - 1)
             println(
                 io,
-                "        if (bank == $bank) result = from_chunks<$type,$(t.format.width)>(table[$bank][row]);",
+                "        if (bank == $bank) result = from_chunks<$type,$width>(table[$bank][row]);",
             )
         end
         println(io, "        return result;")
     else
-        println(
-            io,
-            "        return from_chunks<$type,$(t.format.width)>(table[bank][row]);",
-        )
+        println(io, "        return from_chunks<$type,$width>(table[bank][row]);")
     end
     println(io, "    }")
 end
@@ -193,11 +246,12 @@ function _kernel_node(io, p, i, expression, backend)
     println(io, "    }")
 end
 
-"""Emit a C++17 vendor fixed kernel with exact IR semantics and explicit rejection status.
+"""Emit a C++17 vendor fixed kernel with encoded floating interfaces and explicit rejection status.
 
 `toolchain=:generic` uses the supplied public headers. `:vitis` and `:oneapi`
 select vendor include paths and guarded memory hints; actual synthesis needs
-the corresponding vendor compiler. Floating graphs are explicitly unsupported.
+the corresponding vendor compiler. Floating arithmetic and exponent reduction
+are explicitly unsupported; conversions and IEEE branch operations are supported.
 """
 function emit_kernel(
     io::IO,
@@ -212,8 +266,9 @@ function emit_kernel(
     inputformat, outputformat = IR.format(p, p.input), IR.format(p)
     intype, outtype =
         _kernel_type(inputformat, backend), _kernel_type(outputformat, backend)
-    inword = _kernel_type(IR.UIntFormat(inputformat.width), backend)
-    outword = _kernel_type(IR.UIntFormat(outputformat.width), backend)
+    inputwidth, outputwidth = _kernel_width(inputformat), _kernel_width(outputformat)
+    inword = _kernel_type(IR.UIntFormat(inputwidth), backend)
+    outword = _kernel_type(IR.UIntFormat(outputwidth), backend)
     include = if toolchain == :oneapi
         """
 #if defined(__INTEL_LLVM_COMPILER)
@@ -232,9 +287,11 @@ function emit_kernel(
 #pragma once
 #include <cstddef>
 $include
-// PRESAGe fixed kernel; backend=$backend, toolchain=$toolchain.
+// PRESAGe fixed arithmetic kernel; backend=$backend, toolchain=$toolchain.
 namespace $ns {
+template<int Width> using UInt = $(backend == :ap_fixed ? "ap_uint<Width>" : "ac_int<Width,false>");
 $(read(joinpath(@__DIR__, "cpp_kernel.hpp"), String))
+$(any(f -> f isa FloatFormat,p.types) || any(t -> t.format isa FloatFormat,p.tables) ? read(joinpath(@__DIR__, "cpp_kernel_float.hpp"), String) : "")
 using Input = $intype;
 using Output = $outtype;
 using InputBits = $inword;
@@ -255,7 +312,10 @@ struct Context {
         _kernel_table(io, i, t, backend, toolchain)
     end
     for (i, f) in enumerate(p.types)
-        println(io, "    bool ready$i = false; $(_kernel_type(f,backend)) value$i = 0;")
+        println(
+            io,
+            "    bool ready$i = false; $(_kernel_type(f,backend)) value$i = $(_kernel_type(f,backend))(0);",
+        )
     end
     for i in eachindex(p.nodes)
         _kernel_node(io, p, i, expressions[i], backend)
@@ -270,8 +330,8 @@ inline Result evaluate(const Input& input) {
     return {context.status == Status::ok ? value : Output(0), context.status};
 }
 inline BitsResult evaluate_bits(const InputBits& bits) {
-    Result result = evaluate(copy_bits<Input,$(inputformat.width)>(bits));
-    return {copy_bits<OutputBits,$(outputformat.width)>(result.value), result.status};
+    Result result = evaluate(copy_bits<Input,$inputwidth>(bits));
+    return {copy_bits<OutputBits,$outputwidth>(result.value), result.status};
 }
 } // namespace $ns
 """,
@@ -291,7 +351,7 @@ function emit_kernel(path::AbstractString, p; kwargs...)
     return nothing
 end
 
-"""Emit a host byte-stream adapter for a fixed kernel. `--status` adds one status byte per output."""
+"""Emit a host byte-stream adapter for a kernel. `--status` adds one status byte per output."""
 function emit_kernel_harness(
     io::IO,
     p::IR.Program;
@@ -302,8 +362,7 @@ function emit_kernel_harness(
         throw(ArgumentError("header must be a simple filename"))
     ns = _cpp_name(name)
     infmt, outfmt = IR.format(p, p.input), IR.format(p)
-    infmt isa FixedFormat && outfmt isa FixedFormat ||
-        throw(ArgumentError("kernel harness requires fixed interfaces"))
+    inwidth, outwidth = _kernel_width(infmt), _kernel_width(outfmt)
     inbytes, outbytes = _word_bytes(infmt), _word_bytes(outfmt)
     println(
         io,
@@ -325,10 +384,10 @@ int main(int argc, char** argv) {
                 }
                 std::cerr << "truncated or unreadable input word\\n"; return 3;
             }
-            if (byte == $(inbytes-1) && (unsigned(c) >> $(infmt.width-8(inbytes-1))) != 0) {
+            if (byte == $(inbytes-1) && (unsigned(c) >> $(inwidth-8(inbytes-1))) != 0) {
                 std::cerr << "nonzero input padding\\n"; return 3;
             }
-            for (int bit = 0; bit < 8 && byte * 8 + bit < $(infmt.width); ++bit)
+            for (int bit = 0; bit < 8 && byte * 8 + bit < $inwidth; ++bit)
                 input[byte * 8 + bit] = (unsigned(c) >> bit) & 1U;
         }
         BitsResult result = evaluate_bits(input);
@@ -338,7 +397,7 @@ int main(int argc, char** argv) {
         if (statuses) std::cout.put(static_cast<char>(result.status));
         for (int byte = 0; byte < $outbytes; ++byte) {
             unsigned c = 0;
-            for (int bit = 0; bit < 8 && byte * 8 + bit < $(outfmt.width); ++bit)
+            for (int bit = 0; bit < 8 && byte * 8 + bit < $outwidth; ++bit)
                 if (result.bits[byte * 8 + bit]) c |= 1U << bit;
             std::cout.put(static_cast<char>(c));
         }

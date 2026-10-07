@@ -1,7 +1,8 @@
-# Fixed C++ kernels
+# C++ kernels with fixed arithmetic
 
 `emit_kernel` generates a C++17 evaluator using official `ap_fixed`/`ap_uint`
-or `ac_fixed`/`ac_int` types throughout. The header contains bounded arrays,
+or `ac_fixed`/`ac_int` types throughout. Floating values use an explicit IEEE
+encoding backed by vendor integers. The header contains bounded arrays,
 scalar values and a finite DAG of inline functions. PRESAGe's GMP/MPFR helpers,
 streams, tracing and exceptions belong to host tools.
 
@@ -84,7 +85,7 @@ auto bits = presage_evaluator::evaluate_bits(raw);
 | Status | Byte | Corresponding interpreter result |
 | --- | --- | --- |
 | `ok` | 0 | Valid output with identical bits. |
-| `domain_rejected` | 1 | `Guard` raises `DomainError`. |
+| `domain_rejected` | 1 | A false `Guard` or nonfinite float-to-fixed conversion raises `DomainError`. |
 | `overflow_rejected` | 2 | Rounded fixed result raises `OverflowError`. |
 | `table_index_rejected` | 3 | `TableLoad` raises `BoundsError`. |
 
@@ -124,15 +125,55 @@ The old `generator/` inspired the table organization and compiler hints.
 Arithmetic follows the current IR and certificate, including explicit separate
 versus fused rounding.
 
+## Floating interfaces
+
+Floating input/output and intermediate interface values use
+`EncodedFloat<Word,E,M>`. `Word` is the backend's unsigned vendor type. Its
+constructor accepts an **encoded bit pattern**, and `.bits` exposes that pattern.
+It has no native floating arithmetic or implicit conversion to `float`/`double`.
+For a plan with binary32 interfaces:
+
+```cpp
+using namespace presage_evaluator;
+Input x(InputBits(0x3f800000ULL)); // IEEE32 encoding of 1
+auto result = evaluate(x);
+if (result.valid()) {
+    OutputBits raw = result.value.bits;
+}
+```
+
+`evaluate_bits` and the host adapter retain their existing word protocol. Native
+floating application types need an explicit bit conversion in the host or vendor
+adapter. The kernel's encoded interfaces preserve NaN payloads without involving
+the host floating environment.
+
+Float↔fixed and float↔float conversions use the declared rounding mode, with
+fixed overflow rejection/saturation/wrap, subnormals, signed underflow zeros,
+normal/subnormal carries and floating overflow to infinity or maximum finite
+as appropriate. A fixed zero converts to positive floating zero. Floating NaNs
+are canonicalized by conversion; loads, selects, bit casts and `CopySign` retain
+the specified payloads. Floating comparisons are unordered for NaNs and equate
+the two signed zeros. Classification retains sign bits, including on NaNs.
+
+Static `ScalePow2` multiplies by an exact power of two and rounds once into its
+declared format. Required format changes remain explicit IR conversions. Large
+exponents are checked before narrowing shift counts. Work words are bounded by
+the significand and fixed/output precision, rather than the float's numerical
+exponent range; wide exponent fields do not allocate enormous fixed types.
+
 ## Supported scope
 
-Fixed input, output and arithmetic graphs are supported, including ordinary,
-normalized segmented and individually sized polynomial evaluators. Unsigned
-nodes and fixed/unsigned tables are supported. Floating interfaces, floating
-arithmetic and exponent-reduction graphs are rejected explicitly. The active
-CPU emitter continues to cover those graphs.
+Fixed arithmetic graphs accept independent fixed or floating interfaces,
+including ordinary, normalized segmented and individually sized polynomial
+evaluators. Canonical fixed binary16/IEEE32 erf and floating LUTs are supported.
+Unsigned nodes and fixed/unsigned/floating tables are supported. Floating
+arithmetic (`Add`, `Mul`, `FMA`, reciprocal) and normalization/exponent-reduction
+graphs are rejected explicitly. The active CPU emitter covers those graphs.
 
-All vendor types and exact temporaries must fit the 4096-bit limit. A table must
+Formats are parameterized by `FloatFormat(E,M)`; binary16/32/64/128/256 and
+custom encodings have local checks. Floating widths and vendor work words must
+fit 4096 bits. Float-to-fixed conversion requires an additional guard bit, so
+its fixed destination width must be below 4096. A table must
 fit the C `int` index range; bank counts cannot exceed its entry count or 4096.
 OneAPI bank counts must be powers of two. Unsupported emission leaves an
 existing destination header or generated bundle intact.
