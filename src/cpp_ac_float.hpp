@@ -123,6 +123,31 @@ Out ac_float_from_fixed(const Source& source) {
     }
     return result;
 }
+
+template<class Out,int ExponentWidth,class In>
+Out ac_float_scale_by(const In& value,std::int64_t scale) {
+    using S = FloatBits<In>;
+    constexpr std::uint64_t bound = (std::uint64_t(1) << (ExponentWidth-1))
+        + (std::uint64_t(1) << (S::exponent-1)) + S::fraction + 2;
+    constexpr int E = std::bit_width(bound)+1;
+    static_assert(E<=30,"AC dynamic scaling needs exponent headroom within 30 bits");
+    using Wide = ac_std_float<1+E+S::fraction,E>;
+    auto wide = as_ac_float(value).template convert<Wide::width,E,AC_RND_CONV>();
+    return ac_scale_exact<Out>(wide,scale);
+}
+template<class Out,int Width,int IntegerBits,bool Signed,int ExponentWidth,class Source>
+Out ac_fixed_scale_by(const Source& source,std::int64_t scale) {
+    constexpr std::uint64_t bound = (std::uint64_t(1) << (ExponentWidth-1)) + Width + 2;
+    constexpr int E = std::bit_width(bound)+1;
+    constexpr int M = Width>1 ? Width-1 : 1;
+    static_assert(E<=30,"AC dynamic scaling needs exponent headroom within 30 bits");
+    using Wide = ac_std_float<1+E+M,E>;
+    ac_fixed<Width,IntegerBits,Signed> exact = 0;
+    for (int bit=0;bit<Width;++bit) exact[bit] = bool(source[bit]);
+    Wide wide;
+    wide.template assign_from<AC_RND_CONV>(exact);
+    return ac_scale_exact<Out>(wide,scale);
+}
 template<int Fraction,class T> bool ac_float_fractional(const T& value) {
     constexpr int M = T::mant_bits, E = T::e_width;
     ac_int<M+1,false> significand = value.data();

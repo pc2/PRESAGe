@@ -298,3 +298,23 @@ analysis. Transformation fields record the identity, `[0,1]` norm domain,
 reciprocal format, argument intervals, pi/2 node/error and infinity error.
 The global bound includes the infinity limits; exact zeros and excluded inputs
 are audited separately. Stored replay repeats the complete proof.
+
+## Exp reduction artifacts
+
+Exp searches use configuration/report v10, `transformation="exp"`,
+`segments=[1]` and `degree_then_format` ordering. Degree and precision lists
+describe the polynomial on `[-1/2,1/2]`.
+
+Plans containing `ScaleByExponent(source, exponent, format)` use v11. Its
+signed integer exponent is an ordinary fixed IR operand; source scaling rounds
+directly into the floating result with nearest-even rounding. Earlier versions
+reject this operation. Selection, reciprocal/log(2) constants, rounded residual,
+Horner graph and exceptional guards are ordinary audited nodes.
+
+Certificate v2 uses method `exp_polynomial_horner`. Transformation fields record
+the exact identity, norm/reduction formats, selection and exponent format,
+constant nodes, direct scaling and zero-only coverage. Settings retain the
+proved ideal residual radius, coordinate/constant errors, input-dependent
+integer exponent range and conservative maximum error scale. Numerical path
+contributions include exponent scaling; output rounding is recorded separately.
+Failure reports retain the reason without claiming proved coverage.

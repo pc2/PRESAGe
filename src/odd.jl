@@ -12,14 +12,14 @@ function _validate_odd_spec(spec)
 end
 
 function _validate_transformation(transformation, degree, segments)
-    transformation in (:none, :odd, :reciprocal, :sqrt, :rsqrt, :cbrt, :log, :atan) ||
+    transformation in (:none, :odd, :reciprocal, :sqrt, :rsqrt, :cbrt, :log, :atan, :exp) ||
         throw(ArgumentError("unsupported polynomial transformation"))
     if transformation in (:odd, :atan)
         1 <= degree <= 31 && isodd(degree) ||
             throw(ArgumentError("odd polynomial degree must be odd and in 1:31"))
         segments == 1 ||
             throw(ArgumentError("odd transformation currently uses one central kernel"))
-    elseif transformation in (:reciprocal, :sqrt, :rsqrt, :cbrt, :log)
+    elseif transformation in (:reciprocal, :sqrt, :rsqrt, :cbrt, :log, :exp)
         segments == 1 ||
             throw(ArgumentError("exponent reduction currently uses one mantissa kernel"))
     end

@@ -159,6 +159,7 @@ end
 function _precision_audit(plan)
     get(plan.settings, "transformation", "none") == "odd" && return _odd_audit(plan)
     get(plan.settings, "transformation", "none") == "atan" && return _atan_audit(plan)
+    get(plan.settings, "transformation", "none") == "exp" && return _exp_audit(plan)
     get(plan.settings, "transformation", "none") == "log" && return _log_audit(plan)
     get(plan.settings, "transformation", "none") == "reciprocal" &&
         return _reciprocal_audit(plan)
@@ -240,6 +241,8 @@ function _stored_precision(plan)
 end
 
 function _reformat_polynomial(plan, precision)
+    get(plan.settings, "transformation", "none") == "exp" &&
+        return _reformat_exp(plan, precision)
     get(plan.settings, "transformation", "none") == "odd" &&
         return _reformat_odd(plan, precision)
     get(plan.settings, "transformation", "none") == "atan" &&

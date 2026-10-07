@@ -49,6 +49,7 @@ export FloatFormat,
     root_polynomial_plan,
     log_polynomial_plan,
     atan_polynomial_plan,
+    exp_polynomial_plan,
     segmented_polynomial_plan,
     certified_polynomial,
     PolynomialSearchConfig,
@@ -108,6 +109,7 @@ include("reciprocal.jl")
 include("roots.jl")
 include("log.jl")
 include("atan.jl")
+include("exp.jl")
 include("search.jl")
 include("search_schema.jl")
 include("precision_optimization.jl")

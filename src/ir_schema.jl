@@ -52,6 +52,7 @@ const _IR_NODES = Dict(
         IR.FloatReciprocal,
         IR.RootArgument,
         IR.ScaleByInputExponent,
+        IR.ScaleByExponent,
         IR.CopySign,
         IR.Classify,
     )

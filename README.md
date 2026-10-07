@@ -31,6 +31,9 @@ See the [atan example](examples/atan_search.jl).
 Log supports positive finite inputs over bounded nonnegative domains using
 `log(m)+e*log(2)`, with the stored constant and all reconstruction rounding
 included in the certificate. See the [log example](examples/log_search.jl).
+Exp reduces bounded inputs to a residual near zero, evaluates one polynomial
+and scales directly into the floating output. Its certificate includes integer
+selection, stored constants and underflow. See the [exp example](examples/exp_search.jl).
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
@@ -507,6 +510,36 @@ and a bounded signed interval. The certificate is a uniform absolute bound.
 
 ```sh
 julia --startup-file=no --project=. examples/atan_search.jl
+```
+
+## Exp range reduction
+
+```julia
+spec = FunctionSpec("exp(x)"; input_format=IEEE16,
+    domain=(-65504,5), absolute_error=1//8)
+config = PolynomialSearchConfig(degrees=[9],
+    internal_formats=[FixedFormat(72,24)], transformation=:exp,
+    evaluation=:fma, job_timeout=60, total_timeout=90)
+search = search_polynomial(spec, config)
+@assert search.status == :certified
+```
+
+The evaluator rounds the stored-reciprocal product to an integer `k`, forms
+`r=x-k*stored_log2`, and evaluates `p(r)`. It scales the final Horner value
+directly by `2^k` into the output, with one destination quantizer. The proof
+establishes the ideal residual lies in `[-1/2,1/2]` and includes the implemented
+residual error, every Horner operation and exponent-scaled approximation error.
+Possible overflow or an unproved reduced domain refuses certification.
+
+Signed zeros return exact one; positive/negative infinity return infinity/zero.
+NaNs and excluded finite inputs return NaN before reduction. Fixed/floating
+internals, custom formats, individual widths, certified precision search and
+replay are supported. Contracts require floating interfaces and a bounded
+interval; the bound is absolute. The example certifies about `0.06250000050`,
+below `1/8`.
+
+```sh
+julia --startup-file=no --project=. examples/exp_search.jl
 ```
 
 ## Reference CLI

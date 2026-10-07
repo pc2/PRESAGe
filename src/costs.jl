@@ -52,7 +52,10 @@ function implementation_cost(plan::PlanArtifact)
             n -> n isa Union{IR.FloatMantissa, IR.RootArgument},
             p.nodes,
         ),
-        exponent_scalings = count(n -> n isa IR.ScaleByInputExponent, p.nodes),
+        exponent_scalings = count(
+            n -> n isa Union{IR.ScaleByInputExponent, IR.ScaleByExponent},
+            p.nodes,
+        ),
         exponent_extractions = count(n -> n isa IR.FloatExponent, p.nodes),
         sign_copies = count(n -> n isa IR.CopySign, p.nodes),
     )

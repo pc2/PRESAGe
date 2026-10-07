@@ -179,6 +179,8 @@ function _interpret(p::IR.Program, bits::Integer, trace::Bool)
             _, exponent = normalize_float(input.bits, input.format)
             quotient, _ = split_exponent(exponent, n.divisor)
             _scale(visit(n.source), n.multiplier * quotient, f, n.rounding)
+        elseif n isa IR.ScaleByExponent
+            _scale(visit(n.source), numerator(_value(visit(n.exponent))), f, n.rounding)
         elseif n isa IR.CopySign
             source, sign = visit(n.source), visit(n.sign)
             negative = sign.bits & _sign(sign.format) != 0

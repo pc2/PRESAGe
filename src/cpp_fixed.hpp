@@ -153,3 +153,27 @@ template<class Float,class T> Float float_from_fixed(T value,std::int64_t fracti
     if (q >= (Big(1) << mantissa)) word = Word((Word(quantum+mantissa+bias) << mantissa) | (word-(Word(1)<<mantissa)));
     return FloatBits<Float>::from_bits(Word(sign | word));
 }
+
+// Preserve the full source significand until the destination rounds, including
+// normal/subnormal transitions. No intermediate floating scaling is performed.
+template<class Out,class In> Out float_reconstruct(const In& value,std::int64_t scale) {
+    using S = FloatBits<In>;
+    using F = FloatBits<Out>;
+    using Word = typename F::Word;
+    const auto raw = S::bits(value);
+    const bool negative = (raw >> (S::width-1)) != 0;
+    const Word sign = negative ? Word(1) << (F::width-1) : Word(0);
+    constexpr std::int64_t bias = (std::int64_t(1) << (S::exponent-1))-1;
+    const auto field = float_exponent_field((raw >> S::fraction) & ((typename S::Word(1) << S::exponent)-1));
+    auto significand = raw & ((typename S::Word(1) << S::fraction)-1);
+    if (field == 2*bias+1) {
+        const Word inf = ((Word(1) << F::exponent)-1) << F::fraction;
+        return F::from_bits((significand ? Word(0) : sign) | inf | (significand ? Word(1) << (F::fraction-1) : Word(0)));
+    }
+    if (!field && !significand) return F::from_bits(sign);
+    if (field) significand |= typename S::Word(1) << S::fraction;
+    Big units = integer(significand);
+    if (negative) units = -units;
+    const std::int64_t exponent = (field ? field-bias : 1-bias)-S::fraction+scale;
+    return float_from_fixed<Out>(units,-exponent,0);
+}

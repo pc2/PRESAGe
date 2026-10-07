@@ -7,7 +7,17 @@ use each Julia installation's own MPFR/GMP runtime.
 
 ## Results
 
-The atan change passes **seven new groups with 836,815 checks** on Julia
+The exp change passes **six new groups with 756,831 checks** on Julia 1.13.1,
+with four threads and official vendor headers required. These cover exact dynamic
+scaling, complete reduction/reconstruction proofs, every binary16 encoding in
+separate/FMA modes, custom and individual precision, underflow, proof refusals,
+supervised precision search and CLI replay. Another **20 regression groups pass
+with 1,481,219 checks**, covering formats, schemas, IR, references, root direct
+rounding and all atan/log groups. The targeted runs verify **26 groups and
+2,238,050 checks**. The standalone example and formatting pass. The complete
+package runner was not repeated. See the [exp results](#exp-range-reduction-and-reconstruction).
+
+The preceding atan change passes **seven new groups with 836,815 checks** on Julia
 1.13.1, with four threads and official vendor headers required. These cover
 rounded reciprocal semantics, complete central/tail certificates, every binary16
 encoding in separate/FMA modes, custom and wide precision, supervised precision
@@ -773,14 +783,64 @@ also pass. The complete runner was not repeated for this change.
 Atan currently requires floating interfaces, a bounded signed interval and one
 shared kernel. Possible internal/output overflow refuses certification. The
 certificate establishes a uniform absolute bound; it does not establish an ulp
-or correct-rounding guarantee. Wider-domain exp reconstruction is next.
+or correct-rounding guarantee.
+
+## Exp range reduction and reconstruction
+
+[`examples/exp_search.jl`](../examples/exp_search.jl) generates binary16 `exp(x)`
+on `[-65504,5]`. Degree nine uses ten coefficients, `Fixed(72,24)` Horner
+internals and a binary64 reduction format. The evaluator selects an integer
+from the rounded reciprocal product, forms the residual and scales the final
+Horner value directly into binary16. The selected exponents span `[-94502,7]`;
+the proved ideal residual radius is about `0.346573590286`, within `[-1/2,1/2]`.
+The shared graph has one selection multiplication, ten FMAs and one exponent
+scaling. Coefficient and stage declarations each total 720 bits. These are
+structural counts, without an FPGA resource or throughput claim.
+
+| Contribution | Certified upper bound |
+| --- | ---: |
+| Approximation after exponent scaling | `6.789113e-11` |
+| Residual/coordinate error after exponent scaling | `4.291108e-10` |
+| Horner arithmetic after exponent scaling | `3.479463e-13` |
+| Direct reconstruction/output rounding | `0.0625` |
+| Total | `0.06250000049734979` |
+| Contract target | `0.125` |
+
+Stored log(2) error contributes at most `2.191546e-12` before the coordinate
+propagation and exponent scaling. Complete residual formation error is at most
+`2.193322e-12`. The maximum error scale is 128. Every binary16 encoding is
+checked against directed MPFR enclosures for both separate and fused evaluation;
+every visited numeric range and integer selection is checked. Compiled fused
+evaluators agree with Julia across native/AC floating and portable/AC/AP fixed
+backend combinations, including deeply underflowed outputs.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Dynamic exponent scaling and direct output quantization | 196,638 | Three scalings over all binary16 words; signed zeros, infinities and NaNs; subnormal double-rounding case; 320-bit fixed and 100/112-bit floating bridges; huge Julia exponents; CPU headroom/rounding refusals and plan v11. |
+| Certified exp reduction and reconstruction | 1,051 | Fresh generation, separate/FMA complete bounds, rounded integer transition neighbours, stored replay, structural counts and six compiled backend combinations. |
+| Exhaustive binary16 exp verification | 558,588 | Both evaluators over all encodings; directed MPFR errors, integer decisions, visited ranges and six compiled fused backend combinations. |
+| Exp underflow, exceptional branches and proof refusals | 209 | Signed, singleton, clipped and zero-only domains; exact zeros/infinities; deep underflow; mutated graphs/policies, unsupported interfaces, invalid reduction, overflow and unmet budgets. |
+| Exp guard bits, custom formats and individual precision | 296 | Small custom inputs, floating internals, 100-bit input and 112-bit output fractions, nonuniform coefficient/stage formats and official-header conformance. |
+| Exp precision search, CLI generation and replay | 49 | Supervised certified width reduction, search/report v10, actual CLI generation, plan v11, exact header replay and compiled AP/AC artifacts. |
+
+These six groups pass 756,831 checks. Twenty regression groups pass another
+1,481,219 checks, covering formats, schemas, IR, references, direct root rounding
+and all atan/log groups. The targeted runs total 26 groups and 2,238,050 checks
+with official vendor headers required. The standalone example and formatting
+pass. The complete runner was not repeated.
+The first binary32-output fixture correctly refused a budget below its final
+rounding contribution; a feasible absolute target passes. Exp currently requires
+floating interfaces, a bounded interval and one shared kernel. Unproved residual
+coverage and possible overflow refuse certification. The uniform absolute bound
+does not establish correct rounding or an ulp guarantee. Stable bounded
+sinh/cosh reconstruction is next.
 
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
 rejected fixed overflow, including mixed interfaces and custom formats.
-Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log and atan-tail
+Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log, atan-tail and exp
 kernels also have complete certificates.
 Segmented floating erf and other transformation families remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains
@@ -788,7 +848,7 @@ unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces
 schema v5 adds individual coefficient/stage precision, v6 adds exponent
 reconstruction, v7 adds sqrt/rsqrt exponent splitting, v8 adds cbrt and v9
 adds exact exponent extraction for log; v10 adds rounded floating reciprocals
-for atan tails. A
+for atan tails; v11 adds dynamic integer-exponent reconstruction for exp. A
 separate report records the
 numerical proof. Native floating CPU arithmetic supports binary32/binary64 with
 nearest-even rounding; official AC arithmetic supports custom and wide formats.

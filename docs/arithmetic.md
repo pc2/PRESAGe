@@ -296,3 +296,26 @@ branch, or subtracted from stored pi/2 for the tail. Separate evaluation uses
 exact negation followed by an add; FMA combines negation/subtraction in one
 quantizer. The kernel reconstruction product still rounds separately. All
 branches are lazy. Static costs explicitly count the reciprocal as one division.
+
+## Exp and dynamic exponent scaling
+
+`ScaleByExponent(source, exponent, output_format)` rounds the exact dyadic
+`source*2^exponent` directly to a floating output. Its exponent operand must be
+a signed fixed integer, with no fractional bits. Nearest-even is the supported
+rounding policy. Julia accepts arbitrary integer widths and uses exact dyadic
+rounding, without constructing a huge power of two for underflow or overflow.
+CPU exponents must fit a C int. Official AC scaling additionally needs enough
+exponent headroom within its 30-bit limit; unsupported mappings are rejected
+before emission. Native floating sources are decoded to their full significand;
+fixed sources use the existing exact bridge. Official AC adapters widen exactly,
+multiply by an exact power of two and convert once to the output. A rounded
+floating power of two is never materialized in the output format first.
+
+The exp graph widens the input exactly to a reduction format covering input,
+output and coordinate fraction precision, with at least binary64 precision.
+It multiplies by stored `1/log(2)`, rounds to an inferred signed integer `k`,
+converts `k` back explicitly, and forms `x-k*stored_log2`. Separate mode rounds
+a product and add; FMA mode rounds the combined residual once. A separate
+conversion forms the polynomial coordinate. Horner storage/stage conversions
+and direct output scaling remain explicit. Zero, infinity and domain branches
+are lazy. Static costs count one exponent scaling.

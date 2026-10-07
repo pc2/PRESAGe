@@ -111,6 +111,32 @@ function _cpp_ac_expr(p, i, backend)
             return "ac_fixed_reconstruct<$(_cpp_ac_type(f,backend)),$(source.width),$(source.integer_bits),$(source.signed),$(n.multiplier),$(n.divisor)>($(call(n.source)),$(call(n.input)))"
         end
         return "ac_float_reconstruct<$(_cpp_ac_type(f,backend)),$(n.multiplier),$(n.divisor)>($(call(n.source)),$(call(n.input)))"
+    elseif n isa IR.ScaleByExponent
+        source, ef = p.types[n.source], p.types[n.exponent]
+        ef.width <= 32 || throw(ArgumentError("CPU dynamic exponents must fit C int"))
+        if source isa FloatFormat || backend != :portable
+            source_bound =
+                source isa FloatFormat ?
+                (BigInt(1) << (source.exponent_bits - 1)) + source.fraction_bits :
+                BigInt(source.width)
+            bound = (BigInt(1) << (ef.width - 1)) + source_bound + 2
+            ndigits(bound; base = 2) + 1 <= 30 || throw(
+                ArgumentError("AC dynamic scaling needs exponent headroom within 30 bits"),
+            )
+        end
+        units =
+            backend == :portable ? call(n.exponent) :
+            "hls_units<$(ef.width),true>($(call(n.exponent)))"
+        exponent =
+            backend == :portable ? "static_cast<std::int64_t>($units)" :
+            "integer_cast<std::int64_t>($units)"
+        if source isa FixedFormat
+            if backend == :portable
+                return "float_from_fixed<$(_cpp_ac_type(f,backend))>($(call(n.source)),std::int64_t($(_fraction(source)))-$exponent,0)"
+            end
+            return "ac_fixed_scale_by<$(_cpp_ac_type(f,backend)),$(source.width),$(source.integer_bits),$(source.signed),$(ef.width)>($(call(n.source)),$exponent)"
+        end
+        return "ac_float_scale_by<$(_cpp_ac_type(f,backend)),$(ef.width)>($(call(n.source)),$exponent)"
     elseif n isa IR.CopySign
         return "copy_float_sign($(call(n.source)),$(call(n.sign)))"
     elseif n isa IR.Compare

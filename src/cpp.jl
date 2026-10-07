@@ -98,6 +98,21 @@ function _cpp_expr(p, i, backend = :portable)
             return "float_from_fixed<$(_cpp_type(f))>($units,std::int64_t($(_fraction(source)))-$exponent,0)"
         end
         return "canonical(static_cast<$(_cpp_type(f))>(std::ldexp(static_cast<double>($(call(n.source))),static_cast<int>($exponent))))"
+    elseif n isa IR.ScaleByExponent
+        ef = IR.format(p, n.exponent)
+        ef.width <= 32 ||
+            throw(ArgumentError("native CPU dynamic exponents must fit C int"))
+        units(j, format) =
+            backend == :portable ? call(j) :
+            "hls_units<$(format.width),$(format.signed)>($(call(j)))"
+        exponent =
+            backend == :portable ? "static_cast<std::int64_t>($(units(n.exponent, ef)))" :
+            "integer_cast<std::int64_t>($(units(n.exponent, ef)))"
+        source = IR.format(p, n.source)
+        if source isa FixedFormat
+            return "float_from_fixed<$(_cpp_type(f))>($(units(n.source, source)),std::int64_t($(_fraction(source)))-$exponent,0)"
+        end
+        return "float_reconstruct<$(_cpp_type(f))>($(call(n.source)),$exponent)"
     elseif n isa IR.CopySign
         return "copy_float_sign($(call(n.source)),$(call(n.sign)))"
     elseif n isa IR.Compare
@@ -200,6 +215,7 @@ function emit_cpp(
                     IR.Quantize,
                     IR.ScalePow2,
                     IR.ScaleByInputExponent,
+                    IR.ScaleByExponent,
                     IR.FloatReciprocal,
                 },
             p.nodes,

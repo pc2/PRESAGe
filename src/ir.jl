@@ -34,6 +34,7 @@ export UIntFormat,
     FloatReciprocal,
     RootArgument,
     ScaleByInputExponent,
+    ScaleByExponent,
     CopySign,
     Classify,
     Guard,
@@ -251,6 +252,23 @@ struct ScaleByInputExponent <: Node
 end
 ScaleByInputExponent(source, input, multiplier, divisor, format; rounding = :nearest_even) =
     ScaleByInputExponent(source, input, multiplier, format; divisor, rounding)
+"""Round source*2^exponent directly to a float; exponent is a signed fixed integer."""
+struct ScaleByExponent <: Node
+    source::Int
+    exponent::Int
+    format::FloatFormat
+    rounding::Symbol
+    function ScaleByExponent(
+        source::Integer,
+        exponent::Integer,
+        format::FloatFormat;
+        rounding::Symbol = :nearest_even,
+    )
+        rounding == :nearest_even ||
+            throw(ArgumentError("dynamic scaling requires nearest-even rounding"))
+        new(Int(source), Int(exponent), format, rounding)
+    end
+end
 """Copy the sign bit of a floating value without arithmetic or rounding."""
 struct CopySign <: Node
     source::Int
@@ -269,6 +287,7 @@ refs(n::Union{Convert, Quantize, BitCast, ExtractBits, ScalePow2, Classify}) = (
 refs(n::Union{FloatMantissa, FloatExponent, FloatReciprocal}) = (n.source,)
 refs(n::RootArgument) = (n.source,)
 refs(n::ScaleByInputExponent) = (n.source, n.input)
+refs(n::ScaleByExponent) = (n.source, n.exponent)
 refs(n::CopySign) = (n.source, n.sign)
 refs(n::TableLoad) = (n.index,)
 
@@ -366,6 +385,17 @@ function _type(n::Node, types, tables)
     elseif n isa ScaleByInputExponent
         types[n.source] isa ArithmeticFormat && types[n.input] isa FloatFormat || throw(
             ArgumentError("exponent reconstruction needs arithmetic/floating operands"),
+        )
+        return n.format
+    elseif n isa ScaleByExponent
+        exponent = types[n.exponent]
+        types[n.source] isa ArithmeticFormat &&
+            exponent isa FixedFormat &&
+            exponent.signed &&
+            exponent.width == exponent.integer_bits || throw(
+            ArgumentError(
+                "dynamic scaling needs arithmetic source and signed integer exponent",
+            ),
         )
         return n.format
     elseif n isa CopySign

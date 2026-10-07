@@ -15,6 +15,8 @@ For `transformation=:sqrt` or `:rsqrt`, they describe a kernel on `[1,4]`,
 with exact floor exponent splitting and direct output reconstruction.
 For `transformation=:cbrt`, the kernel uses `[1,8]`, floor division by three
 and original sign restoration; bounded signed domains are supported.
+For `transformation=:exp`, prove rounded integer exponent selection and a
+residual in `[-1/2,1/2]`, then scale the final Horner value directly to the output.
 For `transformation=:atan`, use one shared odd kernel on `[0,1]`, with
 exact central/tail dispatch, a rounded reciprocal and stored pi/2 reconstruction.
 For `transformation=:log`, the kernel approximates log(m) on `[1,2]` and
@@ -396,6 +398,7 @@ function _search_polynomial(
     # Validate all choices, including ones beyond the attempt limit.
     config.transformation == :odd && _validate_odd_spec(spec)
     config.transformation == :atan && _atan_geometry(spec)
+    config.transformation == :exp && _exp_geometry(spec)
     config.transformation == :log && _log_geometry(spec)
     config.transformation == :reciprocal && _reciprocal_geometry(spec)
     config.transformation in (:sqrt, :rsqrt, :cbrt) &&

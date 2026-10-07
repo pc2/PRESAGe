@@ -1,4 +1,5 @@
 _search_schema_version(config) =
+    config.transformation == :exp ? 10 :
     config.transformation == :atan ? 9 :
     config.transformation == :log ? 8 :
     config.transformation == :cbrt ? 7 :
@@ -71,7 +72,7 @@ function _read_search_config(data)
     get(data, "schema", nothing) == "presage-search-config" ||
         throw(ArgumentError("unknown search configuration schema"))
     version = get(data, "schema_version", nothing)
-    version isa Integer && !(version isa Bool) && version in (1, 2, 3, 4, 5, 6, 7, 8, 9) ||
+    version isa Integer && !(version isa Bool) && version in 1:10 ||
         throw(ArgumentError("unsupported search configuration version"))
     (version == 1 ? !haskey(data, "segments") : haskey(data, "segments")) ||
         throw(ArgumentError("segment choices require search configuration v2"))
@@ -118,6 +119,7 @@ function _read_search_config(data)
         throw(ArgumentError("search configuration v3 requires precision layouts"))
     transformation = get(data, "transformation", "none")
     (
+        version == 10 ? transformation == "exp" :
         version == 9 ? transformation == "atan" :
         version == 8 ? transformation == "log" :
         version == 7 ? transformation == "cbrt" :

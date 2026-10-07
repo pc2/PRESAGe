@@ -146,7 +146,13 @@ end
 _dyadic_fraction(q) =
     iszero(q) ? 0 :
     ndigits(denominator(q); base = 2) - 1 - trailing_zeros(abs(numerator(q)))
-function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = Dict())
+function _polynomial_ranges(
+    p,
+    layout;
+    stop_before = nothing,
+    range_overrides = Dict(),
+    exact_overrides = Dict(),
+)
     ranges, rho = Dict{Int, _Interval}(), Dict{Int, Rational{BigInt}}()
     grids = Dict{Int, Int}()
     choices = get(layout, :range_choices, Dict{Int, Int}())
@@ -220,6 +226,11 @@ function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = 
         elseif n isa IR.ScaleByInputExponent
             exact = _interval_mul(ranges[n.source], layout.scale_domain)
             scale = grids[n.source] - layout.scale_exponents[1]
+        elseif n isa IR.ScaleByExponent
+            exact = _interval_mul(ranges[n.source], (_q(0), layout.scale_upper))
+            # Exponents vary with the input. A single exact dyadic grid cannot
+            # eliminate destination rounding across all these scales.
+            scale = _polynomial_grid(f, exact) + 1
         elseif n isa IR.CopySign
             lo, hi = ranges[n.source]
             magnitude =
@@ -261,6 +272,7 @@ function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = 
         else
             throw(ArgumentError("unsupported arithmetic node $i"))
         end
+        exact = get(exact_overrides, i, exact)
         ranges[i] = try
             _interval_round(exact, f)
         catch err
@@ -408,6 +420,8 @@ function certify_polynomial(
         return _certify_odd(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "atan" &&
         return _certify_atan(plan; precision, accuracy, max_refinements)
+    get(plan.settings, "transformation", "none") == "exp" &&
+        return _certify_exp(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "log" &&
         return _certify_log(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "reciprocal" &&

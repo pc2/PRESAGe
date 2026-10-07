@@ -754,3 +754,42 @@ NaNs and excluded finite inputs return canonical NaN before kernel evaluation.
 Possible overflow refuses a proof. Every dispatch, constant, reciprocal, stage
 and exceptional branch is audited again during recertification and precision
 reduction. These are absolute-error certificates, without an ulp guarantee.
+
+## Exp range reduction and reconstruction
+
+For any integer `k`, `exp(x)=2^k*exp(x-k*log(2))`. The implemented selection is
+`k=round_integer(round_float(x*C))`, where `C` is the stored reciprocal constant.
+With exact input widening, `|k-x*C| <= ρproduct+ρinteger`. Integer conversion
+contributes at most one half, including both signs and ties. Directed log(2)
+bounds establish the ideal residual radius
+`X*max(abs(1-C*log(2))) + (ρproduct+ρinteger)*upper_log2`.
+The proof requires this to be at most `1/2`, matching the norm domain. Selection
+need not equal a hypothetical exact nearest `x/log(2)`; the identity holds for
+the actual integer and its reduced domain is proved.
+
+Correlation between input and selected exponent also bounds the exact
+implemented residual before rounding, using stored `L=log2`. This avoids the
+unrelated interval estimate of subtracting two large independent quantities.
+The coordinate error includes `max(abs(k))*max(abs(L-log(2)))`, the explicit
+integer-to-reduction conversion, separate product rounding when present,
+residual add/FMA rounding and the coordinate conversion. Existing Horner bounds
+propagate this through every coefficient/stage conversion and operation.
+The stored polynomial norm already includes coefficient quantization.
+
+Approximation, coordinate and evaluator errors are multiplied by a proved upper
+bound on `2^k`. A directed exp image enlarged by the complete kernel error
+tightens the final Horner range before direct output scaling. A zero lower
+scale bounds arbitrarily deep underflow without allocating `2^k` at the negative
+endpoint. For an entirely tiny domain, a conservative upper scale is capped
+above its actual value near the output underflow quantum. Output rounding is
+added once, including subnormal ties. Possible internal/output overflow or
+failure to prove the residual domain refuses certification.
+
+All reduction constants, selection operations, Horner stages, scaling and
+guards are audited again during replay and precision reduction. Both signed
+zeros use exact one; positive infinity uses infinity and negative infinity uses
+positive zero. NaNs and excluded finite inputs return canonical NaN before
+reduction. Zero-only contracts have no numerical path and an exact zero bound.
+Contracts currently require floating interfaces, a bounded interval and one
+shared kernel. These are uniform absolute bounds, without an ulp or
+correct-rounding guarantee.

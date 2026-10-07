@@ -566,6 +566,32 @@ function _certificate_data(result::CertificationResult)
             ],
         )
     end
+    if get(result.settings, "method", "") == "exp_polynomial_horner" &&
+       result.total_bound !== nothing
+        path = only(_exp_audit(result.plan).paths)
+        d["coverage"] = Dict(
+            "input_domain" => _rational_text.(collect(path.input_domain)),
+            "inputs" => "all representable finite inputs in the bounded signed interval",
+            "zeros" => "both signed zeros return exact one when included",
+            "infinities" => "positive infinity returns infinity; negative infinity returns positive zero",
+            "invalid_inputs" => "NaNs and excluded finite inputs return canonical quiet NaN before reduction",
+            "overflow" => "all reachable numerical operations and output scaling bounded",
+        )
+        d["transformation"] = Dict(
+            "kind" => "exp",
+            "identity" => "exp(x)=2^k*exp(x-k*log(2)) for integer k",
+            "norm_domain" => _rational_text.(collect(path.domain)),
+            "reduction_format" => _format_data(path.reduction_format),
+            "exponent_node" => path.exponent_node,
+            "exponent_format" => _format_data(path.exponent_format),
+            "selection" => "nearest-even integer conversion of rounded x*stored inverse_log2",
+            "stored_log2_node" => path.log2_node,
+            "stored_inverse_log2_node" => path.inverse_node,
+            "reconstruction_node" => path.output_node,
+            "rounding" => "direct final-Horner scaling to the output format",
+            "zero_only" => path.zero_only,
+        )
+    end
     result.tail_bound === nothing || (
         d["tail"] = Dict(
             "magnitude_lower" => "4/1",
