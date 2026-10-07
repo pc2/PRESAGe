@@ -428,6 +428,8 @@ function certify_polynomial(
         return _certify_atan(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") in ("sinh", "cosh") &&
         return _certify_hyperbolic(plan; precision, accuracy, max_refinements)
+    get(plan.settings, "transformation", "none") == "erfc" &&
+        return _certify_erfc(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "exp" &&
         return _certify_exp(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "log" &&

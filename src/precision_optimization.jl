@@ -10,9 +10,11 @@ function precision_cost(plan::PlanArtifact)
     precision = _stored_precision(plan)
     p = plan.program
     rows =
+        get(plan.settings, "transformation", "none") == "erfc" ? 3 :
         get(plan.settings, "transformation", "none") in ("sinh", "cosh") ? 2 :
         max(1, length(plan.segments))
-    evaluations = get(plan.settings, "transformation", "none") in ("sinh", "cosh") ? 3 : 1
+    evaluations =
+        get(plan.settings, "transformation", "none") in ("sinh", "cosh", "erfc") ? 3 : 1
     operations = [n for n in p.nodes if n isa Union{IR.Mul, IR.Add, IR.FMA}]
     operand_widths = [[_width(IR.format(p, i)) for i in IR.refs(n)] for n in operations]
     return (;
@@ -168,14 +170,47 @@ function _precision_proposals(result, step, minimum)
         layouts = first.(pairs)
         ranges = last.(pairs)
     end
+    if get(result.plan.settings, "transformation", "none") == "erfc"
+        pairs = Tuple{NamedTuple, Dict{Int, _Interval}}[]
+        for (p, r) in zip(layouts, ranges)
+            if p.tail
+                f = result.plan.spec.output_format
+                kmax = numerator(r[p.exponent_node][2])
+                scale = _pow2(Int(max(kmax, _emin(f) - f.fraction_bits - 4)))
+                ep = merge(
+                    p,
+                    (;
+                        reconstruction_bound = scale *
+                                               _interval_magnitude(r[p.scaled_wide])
+                    ),
+                )
+                phi = merge(
+                    p.scaled_kernel,
+                    (; reconstruction_bound = scale * _interval_magnitude(r[p.exp_wide])),
+                )
+                push!(pairs, (ep, r), (phi, r))
+            else
+                push!(pairs, (p, r))
+            end
+        end
+        # Each tail executes two distinct Horner graphs with shared formats.
+        layouts = first.(pairs)
+        ranges = last.(pairs)
+    end
     count = length(precision.coefficient_formats)
+    storage_rows = if get(result.plan.settings, "transformation", "none") == "erfc"
+        layout = _erfc_audit(result.plan)
+        (layout.central_coefficients, layout.scaled_coefficients, layout.exp_coefficients)
+    else
+        [p.coefficients for p in layouts]
+    end
     proposals = NamedTuple[]
     for (kind, formats) in
         ((:coefficient, precision.coefficient_formats), (:stage, precision.stage_formats))
         for (k, format) in enumerate(formats)
             storage = kind == :coefficient
             local_ranges =
-                storage ? [_singleton(p.coefficients[k]) for p in layouts] :
+                storage ? [_singleton(cs[k]) for cs in storage_rows] :
                 [
                     r[node] for (p, r) in zip(layouts, ranges) for
                     node in _precision_stage_nodes(p, k, count)

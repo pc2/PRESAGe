@@ -834,3 +834,54 @@ Contracts require floating interfaces, an explicit bounded signed interval
 and kernel degree 0:15. Degree d means central degree 2d+1 for sinh, 2d for
 cosh and degree d for each exp evaluation. This is a uniform absolute bound,
 without a correct-rounding or ulp guarantee.
+
+## Scaled erfc tails
+
+For positive a, `phi(a)=exp(a*a)*erfc(a)` has the integral representation
+`2/sqrt(pi)*integral(exp(-t*t-2*a*t), t=0..infinity)`. This proves positivity
+and strict decrease. Directed point enclosures at the interval endpoints
+therefore bound phi over the entire tail. This avoids treating exp(a²) and
+erfc(a) as independent interval factors. The function is smooth on the bounded
+positive approximation interval; no heuristic property detection is used.
+
+Central erfc is approximated on `[0,1]`. Tail phi is approximated in the actual
+stored affine normalization of `[1,max(2,R)]`, inside `[-1,1]`. Sollya certifies
+the actual stored phi polynomial against that composed function, and the stored
+exp polynomial against exp on `[-1/2,1/2]`. The certificate includes both norms.
+Changing the stored normalization changes the meaning of its coefficients;
+generation and replay audit its exact center, scale and coordinate graph.
+
+Input widening is exact. The rounded square has error ηs. The exp selection
+proof uses the actual rounded negative-square range, then adds ηs when bounding
+the ideal residual `-a*a-k*log(2)` and its formation error. The norm domain must
+still be proved to cover that ideal residual. Stored log(2), selection, exponent
+conversion, residual arithmetic and coordinate casts retain their explicit
+error terms. Phi coordinates include rounded center subtraction, power-of-two
+normalization and conversion. Both Horner bounds include every declared format
+and operation, plus their final wide conversions.
+
+Let E bound exact exp(r), P bound the actual wide phi polynomial, S bound `2^k`,
+and N/C/V denote stored-polynomial, coordinate and evaluator errors for each
+kernel. From
+`actual_phi*actual_exp-phi*exp = exp*(actual_phi-phi) + actual_phi*(actual_exp-exp)`,
+the approximation contribution is `S*(E*Nphi+P*Nexp)`, coordinate contribution
+is `S*(E*Cphi+P*Cexp)`, and arithmetic adds `S*(E*Vphi+P*Vexp)` plus multiplication,
+scaling, negative reflection and output rounding. P already includes its proved
+kernel errors, so mixed error products are accounted for.
+
+Exponent scaling uses a zero lower scale. Deeply negative endpoints do not
+allocate a huge power of two; an entirely tiny upper scale is capped upward
+near the output subnormal quantum. Both internal and final underflow rounding
+are included. Negative inputs use `erfc(-a)=2-erfc(a)` with separate/FMA rounding.
+Four signed central/tail paths partition the representable domain, including
+the adjacent encodings at ±1 and zero. The gap between negative minimum
+subnormal and zero contains no other representable input. Exact zero and
+infinity limits are audited separately; excluded finite inputs and NaNs return
+canonical NaN before numerical evaluation.
+
+Replay and precision reduction repeat the complete proof. Unproved residual
+coverage, possible overflow and unmet budgets refuse certification. Contracts
+require floating interfaces, a bounded signed interval and degree 0:32. All
+three coefficient banks and Horner graphs use the declared precision lists.
+This establishes a uniform absolute bound, without an ulp or correct-rounding
+guarantee; it does not establish full-domain erfc support.

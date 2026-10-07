@@ -885,14 +885,69 @@ Hyperbolic contracts currently require floating interfaces, an explicit bounded
 interval and kernel degree 0:15. Central coefficients use a stored Taylor basis;
 tail coefficients use Sollya fpminimax. Both have direct stored-polynomial norm
 proofs. This is a uniform absolute bound, without an ulp or correct-rounding
-guarantee. Scaled erfc tails are next.
+guarantee. Scaled erfc tails are described below.
+
+## Scaled erfc tails
+
+[`examples/erfc_search.jl`](../examples/erfc_search.jl) generates binary16 erfc on
+`[-8,8]` with target `1/512`. Degree thirteen uses three banks of fourteen
+coefficients in `FixedFormat(72,24)`: central erfc, normalized scaled erfc and
+reduced exp. The stored tail center is 4.5 and normalization scale is 1/4,
+giving the norm interval `[-7/8,7/8]` for physical arguments `[1,8]`.
+Reconstruction occurs in binary64 before output conversion. The total bound is
+`0.0009767813924863073`.
+
+| Negative-tail contribution | Certified upper bound |
+| --- | ---: |
+| Both stored-polynomial norms after reconstruction | `2.188925e-7` |
+| Normalization, square and exp-coordinate errors | `1.276853e-15` |
+| Horner, multiplication, scaling and reflection arithmetic | `1.050864e-14` |
+| Final output rounding | `0.0009765625` |
+| Total | `0.0009767813924863073` |
+| Contract target | `0.001953125` |
+
+The positive-tail bound is `0.00012228920498608516`. Coefficient banks and
+Horner stage sets each total 3,024 declared bits. Static IR has 41 FMAs, four
+multiplications, one normalization add and one dynamic exponent scaling, plus
+dispatch and conversions. These are structural counts, without a device claim.
+
+With binary32 interfaces and target `2^-20`, ordered search first refuses degree
+nine with bound `1.932926e-5`, then certifies degree thirteen at
+`3.3810177585913347e-7`. Directed references include square/exponent transitions,
+central/tail neighbours, subnormal inputs and outputs, zero outputs and negative
+reflection. A positive binary64 contract on `[30,32]` certifies below its smallest
+subnormal quantum and produces zero through both Julia and official-header C++.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Certified erfc scaled tails and reflection | 4,361 | Fresh generation, separate/FMA complete proofs, exponent and output transitions, all six backend combinations, exact exceptional branches and stored recertification. |
+| Exhaustive binary16 erfc scaled-tail verification | 630,788 | Both arithmetic modes over all encodings, directed MPFR error bounds, every visited range and two exhaustive compiled evaluators. |
+| Erfc bounded branches, underflow and proof refusals | 447 | Central/tail/singleton/clipped/zero-only contracts, degree-zero generation, deep binary64 underflow, mutated graphs, invalid interfaces/reductions, fixed overflow, insufficient constants for large squares and unmet budgets. |
+| Erfc binary32, guard bits and individual precision | 320 | Ordered degree refinement, binary32 and small custom formats, 100-bit input and 112-bit output fractions, floating/fixed internals, explicit coordinate errors, individual widths and official-header C++. |
+| Erfc precision search, artifacts and CLI | 46 | Supervised complete width reduction over both tail kernels, all coefficient banks, configuration/report v12, actual CLI generation and exact AP/AC replay. |
+
+The five new groups pass 635,962 checks; the two added overflow/constant refusals
+were checked separately after the main run. Eight regression groups pass another
+327,389 checks, covering formats, plan/search schemas, IR, dynamic exp scaling,
+exp reduction/refusals and sinh/cosh precision search and CLI replay. The targeted
+runs total 963,351 checks with official vendor headers required. The example and
+formatting pass. The complete runner was not repeated. The initial subnormal
+fixture was corrected to check exponent bits, matching the decoder's `finite`
+classification for both normal and subnormal values.
+
+Contracts currently require floating interfaces, an explicit bounded interval,
+three degree 0:32 kernels and an absolute-error target. The single normalized
+scaled-tail polynomial is tied to its stored domain; a wider domain can need
+higher degree, different coefficients or another architecture. Unsupported
+ranges fail explicitly. This does not establish full-domain erfc, relative/ulp
+accuracy or correct rounding. Bounded sin/cos periodic reduction is next.
 
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
 rejected fixed overflow, including mixed interfaces and custom formats.
-Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log, atan-tail, exp and sinh/cosh
+Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log, atan-tail, exp, sinh/cosh and scaled erfc
 kernels also have complete certificates.
 Segmented floating erf and other transformation families remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains

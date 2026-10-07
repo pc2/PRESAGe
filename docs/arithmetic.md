@@ -342,3 +342,29 @@ either zero and positive infinity for either infinity. NaNs and excluded finite
 inputs return canonical NaN before numerical evaluation. All branches are lazy.
 Structural cost reports count two coefficient banks, three Horner stage sets
 and two exponent scalings; these are not synthesis estimates.
+
+## Scaled erfc reconstruction arithmetic
+
+The erfc graph compares `abs(x)>1` in the input format. Central erfc uses an
+ascending polynomial on `[0,1]`. The positive tail uses a separate polynomial
+for `phi(a)=exp(a*a)*erfc(a)` in a normalized coordinate. A stored center and
+power-of-two scale map `[1,max(2,R)]` inside `[-1,1]`, where R is the largest
+accepted representable magnitude. Center subtraction and normalization occur
+in the widened reduction format, then convert to the coordinate format.
+
+The same wide format squares the exactly widened input. Negate the rounded
+square, select k and form the exp residual, with separate or fused arithmetic
+as declared. Evaluate the reduced exp polynomial, explicitly convert both tail
+Horner results, multiply and scale the product by `2^k`. No exp(a²) or erfc(a)
+library call is emitted. Negative inputs reconstruct `2-positive_result` in
+the wide format; separate mode uses a negation product and add, while fused
+mode uses FMA. Convert the selected result into the floating output.
+
+The reduction exponent field covers input squaring and has extra range beyond
+the output; fraction precision covers the interfaces and coordinate format,
+with at least binary64 precision. All operations and casts are explicit IR.
+Zeros return exact one, infinity limits are zero/two, and invalid finite inputs
+and NaNs return canonical NaN before numerical evaluation. Branches are lazy.
+Structural cost reports count three coefficient banks, three Horner stage sets
+and one dynamic exponent scaling. Individual width proposals account for both
+tail kernels and their reconstruction factors.

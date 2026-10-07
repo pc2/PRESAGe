@@ -628,6 +628,44 @@ function _certificate_data(result::CertificationResult)
             ],
         )
     end
+    if get(result.settings, "method", "") == "erfc_polynomial_horner" &&
+       result.total_bound !== nothing
+        layout = _erfc_audit(result.plan)
+        path = first(layout.paths)
+        d["coverage"] = Dict(
+            "input_domain" => _rational_text.(collect(layout.geometry.accepted_domain)),
+            "inputs" => "all representable finite inputs in the bounded signed interval",
+            "dispatch" => "central for abs(x)<=1; scaled erfc tail for abs(x)>1, compared in the input format",
+            "zeros" => "both signed zeros return exact one when included",
+            "infinities" => "positive infinity returns zero; negative infinity returns two",
+            "invalid_inputs" => "NaNs and excluded finite inputs return canonical quiet NaN before kernel evaluation",
+            "overflow" => "all reachable square, coordinate, kernel, reconstruction and output nodes bounded",
+        )
+        d["transformation"] = Dict(
+            "kind" => "erfc",
+            "identity" => "erfc(a)=(exp(a*a)*erfc(a))*exp(-a*a); erfc(-a)=2-erfc(a)",
+            "scaled_function" => _ERFC_SCALED_EXPRESSION,
+            "scaled_image" => "positive decreasing function by its Gaussian integral representation; directed endpoint enclosures",
+            "scaled_norm_domain" =>
+                _rational_text.(collect(layout.normalization.domain)),
+            "scaled_argument_domain" =>
+                _rational_text.(collect(layout.normalization.argument_domain)),
+            "center" => _rational_text(layout.normalization.center),
+            "scale_exponent" => layout.normalization.exponent,
+            "exp_norm_domain" => ["-1/2", "1/2"],
+            "reduction_format" => _format_data(path.reduction_format),
+            "square_node" => path.square,
+            "stored_log2_node" => layout.log2_node,
+            "stored_inverse_log2_node" => layout.inverse_node,
+            "zero_only" => layout.geometry.zero_only,
+            "paths" => [
+                Dict(
+                    "kind" => string(p.kind),
+                    "input_domain" => _rational_text.(collect(p.input_domain)),
+                ) for p in layout.paths
+            ],
+        )
+    end
     result.tail_bound === nothing || (
         d["tail"] = Dict(
             "magnitude_lower" => "4/1",

@@ -314,16 +314,24 @@ function _certified_exp(
     return _certify_exp(plan; precision = proof_precision, accuracy, max_refinements)
 end
 
-function _exp_reduction_bounds(plan, path, log2_bounds; exponent_headroom = 1)
+function _exp_reduction_bounds(
+    plan,
+    path,
+    log2_bounds;
+    exponent_headroom = 1,
+    selection_domain = path.input_domain,
+    selection_error = _q(0),
+)
     0 < path.inverse_log2 < 2 && path.log2 > 0 ||
         throw(ArgumentError("invalid exp reduction constants"))
     ranges, rho = _polynomial_ranges(plan.program, path; stop_before = path.residual)
-    xbound = _interval_magnitude(path.input_domain)
+    xbound = _interval_magnitude(selection_domain)
     kbound = _interval_magnitude(ranges[path.exponent_node])
     kerror = rho[path.exponent_node] + rho[path.selection_product]
     ideal_radius =
         xbound * maximum(abs(1 - path.inverse_log2 * l) for l in log2_bounds) +
-        kerror * log2_bounds[2]
+        kerror * log2_bounds[2] +
+        selection_error
     ideal_radius <= 1 // 2 ||
         throw(ArgumentError("exp exponent selection does not establish the reduced domain"))
     # Correlation between x and k bounds the exact residual before its rounding.
@@ -357,6 +365,7 @@ function _exp_reduction_bounds(plan, path, log2_bounds; exponent_headroom = 1)
     constant_error = kbound * maximum(abs(path.log2 - l) for l in log2_bounds)
     eta =
         constant_error +
+        selection_error +
         abs(path.log2) * rho[path.exponent_value] +
         product_error +
         rho[path.residual] +

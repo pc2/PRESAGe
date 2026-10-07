@@ -337,3 +337,25 @@ handling. Transformation fields record the identity, central kernel, exp norm
 domain, widened format, constant nodes and reconstruction order. Each original
 input path reports its scaled approximation, coordinate, arithmetic and final
 rounding bounds. Failed proofs do not claim coverage.
+
+## Scaled erfc artifacts
+
+Erfc searches use configuration/report v12, `transformation="erfc"`,
+`segments=[1]` and `degree_then_format` ordering. Degree d (0:32) and the d+1
+coefficient/stage formats apply to central erfc, normalized scaled erfc and
+reduced exp. Three separate coefficient banks retain exact payloads.
+
+Plan v11 already represents input-format dispatch, affine normalization,
+squaring, integer selection, both tail Horner graphs, multiplication, dynamic
+scaling and reflection. No new arithmetic node or plan version is needed.
+Replay preserves the stored normalization and constants; reinterpreting
+normalized coefficients on a different domain requires a new norm proof and
+can require regeneration.
+
+Certificate v2 uses method `erfc_polynomial_horner`. Transformation fields
+record the identity, scaled function and image method, stored center/scale,
+scaled and exp norm domains, wide format, square and reduction constant nodes.
+Coverage records four signed central/tail intervals and exact exceptional
+branches. Path contributions include both polynomial norms, square/reduction
+and normalized-coordinate errors, all reconstruction arithmetic and output
+rounding, including subnormals. Failed proofs do not claim coverage.

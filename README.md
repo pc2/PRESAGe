@@ -37,6 +37,9 @@ selection, stored constants and underflow. See the [exp example](examples/exp_se
 Sinh/cosh combine central odd/even kernels with two exponential tails. Each tail
 is scaled by one half before reconstruction, preserving finite hyperbolic results
 past exp's output overflow point. See the [hyperbolic example](examples/hyperbolic_search.jl).
+Erfc combines a central polynomial with a normalized scaled positive tail and
+certified exp reconstruction, including square rounding, underflow and the
+negative-input identity. See the [erfc example](examples/erfc_search.jl).
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
@@ -575,6 +578,40 @@ supported. The binary16 example certifies a total absolute bound about 16 agains
 
 ```sh
 julia --startup-file=no --project=. examples/hyperbolic_search.jl
+```
+
+## Scaled erfc tails
+
+```julia
+spec = FunctionSpec("erfc(x)"; input_format=IEEE16,
+    domain=(-8,8), absolute_error=1//512)
+config = PolynomialSearchConfig(degrees=[13],
+    internal_formats=[FixedFormat(72,24)], transformation=:erfc,
+    evaluation=:fma, job_timeout=60, total_timeout=90)
+search = search_polynomial(spec, config)
+@assert search.status == :certified
+```
+
+The central branch approximates erfc on `[0,1]`. For `a=abs(x)>1`, the tail
+approximates `exp(a*a)*erfc(a)` in a normalized coordinate, evaluates reduced
+exp and reconstructs with `2^k`. The evaluator uses the two stored polynomials;
+the scaled mathematical expression is used during generation and proof.
+Negative inputs reconstruct `2-erfc(a)` before output conversion. Both signed
+zeros return one; positive/negative infinities return zero/two. NaNs and excluded
+finite inputs return NaN before numerical evaluation.
+
+The certificate includes normalization, the rounded square, integer selection,
+both stored-polynomial norms, multiplication, exponent scaling, reflection and
+output rounding. Coefficient/stage lists apply to all three kernels. Fixed and
+floating internals, custom formats, individual widths, precision search and
+stored replay are supported. Contracts require bounded floating interfaces and
+an absolute target. The binary16 example certifies about `0.0009767814` against
+`1/512` on `[-8,8]`; degree thirteen also meets `2^-20` for binary32 interfaces.
+Tail coefficients belong to the stored normalization; changing its domain or
+coordinate precision can require regenerating them.
+
+```sh
+julia --startup-file=no --project=. examples/erfc_search.jl
 ```
 
 ## Reference CLI

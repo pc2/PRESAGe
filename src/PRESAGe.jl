@@ -51,6 +51,7 @@ export FloatFormat,
     atan_polynomial_plan,
     exp_polynomial_plan,
     hyperbolic_polynomial_plan,
+    erfc_polynomial_plan,
     segmented_polynomial_plan,
     certified_polynomial,
     PolynomialSearchConfig,
@@ -112,6 +113,7 @@ include("log.jl")
 include("atan.jl")
 include("exp.jl")
 include("hyperbolic.jl")
+include("erfc.jl")
 include("search.jl")
 include("search_schema.jl")
 include("precision_optimization.jl")
