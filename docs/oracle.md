@@ -12,6 +12,10 @@ it does not loosen the oracle's rounding decision.
 2. Apply established primitive domain/special-value identities. A NaN input
    becomes the canonical quiet NaN; a validated domain error is separately
    classified. Generic infinite-input identities are not inferred.
+   Atan infinity limits use adaptive directed bounds for signed pi/2. Sollya
+   encloses the constant; MPFR bounds pi directly and scales its exact dyadic
+   endpoints by one half. Floating and fixed output rounding use the same
+   endpoint agreement and unresolved/overflow rules as finite references.
 3. Evaluate rational polynomials exactly, covering zeros and rounding ties.
 4. Otherwise obtain guaranteed image bounds from a singleton input interval
    with `Sollya.enclosure`. Direct MPFR primitives provide a separate check:

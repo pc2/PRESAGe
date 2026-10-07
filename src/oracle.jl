@@ -591,10 +591,47 @@ function _adaptive(
     end
 end
 
+# atan has finite irrational limits. Keep directed endpoints so an infinity
+# result has the same rounding/error evidence as an ordinary reference.
+function _atan_limit_bounds(o, negative, precision)
+    bounds = if o.backend == :sollya
+        Sollya.with_session(Sollya.Session(; precision)) do
+            Sollya.with_objects() do keep
+                range = keep(Sollya.enclosure(keep(Sollya.sollya("pi/2")), 0))
+                (
+                    _sollya_bound(keep(Sollya.infimum(range))),
+                    _sollya_bound(keep(Sollya.supremum(range))),
+                )
+            end
+        end
+    else
+        lo, hi = BigFloat(0; precision), BigFloat(0; precision)
+        ccall((:mpfr_const_pi, Base.MPFR.libmpfr), Cint, (Ref{BigFloat}, Cint), lo, 3)
+        ccall((:mpfr_const_pi, Base.MPFR.libmpfr), Cint, (Ref{BigFloat}, Cint), hi, 2)
+        map((_mpfr_bound(lo), _mpfr_bound(hi))) do b
+            DyadicBound(b.significand, b.exponent - 1)
+        end
+    end
+    return negative ?
+           map(
+        b -> DyadicBound(-b.significand, b.exponent; negative = true),
+        reverse(bounds),
+    ) : bounds
+end
+
 """Resolve exact input bits using adaptive enclosures, never by low precision point evaluation."""
 function reference(o::ReferenceOracle, bits::Integer)
     isopen(o) || throw(ArgumentError("oracle is closed"))
     x = _decode_input(bits, o.spec.input_format)
+    o.primitive == :atan &&
+        x.kind == :infinity &&
+        return _adaptive(
+            p -> _atan_limit_bounds(o, x.negative, p),
+            o.spec.output_format,
+            o.config,
+            o.config.initial_precision,
+            o.backend,
+        )
     special = _exceptional(o, x)
     special === nothing || return special
     start = max(o.config.initial_precision, _input_precision(o.spec.input_format))

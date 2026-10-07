@@ -149,9 +149,12 @@ _dyadic_fraction(q) =
 function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = Dict())
     ranges, rho = Dict{Int, _Interval}(), Dict{Int, Rational{BigInt}}()
     grids = Dict{Int, Int}()
+    choices = get(layout, :range_choices, Dict{Int, Int}())
     needed = Set(get(layout, :range_roots, (p.output,)))
     for i in reverse(eachindex(p.nodes))
-        i in needed && union!(needed, IR.refs(p.nodes[i]))
+        if i in needed
+            union!(needed, haskey(choices, i) ? (choices[i],) : IR.refs(p.nodes[i]))
+        end
     end
     for (i, n) in enumerate(p.nodes)
         i == stop_before && break
@@ -167,6 +170,12 @@ function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = 
             ranges[i] = layout.exact_branches[i]
             grids[i] = _dyadic_fraction(ranges[i][1])
             rho[i] = _q(0)
+            continue
+        elseif haskey(choices, i)
+            source = choices[i]
+            n isa IR.Select && source in (n.yes, n.no) ||
+                throw(ArgumentError("invalid audited range choice"))
+            ranges[i], grids[i], rho[i] = ranges[source], grids[source], _q(0)
             continue
         elseif n isa IR.Input
             ranges[i] = get(layout, :input_domain, layout.domain)
@@ -195,6 +204,14 @@ function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = 
             grids[i] = IR.format(p, n.source).fraction_bits
             rho[i] = _q(0)
             continue
+        elseif n isa IR.FloatReciprocal
+            lo, hi = ranges[n.source]
+            0 < lo <= hi ||
+                throw(ArgumentError("reciprocal proof requires a positive range"))
+            exact = (inv(hi), inv(lo))
+            # A reciprocal is generally not dyadic. Do not infer an exact grid
+            # from the input; only its rounded result has the format's grid.
+            scale = _polynomial_grid(f, exact) + 1
         elseif n isa IR.FloatExponent
             ranges[i] = _q.(layout.exponents)
             grids[i] = 0
@@ -207,7 +224,13 @@ function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = 
             lo, hi = ranges[n.source]
             magnitude =
                 (lo <= 0 <= hi ? _q(0) : min(abs(lo), abs(hi)), max(abs(lo), abs(hi)))
+            sign = p.nodes[n.sign]
             ranges[i] =
+                sign isa IR.Const ?
+                (
+                    decode_ieee(sign.bits, sign.format).negative ?
+                    (-magnitude[2], -magnitude[1]) : magnitude
+                ) :
                 get(layout, :both_signs, false) ? (-magnitude[2], magnitude[2]) :
                 layout.negative ? (-magnitude[2], -magnitude[1]) : magnitude
             grids[i] = grids[n.source]
@@ -383,6 +406,8 @@ function certify_polynomial(
     0 <= max_refinements <= 8 || throw(ArgumentError("refinements must be in 0:8"))
     get(plan.settings, "transformation", "none") == "odd" &&
         return _certify_odd(plan; precision, accuracy, max_refinements)
+    get(plan.settings, "transformation", "none") == "atan" &&
+        return _certify_atan(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "log" &&
         return _certify_log(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "reciprocal" &&

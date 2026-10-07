@@ -536,6 +536,36 @@ function _certificate_data(result::CertificationResult)
             "exceptional_only" => path.exceptional_only,
         )
     end
+    if get(result.settings, "method", "") == "atan_polynomial_horner" &&
+       result.total_bound !== nothing
+        layout = _atan_audit(result.plan)
+        d["coverage"] = Dict(
+            "input_domain" => _rational_text.(collect(layout.geometry.accepted_domain)),
+            "inputs" => "all representable finite inputs in the bounded signed interval",
+            "dispatch" => "central for abs(x)<=1; reciprocal tail for abs(x)>1, compared in the input format",
+            "zeros" => "both signed zeros preserved when included",
+            "infinities" => "signed stored pi/2 limit, including its conversion and constant error",
+            "invalid_inputs" => "NaNs and excluded finite inputs return canonical quiet NaN before kernel evaluation",
+            "overflow" => "all reachable numerical branches and output conversions bounded",
+        )
+        d["transformation"] = Dict(
+            "kind" => "atan",
+            "identity" => "atan(x)=sign(x)*atan(abs(x)); atan(a)=pi/2-atan(1/a) for a>1",
+            "norm_domain" => ["0/1", "1/1"],
+            "kernel" => "r*q(r*r)",
+            "reciprocal_format" => _format_data(layout.reduction_format),
+            "pi2_node" => layout.pi2_node,
+            "pi2_error_bound" => get(result.settings, "pi2_error_bound", ""),
+            "infinity_error_bound" => get(result.settings, "infinity_error_bound", ""),
+            "paths" => [
+                Dict(
+                    "kind" => string(p.kind),
+                    "input_domain" => _rational_text.(collect(p.input_domain)),
+                    "argument_domain" => _rational_text.(collect(p.argument_domain)),
+                ) for p in layout.paths
+            ],
+        )
+    end
     result.tail_bound === nothing || (
         d["tail"] = Dict(
             "magnitude_lower" => "4/1",

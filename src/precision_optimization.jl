@@ -300,7 +300,7 @@ function _optimize_precision(
             spec,
             config,
             domain,
-            degree = config.transformation == :odd ?
+            degree = config.transformation in (:odd, :atan) ?
                      2length(precision.coefficient_formats) - 1 :
                      length(precision.coefficient_formats) - 1,
             internal_format = precision.coordinate_format,

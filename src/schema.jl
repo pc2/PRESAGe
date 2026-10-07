@@ -1,4 +1,4 @@
-const _SCHEMA_VERSION = 9
+const _SCHEMA_VERSION = 10
 _has_cube_reduction(p::IR.Program) = any(
     n -> n isa Union{IR.RootArgument, IR.ScaleByInputExponent} && n.divisor == 3,
     p.nodes,
@@ -117,6 +117,7 @@ function _plan_data(p::PlanArtifact)
     fixedio = p.spec.input_format isa FixedFormat || p.spec.output_format isa FixedFormat
     guarded = p.program !== nothing && any(n -> n isa IR.Guard, p.program.nodes)
     version =
+        p.program !== nothing && any(n -> n isa IR.FloatReciprocal, p.program.nodes) ? 10 :
         p.program !== nothing && any(n -> n isa IR.FloatExponent, p.program.nodes) ? 9 :
         p.program !== nothing && _has_cube_reduction(p.program) ? 8 :
         p.program !== nothing && _has_root_reduction(p.program) ? 7 :
@@ -213,6 +214,10 @@ function _read_plan(d)
         )
     end
     program = haskey(d, "program") ? _read_program(d["program"]) : nothing
+    program !== nothing &&
+        any(n -> n isa IR.FloatReciprocal, program.nodes) &&
+        d["schema_version"] < 10 &&
+        throw(ArgumentError("rounded floating reciprocal requires schema v10"))
     program !== nothing &&
         any(n -> n isa IR.FloatExponent, program.nodes) &&
         d["schema_version"] < 9 &&

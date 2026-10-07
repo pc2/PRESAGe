@@ -25,6 +25,9 @@ See the [root example](examples/root_search.jl) and [proof](docs/certification.m
 Cbrt extends this pipeline to bounded signed domains with `e=3q+r`, a positive
 kernel on `[1,8]`, exact sign restoration and signed zero/infinity branches.
 See the [cbrt example](examples/cbrt_search.jl).
+Atan combines a certified odd central kernel with reciprocal tails at `|x|>1`,
+including reciprocal rounding, the stored `π/2` constant and signed limits.
+See the [atan example](examples/atan_search.jl).
 Log supports positive finite inputs over bounded nonnegative domains using
 `log(m)+e*log(2)`, with the stored constant and all reconstruction rounding
 included in the certificate. See the [log example](examples/log_search.jl).
@@ -476,6 +479,34 @@ This is a uniform absolute bound, without a correct-rounding or ulp guarantee.
 
 ```sh
 julia --startup-file=no --project=. examples/log_search.jl
+```
+
+## Atan reciprocal tails
+
+```julia
+spec = FunctionSpec("atan(x)"; input_format=IEEE16,
+    domain=(-65504,65504), absolute_error=1//1024)
+config = PolynomialSearchConfig(degrees=[15],
+    internal_formats=[FixedFormat(72,24)], transformation=:atan,
+    evaluation=:fma, job_timeout=60, total_timeout=90)
+search = search_polynomial(spec, config)
+@assert search.status == :certified
+```
+
+The degree is the odd original degree of `r*q(r²)`. An exact input-format
+comparison selects `r=|x|` for `|x|≤1`, or a rounded reciprocal for `|x|>1`.
+The tail subtracts the kernel from stored `π/2`; sign restoration and signed
+zeros are explicit. Infinity limits include constant and output-conversion
+error in the global bound. NaNs and excluded finite inputs return NaN.
+
+Reciprocal arithmetic uses native division or official AC division, widening
+automatically for the input, output and coordinate precision, with at least
+binary64 precision. Individual Horner widths, bounded precision search and
+exact replay are supported. Contracts currently require floating interfaces
+and a bounded signed interval. The certificate is a uniform absolute bound.
+
+```sh
+julia --startup-file=no --project=. examples/atan_search.jl
 ```
 
 ## Reference CLI

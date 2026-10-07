@@ -31,6 +31,7 @@ export UIntFormat,
     ScalePow2,
     FloatMantissa,
     FloatExponent,
+    FloatReciprocal,
     RootArgument,
     ScaleByInputExponent,
     CopySign,
@@ -205,6 +206,10 @@ end
 struct FloatExponent <: Node
     source::Int
 end
+"""Nearest-even floating 1/source, including IEEE zero/infinity/NaN semantics."""
+struct FloatReciprocal <: Node
+    source::Int
+end
 """Exact m*2^r where abs(source)=m*2^e and e=divisor*q+r, using floor division.
 Retain fraction bits; widen the exponent field when necessary to represent t.
 """
@@ -261,7 +266,7 @@ refs(n::FMA) = (n.a, n.b, n.c)
 refs(n::Select) = (n.condition, n.yes, n.no)
 refs(n::Guard) = (n.condition, n.source)
 refs(n::Union{Convert, Quantize, BitCast, ExtractBits, ScalePow2, Classify}) = (n.source,)
-refs(n::Union{FloatMantissa, FloatExponent}) = (n.source,)
+refs(n::Union{FloatMantissa, FloatExponent, FloatReciprocal}) = (n.source,)
 refs(n::RootArgument) = (n.source,)
 refs(n::ScaleByInputExponent) = (n.source, n.input)
 refs(n::CopySign) = (n.source, n.sign)
@@ -345,6 +350,10 @@ function _type(n::Node, types, tables)
         n.kind in (:nan, :infinity, :finite, :zero, :negative) ||
             throw(ArgumentError("invalid classification"))
         return Bool
+    elseif n isa FloatReciprocal
+        types[n.source] isa FloatFormat ||
+            throw(ArgumentError("reciprocal requires a floating source"))
+        return types[n.source]
     elseif n isa FloatExponent
         types[n.source] isa FloatFormat ||
             throw(ArgumentError("exponent extraction needs a floating source"))

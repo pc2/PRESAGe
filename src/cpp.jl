@@ -48,7 +48,7 @@ end
 function _cpp_expr(p, i, backend = :portable)
     n, f = p.nodes[i], IR.format(p, i)
     f == IEEE16 &&
-        n isa Union{IR.Mul, IR.Add, IR.FMA, IR.ScalePow2} &&
+        n isa Union{IR.Mul, IR.Add, IR.FMA, IR.ScalePow2, IR.FloatReciprocal} &&
         throw(
             ArgumentError(
                 "binary16 CPU support covers interfaces and conversions; use fixed, binary32 or binary64 arithmetic",
@@ -82,6 +82,8 @@ function _cpp_expr(p, i, backend = :portable)
         return "canonical(std::ldexp($(call(n.source)),$(n.exponent)))"
     elseif n isa IR.FloatMantissa
         return "normalize_float($(call(n.source))).mantissa"
+    elseif n isa IR.FloatReciprocal
+        return "canonical($(_cpp_type(f))(1) / $(call(n.source)))"
     elseif n isa IR.FloatExponent
         return "$(_cpp_type(f,backend))(input_exponent<1>($(call(n.source))))"
     elseif n isa IR.RootArgument
@@ -198,6 +200,7 @@ function emit_cpp(
                     IR.Quantize,
                     IR.ScalePow2,
                     IR.ScaleByInputExponent,
+                    IR.FloatReciprocal,
                 },
             p.nodes,
         ) ?

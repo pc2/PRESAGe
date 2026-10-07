@@ -279,3 +279,22 @@ record the identity, mantissa domain, input exponents, constant/reconstruction
 nodes and the exponent-scaled constant error bound. Paths describe positive
 finite inputs; coverage records exact zero/one, infinity and invalid-input
 behavior. Recertification audits and proves every stored operation again.
+
+## Atan tail artifacts
+
+Atan searches use configuration/report v9, `transformation="atan"`,
+`segments=[1]` and `degree_then_format` ordering. Requested degrees are odd in
+`1:31`; coefficient and stage lists describe the `(degree+1)/2` entries of q.
+
+Plans containing `FloatReciprocal(source)` use v10. The format is inferred from
+its floating source, and rounding is nearest-even. Earlier versions reject this
+operation. Atan branch decisions, widened input, reciprocal, shared odd kernel,
+stored pi/2, reconstruction, sign and exceptional paths are ordinary IR nodes.
+The reduction format is derived from the interfaces and coordinate precision.
+
+Certificate v2 uses method `atan_polynomial_horner`. Numerical paths cover the
+original signed input intervals, with the unused branch excluded from range
+analysis. Transformation fields record the identity, `[0,1]` norm domain,
+reciprocal format, argument intervals, pi/2 node/error and infinity error.
+The global bound includes the infinity limits; exact zeros and excluded inputs
+are audited separately. Stored replay repeats the complete proof.

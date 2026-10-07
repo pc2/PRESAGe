@@ -12,9 +12,9 @@ function _validate_odd_spec(spec)
 end
 
 function _validate_transformation(transformation, degree, segments)
-    transformation in (:none, :odd, :reciprocal, :sqrt, :rsqrt, :cbrt, :log) ||
+    transformation in (:none, :odd, :reciprocal, :sqrt, :rsqrt, :cbrt, :log, :atan) ||
         throw(ArgumentError("unsupported polynomial transformation"))
-    if transformation == :odd
+    if transformation in (:odd, :atan)
         1 <= degree <= 31 && isodd(degree) ||
             throw(ArgumentError("odd polynomial degree must be odd and in 1:31"))
         segments == 1 ||
@@ -26,9 +26,9 @@ function _validate_transformation(transformation, degree, segments)
     return nothing
 end
 _coefficient_degree(degree, transformation) =
-    transformation == :odd ? (degree - 1) ÷ 2 : degree
+    transformation in (:odd, :atan) ? (degree - 1) ÷ 2 : degree
 _executed_degree(plan, precision) =
-    get(plan.settings, "transformation", "none") == "odd" ?
+    get(plan.settings, "transformation", "none") in ("odd", "atan") ?
     2length(precision.coefficient_formats) - 1 : length(precision.coefficient_formats) - 1
 
 function _odd_square_domain(domain)

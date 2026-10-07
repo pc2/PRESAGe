@@ -73,7 +73,7 @@
     @test reference(FunctionSpec("pi*x"), 0x3f800000).bits == 0x40490fdb
     @test reference(FunctionSpec("exp(1)"), 0).bits == 0x402df854
     @test reference(FunctionSpec("sqrt(x)+1"), 0xbf800000).status == :evaluation_failed
-    @test reference(FunctionSpec("atan(x)"), 0x7f800000).status == :unresolved
+    @test reference(FunctionSpec("atan(x)"), 0x7f800000).status == :resolved
     @test PRESAGe._exact_expression("log2(x)+0.1+1b-24+0x1p-2") ==
           "log2(x)+(1/10)+1b-24+0x1p-2"
     @test_throws ArgumentError PRESAGe._exact_expression("1e1000000*x")

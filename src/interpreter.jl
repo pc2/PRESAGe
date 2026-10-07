@@ -161,6 +161,12 @@ function _interpret(p::IR.Program, bits::Integer, trace::Bool)
         elseif n isa IR.FloatMantissa
             mantissa, _ = normalize_float(visit(n.source).bits, f)
             _float(mantissa, f)
+        elseif n isa IR.FloatReciprocal
+            x = _decoded(visit(n.source))
+            x.kind == :nan ? _invalid(f) :
+            x.kind == :zero ? _infinite(f, x.negative) :
+            x.kind == :infinity ? _float(x.negative ? _sign(f) : 0, f) :
+            _float(round_ieee(inv(x.value), f; zero_sign = x.negative), f)
         elseif n isa IR.FloatExponent
             source = visit(n.source)
             _, exponent = normalize_float(source.bits, source.format)

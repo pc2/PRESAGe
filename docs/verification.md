@@ -7,7 +7,20 @@ use each Julia installation's own MPFR/GMP runtime.
 
 ## Results
 
-The cbrt change passes **ten new groups with 451,880 checks** on Julia 1.13.1,
+The atan change passes **seven new groups with 836,815 checks** on Julia
+1.13.1, with four threads and official vendor headers required. These cover
+rounded reciprocal semantics, complete central/tail certificates, every binary16
+encoding in separate/FMA modes, custom and wide precision, supervised precision
+search, CLI replay, directed infinity references and writable failure reports.
+The binary16 example certifies `0.0004883187620752597` against `1/1024`.
+Its standalone generation and formatting checks also pass. Another **24
+regression groups pass with 1,383,439 checks**, covering formats, schemas, IR,
+references and every odd, sqrt/rsqrt and log group. Together these runs verify
+**31 groups and 2,220,254 checks**. See the detailed
+[atan results](#atan-central-and-reciprocal-tails) below. The complete package
+runner was not repeated.
+
+The preceding cbrt change passes **ten new groups with 451,880 checks** on Julia 1.13.1,
 with four threads and official vendor headers required. It covers exact division
 by three, argument widening, direct reconstruction, signed certificates, every
 binary16 encoding, custom/nonuniform precision, supervised optimization,
@@ -575,8 +588,8 @@ evaluators. The standalone example and CLI replay also run successfully.
 
 The reciprocal contract currently accepts one bounded interval strictly on
 one side of zero, with floating interfaces. Overflow refuses certification.
-Full-domain reciprocal special values, disconnected domains and atan tail
-reductions remain pending. AC reconstruction requires sufficient intermediate
+Full-domain reciprocal special values and disconnected domains remain pending.
+AC reconstruction requires sufficient intermediate
 exponent headroom within its 30-bit limit; arbitrary significand widths remain
 available within the existing CPU width limits.
 
@@ -617,7 +630,7 @@ outside the contract return canonical NaN before normalization or arithmetic.
 Numerical contracts currently require floating interfaces, a bounded
 nonnegative interval and one kernel. Possible output overflow refuses a finite
 certificate. These are absolute-error certificates, without a correct-rounding
-or ulp guarantee. Atan tails remain pending.
+or ulp guarantee.
 
 ## Signed cbrt exponent reduction
 
@@ -663,7 +676,7 @@ compositions; signed ordinary polynomial requests require the root transformatio
 
 Cbrt currently requires floating interfaces, a bounded signed interval and one
 kernel. Internal or output overflow refuses certification. The absolute bound
-does not imply correct rounding or an ulp guarantee. Atan tails are next.
+does not imply correct rounding or an ulp guarantee.
 
 ## Log exponent reconstruction
 
@@ -705,21 +718,77 @@ checks with official vendor headers required. Formatting passes. The complete
 runner was not repeated.
 Log currently requires floating interfaces, a bounded nonnegative interval and
 one kernel. Possible overflow refuses certification. The absolute bound does
-not imply an ulp or correct-rounding guarantee; atan tails remain next.
+not imply an ulp or correct-rounding guarantee.
+
+## Atan central and reciprocal tails
+
+[`examples/atan_search.jl`](../examples/atan_search.jl) generates binary16
+`atan(x)` on `[-65504,65504]`. Degree fifteen uses eight coefficients and
+`Fixed(72,24)` internals. The central branch evaluates `r*q(r²)` with `r=abs(x)`;
+the tails use a rounded binary64 reciprocal and subtract the same kernel from
+stored π/2. Dispatch at `abs(x)>1` compares the original input exactly.
+The shared graph contains one floating division, two multiplications and eight
+FMAs. Coefficient and stage declarations each total 576 bits. These counts
+describe the IR; they do not predict FPGA resource use or throughput.
+
+| Contribution | Largest certified upper bound |
+| --- | ---: |
+| Stored odd polynomial approximation | `3.751206e-8` |
+| Reciprocal and coordinate formation | `6.437069e-15` |
+| Arithmetic, stored π/2 and tail reconstruction | `1.584141e-14` |
+| Output rounding | `0.00048828125` |
+| Signed infinity limits, separate branch | `0.0004838267948966193` |
+| Total across all branches | `0.0004883187620752597` |
+| Contract target | `0.0009765625` |
+
+The stored π/2 contribution, included in tail arithmetic, is at most
+`1.715125e-15`. The infinity branch has its own complete constant/conversion
+bound, included in the global maximum even for zero-only finite contracts.
+Signed zeros are exact. NaNs and excluded finite inputs return canonical NaN
+before numerical evaluation.
+
+Both separate and fused evaluators are checked over all 65,536 encodings
+against directed MPFR enclosures and every visited numeric range. The compiled
+fused evaluator agrees with Julia for native and AC floating arithmetic,
+combined with each portable, AC and AP fixed backend. Standalone reciprocal
+tests also compile the official AC floating division, including custom wide
+formats. Sollya and MPFR atan infinity references resolve adaptively to directed
+π/2 bounds; insufficient precision retains an unresolved enclosure.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Rounded floating reciprocal IR and official headers | 65,624 | All binary16 and small custom words; signed zeros, infinities and NaNs; native/AC division, wide raw/typed AC APIs, host rounding rejection and plan v10. |
+| Certified atan central and reciprocal tails | 183 | Fresh generation, separate/FMA proofs, exact boundary neighbours, stored constants, all six C++ backend combinations and artifact recertification. |
+| Exhaustive binary16 atan verification | 770,042 | Both evaluators over every encoding; independent directed MPFR errors, visited ranges and six compiled fused backend combinations. |
+| Atan domains, exceptional limits and proof refusals | 392 | Central/tail/signed/singleton and zero-only contracts; infinity error, lazy guards, graph mutations, invalid requests and unmet budgets. |
+| Atan custom floating, guard bits and individual precision | 461 | Small custom inputs, 100-bit input and 112-bit output fractions, widened reciprocals, full finite binary64 domains, nonuniform stages and official-header conformance. |
+| Atan precision search, generation and replay | 59 | Supervised width reduction with fresh proofs, search/report v9, actual CLI generation, plan v10, byte-identical replay and compiled AP/AC artifacts. |
+| Atan directed infinity reference limits | 54 | Both reference backends and signs, half through 112-bit fractions, fixed output, insufficient precision and output overflow. |
+
+These seven groups pass 836,815 checks with official vendor headers required.
+Twenty-four regression groups pass another 1,383,439 checks, covering formats,
+schemas, IR, references and every odd, sqrt/rsqrt and log group. The targeted
+runs total 31 groups and 2,220,254 checks. The standalone example and formatting
+also pass. The complete runner was not repeated for this change.
+Atan currently requires floating interfaces, a bounded signed interval and one
+shared kernel. Possible internal/output overflow refuses certification. The
+certificate establishes a uniform absolute bound; it does not establish an ulp
+or correct-rounding guarantee. Wider-domain exp reconstruction is next.
 
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
 rejected fixed overflow, including mixed interfaces and custom formats.
-Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt and log
+Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log and atan-tail
 kernels also have complete certificates.
 Segmented floating erf and other transformation families remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains
 unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces;
 schema v5 adds individual coefficient/stage precision, v6 adds exponent
 reconstruction, v7 adds sqrt/rsqrt exponent splitting, v8 adds cbrt and v9
-adds exact exponent extraction for log; a
+adds exact exponent extraction for log; v10 adds rounded floating reciprocals
+for atan tails. A
 separate report records the
 numerical proof. Native floating CPU arithmetic supports binary32/binary64 with
 nearest-even rounding; official AC arithmetic supports custom and wide formats.

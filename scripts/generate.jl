@@ -293,6 +293,8 @@ function generate_main(args)
         " additions, ",
         costs.fmas,
         " FMAs, ",
+        costs.divisions,
+        " divisions, ",
         costs.normalizations,
         " normalizations, ",
         costs.exponent_scalings,

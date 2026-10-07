@@ -45,6 +45,7 @@ function implementation_cost(plan::PlanArtifact)
         multiplications = count(n -> n isa IR.Mul, p.nodes),
         additions = count(n -> n isa IR.Add, p.nodes),
         fmas = count(n -> n isa IR.FMA, p.nodes),
+        divisions = count(n -> n isa IR.FloatReciprocal, p.nodes),
         conversions = count(n -> n isa Union{IR.Convert, IR.Quantize}, p.nodes),
         comparisons = count(n -> n isa IR.Compare, p.nodes),
         normalizations = count(

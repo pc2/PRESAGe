@@ -273,3 +273,26 @@ combined expression once. A final conversion rounds to the output format.
 The complete certificate accounts for every operation. C++ uses the existing
 bit-field normalization and official fixed arithmetic types; no C++ `log` call
 is used in the evaluator.
+
+## Atan and rounded reciprocals
+
+`FloatReciprocal(source)` rounds exact `1/source` to its floating source format
+with nearest-even rounding. Signed zeros produce signed infinities; signed
+infinities produce signed zeros; NaNs become canonical NaN. The interpreter
+rounds the exact rational reciprocal. Native C++ uses strict floating division;
+AC uses `div<AC_RND_CONV,false>`, retaining subnormal arithmetic. Native public
+entry points require `FE_TONEAREST` for this operation. Native binary16
+arithmetic remains unsupported; AC supports the binary16 reciprocal operation.
+
+The atan evaluator widens the magnitude exactly before reciprocal evaluation.
+The reduction exponent field covers the input and coordinate formats; its
+fraction width covers input, output and coordinate precision, with at least
+52 fraction bits. Fixed coordinates contribute their fractional width.
+Conversions to the coordinate format remain separate quantizers.
+
+The original magnitude selects the central or tail argument before one shared
+odd Horner kernel. Its reconstructed value is selected directly for the central
+branch, or subtracted from stored pi/2 for the tail. Separate evaluation uses
+exact negation followed by an add; FMA combines negation/subtraction in one
+quantizer. The kernel reconstruction product still rounds separately. All
+branches are lazy. Static costs explicitly count the reciprocal as one division.

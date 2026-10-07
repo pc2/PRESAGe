@@ -724,3 +724,33 @@ yields positive zero, and positive infinity yields infinity. Negative inputs,
 negative infinity, NaNs and excluded finite inputs return canonical NaN before
 normalization. Zero-only and one-only contracts have an exact zero bound and
 no numerical paths. Precision optimization recertifies the complete graph.
+
+## Atan central and reciprocal tails
+
+For `a=abs(x)`, use `atan(a)` on `[0,1]` and the established identity
+`atan(a)=pi/2-atan(1/a)` for `a>1`. The canonical graph compares `a>1` in the
+input format. Original representable intervals partition at `-nextfloat(1)`,
+`-1`, `1` and `nextfloat(1)`; no finite input is omitted or evaluated twice.
+Range propagation follows the audited branch choices, so an unused reciprocal
+is never required to handle zero or central subnormals.
+
+The stored odd polynomial is certified on `[0,1]`. For the tail argument,
+conversion to the reduction format is exact; argument error includes reciprocal
+rounding and the subsequent coordinate conversion. If this error is `ηr`, the
+square error is bounded by `ηr*(max(abs(rounded_r))+max(abs(ideal_r)))` plus
+square rounding. Existing Horner bounds propagate it through every coefficient
+and stage cast, arithmetic operation, final kernel cast and `r*q(r²)` product.
+The tail then adds the stored pi/2 error and separate/FMA subtraction rounding;
+output conversion is counted on each branch. No reciprocal error is hidden in
+the polynomial norm. Reduced intervals can enlarge the accepted argument set,
+so the transferred norm lower endpoint is zero.
+
+The image `[0,pi/4]` enlarged by the complete kernel bound tightens reconstruction
+before tail/output analysis. Exact sign copying cannot increase error against a
+positive magnitude target. Signed zeros use an exact lazy branch. Both infinity
+limits use the converted stored constant; directed pi/2 bounds include their
+absolute error in the global maximum, even for a zero-only finite contract.
+NaNs and excluded finite inputs return canonical NaN before kernel evaluation.
+Possible overflow refuses a proof. Every dispatch, constant, reciprocal, stage
+and exceptional branch is audited again during recertification and precision
+reduction. These are absolute-error certificates, without an ulp guarantee.

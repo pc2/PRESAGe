@@ -83,6 +83,9 @@ function _cpp_ac_expr(p, i, backend)
         return "canonical($(call(n.a)).template fma<AC_RND_CONV,false>($(call(n.b)),$(call(n.c))))"
     elseif n isa IR.FloatMantissa
         return "normalize_float($(call(n.source))).mantissa"
+    elseif n isa IR.FloatReciprocal
+        one = _cpp_ac_constant(round_ieee(1, f), f, backend)
+        return "canonical($one.template div<AC_RND_CONV,false>($(call(n.source))))"
     elseif n isa IR.FloatExponent
         return "$(_cpp_type(f,backend))(input_exponent<1>($(call(n.source))))"
     elseif n isa IR.RootArgument
