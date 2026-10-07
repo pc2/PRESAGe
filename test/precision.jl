@@ -580,8 +580,8 @@ end
         )
     timed = PRESAGe._optimize_precision(
         baseline;
-        job_timeout = 5,
-        total_timeout = 30,
+        job_timeout = 30,
+        total_timeout = 90,
         worker_command,
         process_started = (process, directory) ->
             (push!(processes, process); push!(directories, directory)),
@@ -589,6 +589,8 @@ end
     @test timed.status == :optimization_failed
     @test timed.stop_reason == :baseline_failed
     @test only(timed.attempts).result.status == :timeout
+    @test only(timed.attempts).result.certificate !== nothing
+    @test only(timed.attempts).result.certificate.status == :certified
     @test all(process_exited, processes)
     @test all(directory -> !isdir(directory), directories)
     io = IOBuffer()

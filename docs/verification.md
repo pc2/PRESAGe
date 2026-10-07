@@ -7,13 +7,14 @@ use each Julia installation's own MPFR/GMP runtime.
 
 ## Results
 
-All **46 test groups are verified: 1,269,303 checks on Julia 1.13.1**, with four
-threads and vendor-header tests required. The 40 existing groups passed through
-the offline `scripts/check.jl` runner. That process had loaded the package before
-the final precision fixes and stopped in the new artifact group; all six precision
-groups then passed in a fresh process against the final code, including 8,063 new
-checks. Formatting is clean. The count is dominated by exhaustive encoding checks,
-not by function coverage or numerical certificates.
+All **50 test groups are verified: 1,487,066 checks on Julia 1.13.1**, with four
+threads and vendor-header tests required. The offline `scripts/check.jl` runner
+passed 28 groups before cold worker jobs exceeded an eight-second fixture budget.
+After increasing those fixture budgets to 30 seconds, a fresh process passed the
+remaining 22 groups against the same implementation. Deadline, kill/reap and
+saved-certificate rejection checks remain enforced. The four odd-kernel groups
+contribute 217,761 checks. Formatting is clean. The count is dominated by
+exhaustive encoding checks, not by function coverage or numerical certificates.
 
 | Group | Checks | Coverage |
 | --- | ---: | --- |
@@ -61,8 +62,12 @@ not by function coverage or numerical certificates.
 | Precision conversion error and exhaustive CPU conformance | 1,782 | Every small input encoding, seed/coordinate/accumulator conversions, nonzero error contributions, positive/negative ties, separate/FMA, exact node ranges and portable/AC/AP C++ APIs. |
 | Precision overflow refusal and canonical graph audit | 22 | Changed quantizers, arithmetic order, coefficient tables and format metadata; fixed/floating conversion and arithmetic overflow refusal. |
 | Generated individual storage and stage formats | 5,200 | Fixed/floating segmented exp in separate/FMA modes, mathematical enclosures, all native CPU backends, width reductions against common-format baselines, schema v3 search history, decimal/rational equality and singleton layout truncation. |
-| Bounded certified precision optimization and reports | 693 | Fresh baseline proofs, accepted storage/stage reductions, rejected over-budget changes, exact report replay, unchanged floating exponent headroom, attempt/deadline limits and owned-worker cleanup. |
+| Bounded certified precision optimization and reports | 695 | Fresh baseline proofs, accepted storage/stage reductions, rejected over-budget changes, exact report replay, unchanged floating exponent headroom, attempt/deadline limits and owned-worker cleanup, including a saved certificate before timeout. |
 | Precision configuration CLI and replay | 336 | Actual v3 CLI generation, v5 stored replay through portable/AP C++, retained certified outputs after a failed precision choice, distinct layout choices and malformed-field rejection. |
+| Odd central generation and complete uniform certificates | 15,511 | Sin/sinh/erf/atan with fixed/floating internals and separate/FMA evaluation; direct MPFR checks, exact replay and official AC arithmetic; portable/AP sin; generated individual coefficient/stage formats. |
+| Odd square, reconstruction, zeros and overflow | 8,779 | Exhaustive small inputs, rounded coordinates/squares and q conversion, zero-only and degree-one lazy arithmetic, outside-domain zero guards, square overflow and portable/AC/AP C++ APIs. |
+| Odd graph audit, identity authorization and request validation | 26 | Rejected graph/identity changes and unsupported requests; negative-zero coefficient payloads preserved through replay and stage reformatting. |
+| Odd binary16 coverage, precision optimization and CLI replay | 193,445 | All 65,536 encodings through Julia and AC/AP C++; certified precision reduction, configuration/report v4, stored-plan CLI replay and malformed transformation rejection. |
 
 The custom floating CMake/CTest build passes with binary128 interfaces, a
 custom 160-fraction-bit internal format and fused polynomial arithmetic,
@@ -470,12 +475,50 @@ Supply sibling header checkouts, or `PRESAGE_AP_INCLUDE_DIR` and
 `PRESAGE_AC_INCLUDE_DIR`. The required-vendor flag rejects missing dependencies;
 without it, unavailable vendor test groups are explicitly skipped.
 
+## Odd central kernels
+
+The [odd search example](../examples/odd_search.jl) generates bounded sin with
+`Fixed(9,3)` input, `Fixed(24,4)` output and `Fixed(32,6)` internal arithmetic
+on `[-1,1]`, targeting `2^-18`. Degree three exceeds the budget; degree nine
+passes with five stored q coefficients, four Horner FMAs, a square and a
+reconstruction product. Its total bound is about `5.158886e-7`:
+
+| Contribution | Uniform bound (rounded up) |
+| --- | ---: |
+| Stored odd-polynomial approximation | `1.798494e-9` |
+| Coordinate formation | `0` (exact input conversion and square on this input grid) |
+| Horner and reconstruction arithmetic | `3.725291e-8` |
+| Output conversion | `4.768372e-7` |
+
+The example declares 160 coefficient bits and 160 stage bits. These are
+structural counts, with no measured FPGA performance claim. Its emitted AC
+evaluator and an actual CLI invocation using the example's v4 configuration
+were generated locally.
+
+Dedicated tests generate sin/sinh/erf/atan on `[-1,1]` at degrees 9/9/13/17,
+with fixed and floating internals and separate/FMA evaluation. Every small fixed
+input encoding is checked against directed MPFR enclosures and certified node
+ranges; official AC C++ checks cover all sixteen combinations. Fixed sin also
+uses AP and portable C++. Independent coefficient/stage formats, rounded squares
+and reconstruction conversions, nonsymmetric domains and complete graph mutation
+rejection are covered.
+
+The binary16 sin contract exhausts all 65,536 encodings through Julia, AC and AP
+C++, including subnormals, signed zeros, nonfinite and outside-domain guards.
+Precision reduction retains the odd layout and freshly certifies its selected
+plan. Configuration/report v4 and plan v5 replay preserve exact semantics through
+CLI generation and AC/AP C++ checks. Tests also cover zero-only contracts with
+unreachable overflowing arithmetic, original nonzero inputs that round to zero,
+reachable square overflow and degree-one evaluators that do not execute a square.
+No tiny-argument shortcut is inferred from these tests.
+
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
 rejected fixed overflow, including mixed interfaces and custom formats.
-Segmented floating erf and general transformations remain outside the
+Bounded odd sin/sinh/atan/erf kernels also have complete certificates.
+Segmented floating erf and other transformation families remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains
 unchanged; schema v3 stores internal fixed programs and v4 adds fixed interfaces;
 schema v5 adds individual coefficient/stage precision; a separate report records the

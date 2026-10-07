@@ -186,3 +186,22 @@ the existing names; fixed formats use the existing complete format table with
 `kind`, `width`, `integer_bits`, `signed`, `rounding` and `overflow`. The
 [fixed search example](../examples/polynomial-search.toml) shows this encoding.
 Choices retain their order, and integer/exponent ranges remain explicit.
+
+## Odd transformation artifacts
+
+Odd searches use configuration/report v4, adding `transformation = "odd"` and
+requiring `segments = [1]`. Degrees are odd original-function degrees in `1:31`;
+optional precision layouts describe q in `x*q(x²)`. Traversal remains
+`degree_then_format`. Versions 1–3 do not accept a transformation field.
+
+Stored odd plans use v5 with their precision layout and complete IR, including
+the square, reconstruction, original-input zero test and domain guard. Settings
+retain `transformation = "odd"` and the requested degree. Coefficient payloads
+are those of q in ascending power order. No additional plan schema is needed.
+
+Certificates use method `odd_polynomial_horner`. A `transformation` table records
+the established function identity, positive norm domain, ideal square domain,
+square/reconstruction node IDs and zero policy. Path domains and ranges still
+refer to actual accepted inputs and executed numeric nodes. Exact signed zeros
+are an audited lazy branch. Recertification reconstructs the graph and proves
+the norm and full arithmetic bound again.

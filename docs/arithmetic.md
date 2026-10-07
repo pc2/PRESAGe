@@ -185,6 +185,12 @@ stages share that format by default. `PolynomialPrecision` supplies individual
 storage and stage formats with explicit conversions and quantizers. See
 [the numerical proof](certification.md#individual-coefficient-and-stage-precision).
 
+Odd kernels use the same arithmetic IR to evaluate `x*q(x²)`. The coordinate
+format governs input conversion, the square, q's final conversion and the
+reconstruction product. A lazy original-input zero branch preserves floating
+zero signs; the domain guard runs before either branch. See
+[odd kernel semantics](certification.md#odd-function-kernels).
+
 ## Fresh erf candidate
 
 `erf_candidate()` approximates `erf(t+center)` with Sollya `fpminimax` in four

@@ -158,8 +158,14 @@ function _polynomial_ranges(p, layout)
         f = IR.format(p, i)
         f isa Union{FixedFormat, FloatFormat} || continue
         if i == p.output
-            ranges[i] = ranges[layout.result]
-            grids[i] = grids[layout.result]
+            source = get(layout, :output_source, layout.result)
+            ranges[i] = ranges[source]
+            grids[i] = grids[source]
+            continue
+        elseif haskey(get(layout, :exact_branches, Dict()), i)
+            ranges[i] = layout.exact_branches[i]
+            grids[i] = _dyadic_fraction(ranges[i][1])
+            rho[i] = _q(0)
             continue
         elseif n isa IR.Input
             ranges[i] = get(layout, :input_domain, layout.domain)
@@ -189,7 +195,9 @@ function _polynomial_ranges(p, layout)
             exact = _interval_mul(ranges[n.source], _singleton(_pow2(n.exponent)))
             scale = grids[n.source] - n.exponent
         elseif n isa IR.Mul
-            exact = _interval_mul(ranges[n.a], ranges[n.b])
+            exact =
+                n.a == n.b ? _odd_square_domain(ranges[n.a]) :
+                _interval_mul(ranges[n.a], ranges[n.b])
             scale = grids[n.a] + grids[n.b]
         elseif n isa IR.Add
             exact = _interval_add(ranges[n.a], ranges[n.b])
@@ -197,6 +205,12 @@ function _polynomial_ranges(p, layout)
         elseif n isa IR.FMA
             exact = _interval_add(_interval_mul(ranges[n.a], ranges[n.b]), ranges[n.c])
             scale = max(grids[n.a] + grids[n.b], grids[n.c])
+        elseif n isa IR.Select && i == get(layout, :zero_select, nothing)
+            a, b = ranges[n.yes], ranges[n.no]
+            ranges[i] = (min(a[1], b[1]), max(a[2], b[2]))
+            grids[i] = max(grids[n.yes], grids[n.no])
+            rho[i] = _q(0)
+            continue
         else
             throw(ArgumentError("unsupported arithmetic node $i"))
         end
@@ -218,7 +232,7 @@ function _polynomial_ranges(p, layout)
             f isa FixedFormat ? _pow2(-_fraction(f) - 1) : _float_rounding_bound(exact, f)
         end
     end
-    ranges[p.output] = ranges[layout.result]
+    ranges[p.output] = ranges[get(layout, :output_source, layout.result)]
     return ranges, rho
 end
 
@@ -236,6 +250,7 @@ function _polynomial_arithmetic(p, layout, ranges, rho)
     else
         get(rho, layout.coordinate, _q(0))
     end
+    eta = get(layout, :coordinate_formation_error, eta)
     exact = _singleton(layout.coefficients[end])
     coordinate, arithmetic = _q(0), seed_error
     for stage in layout.stages
@@ -329,6 +344,8 @@ function certify_polynomial(
     precision >= 64 || throw(ArgumentError("proof precision must be at least 64"))
     0 < accuracy < 1 || throw(ArgumentError("norm accuracy must be between zero and one"))
     0 <= max_refinements <= 8 || throw(ArgumentError("refinements must be in 0:8"))
+    get(plan.settings, "transformation", "none") == "odd" &&
+        return _certify_odd(plan; precision, accuracy, max_refinements)
     (
         plan.precision !== nothing ||
         get(plan.settings, "kernel", "") == "normalized_segmented_horner"

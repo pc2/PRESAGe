@@ -251,6 +251,9 @@ end
     )
     format = FixedFormat(24, 6)
     fixture = joinpath(@__DIR__, "fixtures", "polynomial_worker.jl")
+    # Fresh workers include Julia compilation. Leave enough time for successful
+    # numerical jobs; the controlled hang still exceeds this bounded deadline.
+    fixture_timeout = 30
     for (mode, expected) in (
         ("timeout", :timeout),
         ("crash", :worker_crashed),
@@ -263,8 +266,8 @@ end
         config = PolynomialSearchConfig(
             degrees = [0, 1],
             internal_formats = [format],
-            job_timeout = 8,
-            total_timeout = 40,
+            job_timeout = fixture_timeout,
+            total_timeout = 90,
         )
         command =
             directory -> addenv(
@@ -300,7 +303,9 @@ end
             @test occursin("controlled native-worker crash", first(result.attempts).reason)
         elseif mode == "timeout"
             @test processes[1].termsignal == Base.SIGKILL
-            @test 8 <= first(result.attempts).elapsed_seconds < 12
+            @test fixture_timeout <=
+                  first(result.attempts).elapsed_seconds <
+                  fixture_timeout + 4
             @test occursin("Job wall-time", first(result.attempts).reason)
         end
         io = IOBuffer()
@@ -322,7 +327,7 @@ end
             degrees = [0, 1, 2],
             internal_formats = [format],
             job_timeout = 30,
-            total_timeout = 8,
+            total_timeout = fixture_timeout,
         );
         worker_command = command,
         process_started = (process, directory) -> begin
@@ -334,7 +339,7 @@ end
     @test result.stop_reason == :total_deadline
     @test result.selected === nothing
     @test [a.status for a in result.attempts] == [:bound_exceeds_budget, :timeout]
-    @test 8 <= result.elapsed_seconds < 12
+    @test fixture_timeout <= result.elapsed_seconds < fixture_timeout + 4
     @test length(processes) == 2 # Third choice never launched.
     @test all(process_exited, processes)
     @test all(path -> !isdir(path), directories)
@@ -365,8 +370,8 @@ end
         PolynomialSearchConfig(
             degrees = [1],
             internal_formats = [format],
-            job_timeout = 8,
-            total_timeout = 30,
+            job_timeout = fixture_timeout,
+            total_timeout = 90,
         );
         worker_command = directory -> addenv(
             PRESAGe._polynomial_worker_command(directory; script = fixture),

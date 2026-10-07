@@ -1,4 +1,5 @@
 _search_schema_version(config) =
+    config.transformation != :none ? 4 :
     any(!isnothing, config.precisions) ? 3 : config.segments == (1,) ? 1 : 2
 
 function _search_config_fields(config::PolynomialSearchConfig)
@@ -25,6 +26,8 @@ function _search_config_fields(config::PolynomialSearchConfig)
         ),
     )
     _search_schema_version(config) == 1 || (fields["segments"] = collect(config.segments))
+    config.transformation == :none ||
+        (fields["transformation"] = string(config.transformation))
     return fields
 end
 
@@ -54,6 +57,7 @@ function _read_search_config(data)
             "degrees",
             "internal_formats",
             "segments",
+            "transformation",
             "settings",
             "limits",
         ),
@@ -62,12 +66,12 @@ function _read_search_config(data)
     get(data, "schema", nothing) == "presage-search-config" ||
         throw(ArgumentError("unknown search configuration schema"))
     version = get(data, "schema_version", nothing)
-    version isa Integer && !(version isa Bool) && version in (1, 2, 3) ||
+    version isa Integer && !(version isa Bool) && version in (1, 2, 3, 4) ||
         throw(ArgumentError("unsupported search configuration version"))
     (version == 1 ? !haskey(data, "segments") : haskey(data, "segments")) ||
         throw(ArgumentError("segment choices require search configuration v2"))
     order =
-        version == 1 || (version == 3 && data["segments"] == [1]) ? "degree_then_format" :
+        version == 1 || (version >= 3 && data["segments"] == [1]) ? "degree_then_format" :
         "segment_then_degree_then_format"
     get(data, "order", order) == order || throw(ArgumentError("unsupported search order"))
     haskey(data, "degrees") && haskey(data, "internal_formats") ||
@@ -107,6 +111,11 @@ function _read_search_config(data)
     version == 3 &&
         !any(!isnothing, precisions) &&
         throw(ArgumentError("search configuration v3 requires precision layouts"))
+    transformation = get(data, "transformation", "none")
+    (
+        version == 4 ? transformation == "odd" :
+        transformation == "none" && !haskey(data, "transformation")
+    ) || throw(ArgumentError("odd transformation requires search configuration v4"))
     settings = get(data, "settings", Dict{String, Any}())
     limits = get(data, "limits", Dict{String, Any}())
     _search_keys(
@@ -130,6 +139,7 @@ function _read_search_config(data)
             degrees = data["degrees"],
             internal_formats = formats,
             precisions = precisions,
+            transformation = Symbol(transformation),
             segments = get(data, "segments", (1,)),
             evaluation = Symbol(get(settings, "evaluation", "separate")),
             generation_precision = get(settings, "generation_precision", 256),

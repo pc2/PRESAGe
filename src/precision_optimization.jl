@@ -59,6 +59,8 @@ _precision_ranges(path) = Dict(b.node => b.range for b in path.ranges)
 
 function _precision_amplification(layout, ranges, power)
     factor = _q(1)
+    haskey(layout, :reconstruction_coordinate) &&
+        (factor *= _interval_magnitude(ranges[layout.reconstruction_coordinate]))
     # h_k and a_k feed the remaining stages k-1,...,0.
     for stage in layout.stages
         stage.coefficient <= power || continue
@@ -133,6 +135,9 @@ end
 function _precision_proposals(result, step, minimum)
     precision = result.plan.precision
     layouts = _precision_layouts(result)
+    get(result.plan.settings, "transformation", "none") == "odd" &&
+        all(p -> p.input_domain == (0, 0), layouts) &&
+        return NamedTuple[]
     ranges = _precision_ranges.(result.paths)
     count = length(precision.coefficient_formats)
     proposals = NamedTuple[]
@@ -242,12 +247,13 @@ function _optimize_precision(
         throw(ArgumentError("precision reduction limits must be integers, not Bool"))
     1 <= bit_step <= typemax(Int) && 0 <= min_precision_bits <= typemax(Int) ||
         throw(ArgumentError("invalid precision reduction limits"))
-    degree = length(precision.coefficient_formats) - 1
+    degree = _executed_degree(baseline.plan, precision)
     segments = max(1, length(baseline.plan.segments))
     config = PolynomialSearchConfig(;
         degrees = [degree],
         internal_formats = [precision.coordinate_format],
         precisions = [precision],
+        transformation = Symbol(get(baseline.plan.settings, "transformation", "none")),
         segments = [segments],
         evaluation = Symbol(baseline.plan.settings["evaluation"]),
         generation_precision,
@@ -292,7 +298,9 @@ function _optimize_precision(
             spec,
             config,
             domain,
-            degree = length(precision.coefficient_formats) - 1,
+            degree = config.transformation == :odd ?
+                     2length(precision.coefficient_formats) - 1 :
+                     length(precision.coefficient_formats) - 1,
             internal_format = precision.coordinate_format,
             segments,
             precision,

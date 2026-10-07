@@ -42,6 +42,7 @@ export FloatFormat,
     emit_cpp,
     emit_harness,
     polynomial_plan,
+    odd_polynomial_plan,
     segmented_polynomial_plan,
     certified_polynomial,
     PolynomialSearchConfig,
@@ -96,6 +97,7 @@ include("polynomial_certificates.jl")
 include("segmentation.jl")
 include("precision_kernels.jl")
 include("planning.jl")
+include("odd.jl")
 include("search.jl")
 include("search_schema.jl")
 include("precision_optimization.jl")

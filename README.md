@@ -16,6 +16,7 @@ uniform certificates, including custom formats and extra internal fraction bits.
 Bounded generation also supports normalized segments with complete dispatch,
 coordinate and per-path error proofs. Coefficient storage and Horner stage formats
 can be chosen individually and reduced through a bounded certified search.
+Bounded sin, sinh, atan and erf also support certified `x*q(x²)` kernels.
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
@@ -106,6 +107,20 @@ declared storage, stage and operand widths; FPGA performance remains unmeasured.
 Search configurations accept `precisions=[precision,…]` alongside their internal
 format choices. See [precision semantics](docs/certification.md#individual-coefficient-and-stage-precision)
 and the [segmented precision example](examples/precision_search.jl).
+
+### Odd function kernels
+
+Set `transformation=:odd` in `certified_polynomial` or `PolynomialSearchConfig`
+to generate `x*q(x²)` for bounded `sin(x)`, `sinh(x)`, `atan(x)` or `erf(x)`.
+The original polynomial degree must be odd and in `1:31`. Degree nine uses five
+stored coefficients and four Horner stages, plus the square and reconstruction
+products. Their rounding errors and all precision conversions enter the proof.
+An exact lazy zero branch preserves both floating zero signs.
+
+This option uses one central kernel and supports individual coefficient/stage
+formats and precision optimization. It must be requested explicitly. See
+[transformation proofs](docs/certification.md#odd-function-kernels) and the
+[odd search example](examples/odd_search.jl).
 
 ## Generation from a contract
 

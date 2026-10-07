@@ -47,6 +47,15 @@ See the [precision example](../examples/precision_search.jl), which also writes
 a configuration for CLI use. Precision optimization has its own Julia API and
 report; emit its selected stored plan through the existing replay command.
 
+For bounded `sin(x)`, `sinh(x)`, `atan(x)` and `erf(x)`, set
+`transformation=:odd` to use `x*q(x²)`. Degrees are the odd original polynomial
+degrees in `1:31`; precision lists describe q and need `(maximum(degrees)+1)÷2`
+entries. Only `segments=[1]` is supported. The writer uses configuration v4,
+with `transformation="odd"`; stored plans retain the transformation and exact
+arithmetic graph in schema v5. Replay audits and recertifies that graph.
+The [odd example](../examples/odd_search.jl) writes a contract and configuration
+for the same CLI workflow.
+
 ## Options
 
 With `--search-config`, the CLI accepts `--name`,

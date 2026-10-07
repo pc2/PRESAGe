@@ -395,6 +395,7 @@ function _certificate_data(result::CertificationResult)
             "floating_polynomial_horner",
             "normalized_segmented_horner",
             "precision_polynomial_horner",
+            "odd_polynomial_horner",
         )
             input = result.plan.spec.input_format
             output = result.plan.spec.output_format
@@ -414,6 +415,8 @@ function _certificate_data(result::CertificationResult)
                     "canonical quiet NaN before polynomial evaluation",
                 "overflow" => "all reachable arithmetic nodes and output conversions bounded",
                 "dispatch" =>
+                    get(result.settings, "method", "") == "odd_polynomial_horner" ?
+                    "single odd central kernel; exact zero branch" :
                     !isempty(result.plan.segments) ?
                     "canonical input-format thresholds; adjacent representable path endpoints; both signed zeros share a path" :
                     "single Horner path",
@@ -426,6 +429,26 @@ function _certificate_data(result::CertificationResult)
                 "infinities" => "signed unit values",
                 "nan" => "canonical quiet NaN",
                 "overflow" => "all fixed nodes and output conversions bounded",
+            )
+        end
+        if get(result.settings, "method", "") == "odd_polynomial_horner"
+            path = only(_odd_audit(result.plan).paths)
+            d["transformation"] = Dict(
+                "kind" => "odd",
+                "polynomial" => "x*q(x*x)",
+                "identity" =>
+                    "established oddness and exact zero for " *
+                    _odd_expression(result.plan.spec),
+                "norm_domain" =>
+                    _rational_text.([_q(0), _interval_magnitude(path.input_domain)]),
+                "ideal_square_domain" => _rational_text.(collect(path.domain)),
+                "square_node" => path.coordinate,
+                "reconstruction_node" => path.reconstruction,
+                "zeros" =>
+                    result.plan.spec.input_format isa FloatFormat &&
+                    result.plan.spec.output_format isa FloatFormat ?
+                    "both floating zero signs preserved by the lazy zero branch" :
+                    "exact zero output",
             )
         end
     end

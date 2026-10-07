@@ -77,7 +77,7 @@ end
 
 """
     certified_polynomial(spec; degree, internal_format=spec.output_format, precision=nothing,
-                         segments=1, evaluation=:separate, generation_precision=256,
+                         segments=1, transformation=:none, evaluation=:separate, generation_precision=256,
                          proof_precision=256, accuracy=1//1024, max_refinements=2)
 
 Generate and certify one bounded polynomial evaluator without supplied coefficients.
@@ -101,11 +101,16 @@ With `segments=2,4,…,64`, generate normalized coefficient tables and certify
 every dispatch branch, including rounded coordinate formation. Internal fixed
 formats must then be signed. Empty representable branches are rejected.
 This is one synchronous attempt; it performs no search and sets no wall-time limit.
+With `transformation=:odd`, generate `x*q(x²)` for bounded sin, sinh, atan or erf.
+The requested degree is an odd original-function degree in `1:31`; precision
+lists describe the `(degree+1)÷2` coefficients/stages of q. Only one kernel is
+supported. Its proof includes square and reconstruction rounding and exact zeros.
 """
 function certified_polynomial(
     spec::FunctionSpec;
     degree::Integer,
     segments::Integer = 1,
+    transformation::Symbol = :none,
     precision::Union{Nothing, PolynomialPrecision} = nothing,
     internal_format::Union{FloatFormat, FixedFormat} = precision === nothing ?
                                                        spec.output_format :
@@ -126,8 +131,14 @@ function certified_polynomial(
         accuracy,
         max_refinements,
     )
+    _validate_transformation(transformation, degree, segments)
+    transformation == :odd && _validate_odd_spec(spec)
     _validate_segment_request(spec, segments, internal_format)
-    _validate_precision_request(precision, degree, internal_format)
+    _validate_precision_request(
+        precision,
+        _coefficient_degree(degree, transformation),
+        internal_format,
+    )
     return _certified_polynomial(
         spec,
         domain,
@@ -140,6 +151,7 @@ function certified_polynomial(
         Int(max_refinements);
         segments = Int(segments),
         precision_layout = precision,
+        transformation,
     )
 end
 
@@ -248,8 +260,22 @@ function _certified_polynomial(
     max_refinements;
     segments = 1,
     precision_layout = nothing,
+    transformation = :none,
     candidate_ready = identity,
 )
+    transformation == :odd && return _certified_odd(
+        spec,
+        domain,
+        degree,
+        internal_format,
+        evaluation,
+        generation_precision,
+        proof_precision,
+        accuracy,
+        max_refinements;
+        precision_layout,
+        candidate_ready,
+    )
     settings = Dict(
         "degree" => string(degree),
         "generation_precision" => string(generation_precision),

@@ -447,6 +447,68 @@ estimate DSP/BRAM use, throughput or timing. Plans with explicit layouts use
 schema v5; ordered search configurations use v3 with `precisions` aligned to
 internal format choices. Stored plans replay without another coefficient search.
 
+## Odd function kernels
+
+`transformation=:odd` enables one bounded `x*q(x²)` kernel for the exact primitive
+expressions `sin(x)`, `sinh(x)`, `atan(x)` and `erf(x)` (whitespace is allowed).
+These functions have established odd identities and exact zeros. Composed
+expressions and heuristic parity estimates do not authorize this transformation.
+The original polynomial degree must be odd and in `1:31`; q has at most
+`(degree+1)÷2` coefficients. Explicit precision lists describe q in ascending
+power order. Both arithmetic families, separate/FMA evaluation and independent
+interfaces are supported. Segmentation is not yet combined with this option.
+
+```julia
+spec = FunctionSpec("sin(x)"; input_format=IEEE16, output_format=IEEE16,
+    domain=(-1,1), absolute_error=1//2^9)
+result = certified_polynomial(spec; degree=9,
+    internal_format=FixedFormat(32,6), transformation=:odd, evaluation=:fma)
+```
+
+Generation first approximates the function in a regular dense basis on `[-R,R]`,
+where R bounds the accepted input magnitudes, then retains its odd coefficients.
+Sparse odd Remez calls failed native convergence in local experiments, including
+on `[0,1]`. The discarded even coefficients are not assumed to vanish. The proof
+certifies the *actual stored* expanded polynomial `x*q(x²)` directly against the
+function on `[0,R]`; established oddness extends that norm to negative inputs.
+There is no division by x or unproved quotient limit at zero.
+
+The graph audit checks every coefficient, conversion, stage, square,
+reconstruction, zero test and domain guard. Range propagation handles the
+correlated square as a nonnegative interval. Let x be the exact input, a its
+converted coordinate, B bound `abs(a)`, and `ηx` bound `abs(a-x)`. If `ρsquare`
+bounds the square's local rounding, its coordinate formation error is
+`ηz = ηx*(B+R) + ρsquare`. Horner propagation uses this error and includes
+every stage coordinate conversion. With ideal Q = q(x²), let Cq bound coordinate
+error, Vq bound arithmetic error, and Lq bound the final q conversion into the
+coordinate format. Reconstruction contributes:
+
+| Contribution | Bound |
+| --- | --- |
+| Coordinate error | `B*Cq + ηx*max(abs(Q))` |
+| Arithmetic error | `B*(Vq+Lq) + ρreconstruction` |
+| Output conversion | Its own local rounding bound |
+
+The approximation norm and these contributions sum to the complete absolute
+error bound. Exact rational grids remove local allowances only when justified.
+Endpoint ranges reject possible overflow at every reachable arithmetic node.
+A constant q does not execute the square. A zero-only contract executes only
+the zero branch, so unused arithmetic cannot invalidate its exact bound.
+
+The original input's zero test precedes evaluation through a lazy select.
+Floating input/output pairs preserve both zero signs by conversion; fixed
+outputs return exact zero. A nonzero input that rounds to a zero coordinate
+still follows the ordinary numerical proof. Outside-domain and nonfinite guards
+execute first. No tiny-argument shortcut is implemented, especially no generic
+erf return-x rule.
+
+Use the same option in `PolynomialSearchConfig` for supervised attempts.
+`optimize_precision` preserves the transformation, includes reconstruction
+magnitude in proposal estimates and freshly certifies every candidate.
+`odd_polynomial_plan(spec, coefficients; precision, evaluation)` builds a
+candidate from supplied ascending coefficients of q. Stored plans replay through
+the existing certification and C++ commands. See the [example](../examples/odd_search.jl).
+
 ## Exhaustive binary16 lookup tables
 
 `certified_lut(spec)` builds a full 65,536-entry table for matching binary16

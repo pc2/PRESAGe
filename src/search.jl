@@ -1,5 +1,6 @@
 """
-    PolynomialSearchConfig(; degrees, internal_formats, precisions=nothing, segments=(1,), evaluation=:separate,
+    PolynomialSearchConfig(; degrees, internal_formats, precisions=nothing, transformation=:none,
+        segments=(1,), evaluation=:separate,
         generation_precision=256, proof_precision=256, accuracy=1//1024,
         max_refinements=2, max_attempts=64, job_timeout=60, total_timeout=300)
 
@@ -8,12 +9,15 @@ then degrees, then internal formats, each in the supplied order.
 Formats are explicit: no integer or exponent range is changed automatically.
 Optional `precisions` align one `PolynomialPrecision` (or `nothing` for shared
 formats) with each internal format choice. Their lists cover the largest degree.
+For `transformation=:odd`, degrees are odd original-function degrees in `1:31`,
+precision lists describe q in `x*q(x²)`, and segments must be `(1,)`.
 Timeouts are positive, finite seconds and include process startup.
 """
 struct PolynomialSearchConfig
     degrees::Tuple{Vararg{Int}}
     internal_formats::Tuple{Vararg{Union{FloatFormat, FixedFormat}}}
     precisions::Tuple{Vararg{Union{Nothing, PolynomialPrecision}}}
+    transformation::Symbol
     segments::Tuple{Vararg{Int}}
     evaluation::Symbol
     generation_precision::Int
@@ -27,6 +31,7 @@ struct PolynomialSearchConfig
         degrees,
         internal_formats,
         precisions = nothing,
+        transformation::Symbol = :none,
         segments = (1,),
         evaluation::Symbol = :separate,
         generation_precision::Integer = 256,
@@ -59,11 +64,18 @@ struct PolynomialSearchConfig
         length(internal_formats) ||
             throw(ArgumentError("search choices must not contain duplicates"))
         for (format, layout) in zip(internal_formats, layouts)
-            _validate_precision_request(layout, maximum(degrees), format)
+            _validate_precision_request(
+                layout,
+                _coefficient_degree(maximum(degrees), transformation),
+                format,
+            )
         end
         segments isa Union{Tuple, AbstractVector} && !isempty(segments) ||
             throw(ArgumentError("segments must be a nonempty finite vector or tuple"))
         foreach(_validate_segment_count, segments)
+        for degree in degrees, count in segments
+            _validate_transformation(transformation, degree, count)
+        end
         length(unique(segments)) == length(segments) ||
             throw(ArgumentError("segment choices must not contain duplicates"))
         # The same numerical/policy validation is used by the one-attempt API.
@@ -94,6 +106,7 @@ struct PolynomialSearchConfig
             Tuple(Int.(degrees)),
             Tuple(internal_formats),
             Tuple(layouts),
+            transformation,
             Tuple(Int.(segments)),
             evaluation,
             Int(generation_precision),
@@ -164,6 +177,7 @@ function _polynomial_worker_main(args)
                 config.max_refinements;
                 segments = request.segments,
                 precision_layout = request.precision,
+                transformation = config.transformation,
                 candidate_ready = plan ->
                     _worker_save(joinpath(directory, "candidate"), _plan_data(plan)),
             )
@@ -369,6 +383,7 @@ function _search_polynomial(
     process_started = (process, directory) -> nothing,
 )
     # Validate all choices, including ones beyond the attempt limit.
+    config.transformation == :odd && _validate_odd_spec(spec)
     domain = nothing
     for format in config.internal_formats
         domain = _validate_polynomial_request(
