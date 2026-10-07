@@ -382,3 +382,22 @@ their exact quadrant conditions partition runtime execution. Coverage records
 all bounded representable finite inputs and lazy exceptional branches. Failed
 proofs do not claim coverage. Neither schema nor integer field size implies a
 large-argument reduction guarantee.
+
+## Asin/acos endpoint artifacts
+
+Search configuration/report v14 uses `transformation="asin"` or `"acos"`,
+`segments=[1]` and `degree_then_format` ordering. Degree d (0:32) and d+1
+coefficient/stage formats apply to both the asin parity bank and the sqrt bank.
+The original asin polynomial degree is 2d+1; the root polynomial degree is d.
+
+Existing plan v7 represents the complete evaluator with `RootArgument`,
+`ScaleByInputExponent`, ordinary arithmetic, explicit casts and lazy input-format
+dispatch. No new IR operation is required. Plan replay retains both coefficient
+banks and the stored pi/2 payload, with pi formed by exact binary scaling.
+
+Certificate v2 uses method `inverse_trig_polynomial_horner`. Transformation fields
+record the identities, kernel norm domains, exact endpoint coordinate, widened
+format, pi/2 storage and error. Each path is labelled as a signed central/tail,
+zero or endpoint branch, with its representable interval and complete approximation,
+coordinate, arithmetic and output contributions. Coverage includes all bounded
+representable inputs and lazy invalid-input behavior; failed proofs claim no coverage.

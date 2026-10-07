@@ -432,6 +432,8 @@ function certify_polynomial(
         return _certify_erfc(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") in ("sin", "cos") &&
         return _certify_periodic(plan; precision, accuracy, max_refinements)
+    get(plan.settings, "transformation", "none") in ("asin", "acos") &&
+        return _certify_inverse_trig(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "exp" &&
         return _certify_exp(plan; precision, accuracy, max_refinements)
     get(plan.settings, "transformation", "none") == "log" &&

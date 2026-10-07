@@ -396,3 +396,35 @@ multiword design. Sin preserves signed zeros; cos returns
 exact one. NaNs, infinities and excluded finite inputs return canonical quiet NaN
 before numerical evaluation. Structural costs count two coefficient banks and
 two Horner stage sets; no FPGA performance is inferred.
+
+## Asin/acos endpoint arithmetic
+
+The input-format comparisons split at `abs(x)=1/2` and recognize the exact
+endpoints. On nonzero tails, exactly widen a=abs(x), form `1-a` and divide by
+two. The coordinate t is exact: a lies strictly between one half and one,
+subtraction satisfies Sterbenz's condition, and the widened format retains the
+subsequent binary scaling. The certifier also verifies zero local rounding
+bounds and exact endpoint-coordinate ranges from the executed graph.
+
+Use the existing `RootArgument(t)` to split t's exponent into `e=2q+r`, evaluate
+the stored sqrt polynomial on `[1,4]`, and reconstruct sqrt(t) directly into
+the widened format with `ScaleByInputExponent`. Convert the result into the
+asin coordinate format. The central branch converts abs(x) directly. Both
+branches share a square and one Horner graph for `u*q(u²)` on `[0,1/2]`.
+Asin's Taylor coefficients seed this parity kernel, and Sollya generates the
+separate sqrt polynomial. The actual
+stored polynomials receive direct norm certificates.
+
+Asin tails use `stored(pi/2)-2*kernel`, followed by exact sign restoration.
+Central acos uses `stored(pi/2)±kernel`; positive tails use `2*kernel`, while
+negative tails use `stored(pi)-2*kernel`. Stored pi is an exact power-of-two
+scaling of stored pi/2. Separate/FMA subtraction and all wide/output conversions
+are explicit IR. Root and kernel precision lists are shared; structural costs
+count two coefficient banks and two Horner stage sets.
+
+Zero and endpoint branches bypass root normalization and both kernels. Asin
+preserves signed zeros and returns signed stored pi/2 at ±1. Acos returns zero
+at +1, stored pi at -1 and stored pi/2 for either zero. Constant and output
+rounding errors are certified for these branches. Contracts are bounded inside
+`[-1,1]`; NaNs, infinities and excluded finite inputs return canonical quiet NaN
+before numerical evaluation. No vendor sqrt or inverse trig library call is emitted.

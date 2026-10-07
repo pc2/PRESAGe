@@ -27,12 +27,18 @@ function _validate_transformation(transformation, degree, segments)
         :erfc,
         :sin,
         :cos,
+        :asin,
+        :acos,
     ) || throw(ArgumentError("unsupported polynomial transformation"))
     if transformation in (:odd, :atan)
         1 <= degree <= 31 && isodd(degree) ||
             throw(ArgumentError("odd polynomial degree must be odd and in 1:31"))
         segments == 1 ||
             throw(ArgumentError("odd transformation currently uses one central kernel"))
+    elseif transformation in (:asin, :acos)
+        segments == 1 || throw(
+            ArgumentError("inverse trig reconstruction uses one asin/sqrt kernel pair"),
+        )
     elseif transformation in (:sin, :cos)
         0 <= degree <= 15 || throw(ArgumentError("periodic kernel degree must be in 0:15"))
         segments == 1 ||

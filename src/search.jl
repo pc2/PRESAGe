@@ -28,6 +28,10 @@ For `transformation=:sin` or `:cos`, degrees 0:15 describe sin/cos parity
 kernels. Prove the bounded reduction with stored pi/2 constants, then restore
 the function by exact integer quadrant bits and signs. Large-argument reduction
 requires a separate multiword design.
+For `transformation=:asin` or `:acos`, degrees 0:32 describe two shared banks:
+asin(r)=r*q(r²) on [0,1/2] and sqrt(m) on [1,4]. Exact endpoint coordinates,
+root/asin composition and pi reconstruction are certified on a bounded interval
+inside [-1,1]. Zeros and endpoints use separate lazy branches.
 For `transformation=:atan`, use one shared odd kernel on `[0,1]`, with
 exact central/tail dispatch, a rounded reciprocal and stored pi/2 reconstruction.
 For `transformation=:log`, the kernel approximates log(m) on `[1,2]` and
@@ -412,6 +416,8 @@ function _search_polynomial(
     config.transformation == :exp && _exp_geometry(spec)
     config.transformation == :erfc && _erfc_geometry(spec)
     config.transformation in (:sin, :cos) && _periodic_geometry(spec, config.transformation)
+    config.transformation in (:asin, :acos) &&
+        _inverse_trig_geometry(spec, config.transformation)
     config.transformation in (:sinh, :cosh) &&
         _hyperbolic_geometry(spec, config.transformation)
     config.transformation == :log && _log_geometry(spec)

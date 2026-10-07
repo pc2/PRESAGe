@@ -708,6 +708,41 @@ function _certificate_data(result::CertificationResult)
             report["quadrant"] = path.quadrant
         end
     end
+    if get(result.settings, "method", "") == "inverse_trig_polynomial_horner" &&
+       result.total_bound !== nothing
+        layout = _inverse_trig_audit(result.plan)
+        d["coverage"] = Dict(
+            "input_domain" => _rational_text.(collect(layout.geometry.accepted_domain)),
+            "inputs" => "all representable finite inputs in the bounded interval inside [-1,1]",
+            "dispatch" => "central for abs(x)<=1/2; transformed endpoint tails otherwise; zeros and endpoints are lazy",
+            "zeros" =>
+                layout.geometry.transformation == :asin ? "signed zeros preserved" :
+                "stored pi/2 including constant and output error",
+            "endpoints" => "asin returns signed stored pi/2; acos(+1)=0, acos(-1)=stored pi, with constant/output error certified",
+            "invalid_inputs" => "NaNs, infinities, abs(x)>1 and excluded finite inputs return canonical quiet NaN before numerical evaluation",
+            "overflow" => "all reachable coordinate, root, asin and reconstruction nodes bounded",
+        )
+        d["transformation"] = Dict(
+            "kind" => string(layout.geometry.transformation),
+            "identity" => "t=(1-abs(x))/2; asin(a)=pi/2-2*asin(sqrt(t)); acos(a)=2*asin(sqrt(t)), acos(-a)=pi-2*asin(sqrt(t))",
+            "asin_norm_domain" => ["0/1", "1/2"],
+            "sqrt_norm_domain" => ["1/1", "4/1"],
+            "endpoint_coordinate" => "exact widened subtraction and power-of-two scaling on nonzero tails",
+            "reduction_format" => _format_data(layout.reduction_format),
+            "stored_pi2_node" => layout.pi2_node,
+            "pi2_error_bound" => get(result.settings, "pi2_error_bound", ""),
+            "paths" => [
+                Dict(
+                    "kind" => string(p.kind),
+                    "input_domain" => _rational_text.(collect(p.input_domain)),
+                    "special" => p.special,
+                ) for p in layout.paths
+            ],
+        )
+        for (report, path) in zip(get(d, "paths", []), layout.paths)
+            report["kind"] = string(path.kind)
+        end
+    end
     result.tail_bound === nothing || (
         d["tail"] = Dict(
             "magnitude_lower" => "4/1",

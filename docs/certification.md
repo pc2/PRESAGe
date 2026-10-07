@@ -937,3 +937,57 @@ excluded finite inputs return canonical quiet NaN before reduction. Unproved
 residual domains, possible overflow and unmet budgets refuse certification.
 This gives a uniform absolute-error bound. Large-argument reduction, ulp targets
 and correct rounding remain separate work.
+
+## Asin/acos endpoint transformations
+
+`transformation=:asin` or `:acos` requires a matching primitive, floating
+interfaces and an explicit interval inside `[-1,1]`. Degree d (0:32) describes
+an asin parity polynomial `A(u)=u*q(u²)` of degree 2d+1 and a sqrt polynomial
+of degree d. The graph audit reconstructs both banks, root normalization,
+coordinates, casts, every Horner operation, reconstruction and all guards.
+Individual widths and stored replay preserve exact payloads and repeat this audit.
+
+At a=abs(x)>1/2, away from the exact endpoint, form t=(1-a)/2 exactly in the
+widened format. The range/grid proof must establish zero widening, subtraction
+and scaling errors and the exact t interval. This avoids propagating a coordinate
+perturbation through sqrt's unbounded derivative at zero. Endpoints use separate
+lazy branches; zero cannot reach root normalization. Central inputs use a directly.
+Representable predecessor/successor boundaries partition both signs, the central
+range, zero and endpoints without coverage gaps.
+
+Normalize t exactly as `m*2^(2q+r)` and approximate sqrt(m*2^r) on `[1,4]` using
+the established root IR. Let S bound `2^q`, and Nroot/Croot/Vroot be the stored
+sqrt norm, coordinate and evaluator errors. The reduced asin argument errors are
+`eta_N=S*Nroot`, `eta_C=S*Croot`, and
+`eta_V=S*Vroot+rho_root_reconstruction+rho_argument_cast`.
+Directed sqrt enclosures plus the complete root error tighten the reconstructed
+range before asin evaluation. Bounds are rounded outward into the actual format.
+No square-root sensitivity approximation is used.
+
+The ideal asin argument is in `[0,1/2]`. Let R bound its actual rounded value,
+and Q bound the ideal q polynomial on `[0,1/4]`. The squared-coordinate perturbation
+is at most `eta*(R+1/2)+rho_square`. Horner propagation is linear in this eta
+once actual ranges are fixed. Let Jz be its coefficient and C0 its contribution
+from explicit stage-coordinate casts at zero formation error. Then
+`Jr=R*Jz*(R+1/2)+Q` bounds the argument perturbation through the odd kernel.
+Root approximation contributes `Jr*eta_N`; root coordinate errors contribute
+`Jr*eta_C`; root evaluator/cast errors contribute `Jr*eta_V`. The remaining
+coordinate term is R*C0. Arithmetic also includes the square, every Horner cast
+and quantizer, the final argument multiply and widening conversion. R includes
+all root errors, so these expressions account for mixed error products.
+
+Sollya certifies the expanded stored A directly against asin on `[0,1/2]`, and
+the stored root polynomial against sqrt on `[1,4]`. Tail kernel terms receive
+the reconstruction factor two. Asin tails add stored pi/2 error; central acos
+adds it once, negative acos tails add it twice, and positive acos tails add none.
+The reconstruction nodes and final output quantizer add their own rounding.
+Asin's sign restoration applies the absolute-value map to a nonnegative ideal
+magnitude; this cannot increase its absolute error.
+
+The certifier separately budgets stored constants and output conversion for
+zero/endpoints. Asin zero and acos(+1) are exact; the other limit branches include
+stored pi error. Their bound participates in the same global maximum as all
+numerical paths. Possible overflow, unsupported graphs, unproved exact endpoint
+coordinates and unmet budgets refuse certification. The result is a uniform
+absolute bound, without an ulp or correct-rounding guarantee. Both kernels,
+all constant storage and every reachable special branch enter the certificate.

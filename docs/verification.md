@@ -990,15 +990,61 @@ and their affected groups rerun.
 
 These are uniform absolute-error certificates for explicitly bounded floating
 contracts. An efficient general large-argument reducer, ulp contracts and correct
-rounding remain separate work. The next numerical extension is asin/acos endpoint
-transformation, reusing the certified root machinery.
+rounding remain separate work. Asin/acos endpoint transformations now reuse the
+certified root machinery, as described below.
+
+## Asin/acos endpoint transformations
+
+The [standalone example](../examples/inverse_trig_search.jl) generates both
+functions on `[-1,1]` with binary16 interfaces, degree-nine sqrt and asin parity
+kernels, FMA evaluation and signed 72-bit fixed internals with 48 fraction bits.
+The uniform bounds are approximately `0.0004885738889478` for asin and
+`0.0009768551389478612` for acos, both below `1/512`. Coefficient and declared
+stage storage each total 1,440 bits for the two banks. These are structural
+counts, without FPGA resource or throughput measurements.
+
+Every binary16 encoding is checked against directed MPFR references and
+visited-node ranges for both separate and fused evaluation. Both generated AC
+evaluators are exhausted. Directed C++ compilation also covers portable/AP/AC
+fixed arithmetic, native/AC floating arithmetic and public typed interfaces.
+Transition tests include predecessor/successor inputs at `|x|=1/2`, the
+endpoints and varying endpoint distances. All nonzero tails form
+`t=(1-abs(x))/2` exactly; zero, endpoint and invalid-input branches remain lazy.
+
+Further checks cover binary32, binary64, custom formats with 80 fraction bits,
+individual coefficient/stage widths, accepted supervised precision reduction,
+singleton/clipped contracts, degree-zero kernels, actual CLI generation and
+exact stored-plan replay through official AP/AC headers. Malformed coordinates,
+root exponent/divisor operations, selections, constants and insufficient
+arithmetic precision refuse certification. Both banks participate in precision
+proposals and are recertified together.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Certified asin/acos endpoint transformations | 1,054 | Fresh search, separate/FMA proofs, both banks, lazy branches and portable/AP/AC public interfaces. |
+| Exhaustive binary16 inverse trig verification | 1,024,024 | Both functions and arithmetic modes over all encodings, directed MPFR bounds, visited ranges and two exhaustive compiled AC evaluators. |
+| Inverse trig custom formats and individual precision | 3,635 | Binary32/binary64, small/wide custom formats, individual widths, shared stage proposals and exact public-header conformance. |
+| Inverse trig specials, small domains and proof refusals | 2,273 | Zero/endpoint/singleton/clipped contracts, degree-zero kernels, insufficient precision, malformed graphs/constants and unsupported interfaces. |
+| Inverse trig precision search, artifacts and replay | 539 | Search v14, labelled certificates, accepted supervised precision reduction, actual CLI generation and exact AP replay. |
+
+The five groups pass 1,031,525 checks with official headers required. Seven
+regression groups pass another 325,228 checks, covering formats, plan/search
+schemas, IR, root normalization/reconstruction, fixed payload bitcasts and periodic
+artifacts. Together these are 1,356,753 checks. Formatting is clean. The complete
+runner was not repeated; the groups were run individually, and the special-case
+group was rerun after correcting its degree-zero execution assertion.
+
+These are uniform absolute-error certificates for explicitly bounded floating
+contracts inside `[-1,1]`. Near-endpoint relative/ulp accuracy and correct
+rounding are separate work. The next local task is configured design sweeps
+and numerical caching.
 
 ## Limits
 
 Uniform certification covers complete binary16 LUTs, canonical fixed binary16/IEEE32 erf graphs and supported
 degree 0–32 float/fixed polynomial kernels with nearest-even rounding and
 rejected fixed overflow, including mixed interfaces and custom formats.
-Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log, atan-tail, exp, sinh/cosh, scaled erfc and bounded sin/cos
+Bounded odd sin/sinh/atan/erf, reciprocal, sqrt/rsqrt, signed cbrt, log, atan-tail, exp, sinh/cosh, scaled erfc, bounded sin/cos and asin/acos
 kernels also have complete certificates.
 Segmented floating erf and other transformation families remain outside the
 certificates. The [compact contract](../examples/erf-contract.toml) remains

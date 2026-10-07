@@ -43,6 +43,9 @@ negative-input identity. See the [erfc example](examples/erfc_search.jl).
 Sin/cos support bounded periodic reduction with proved integer quadrants,
 two reduced parity kernels and exact quadrant/sign restoration.
 See the [periodic example](examples/periodic_search.jl).
+Asin/acos support bounded intervals inside `[-1,1]`, with exact endpoint
+coordinates, composed sqrt/asin kernels and complete reconstruction bounds.
+See the [inverse trig example](examples/inverse_trig_search.jl).
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.
@@ -645,6 +648,39 @@ Large-argument reduction remains a separate multiword design and proof.
 
 ```sh
 julia --startup-file=no --project=. examples/periodic_search.jl
+```
+
+## Asin/acos endpoint transformations
+
+```julia
+spec = FunctionSpec("acos(x)"; input_format=IEEE16,
+    domain=(-1,1), absolute_error=1//512)
+config = PolynomialSearchConfig(degrees=[9],
+    internal_formats=[FixedFormat(72,24)], transformation=:acos,
+    evaluation=:fma, job_timeout=60, total_timeout=90)
+search = search_polynomial(spec, config)
+@assert search.status == :certified
+```
+
+Use `asin(x)` with `transformation=:asin` for asin. At `|x|≤1/2`, a shared
+odd polynomial approximates asin. Elsewhere, exact widened arithmetic forms
+`t=(1-|x|)/2`; an exponent-split polynomial evaluates sqrt(t), and the same
+asin kernel evaluates the reduced argument. Acos uses `2*asin(sqrt(t))` near
++1 and `pi-2*asin(sqrt(t))` near -1. Asin reconstructs from stored pi/2 and
+restores the sign. Both kernel errors, every cast and reconstruction rounding
+enter the complete absolute bound.
+
+Degree d (0:32) describes the sqrt polynomial and the asin parity polynomial
+q, whose original degree is 2d+1. Individual coefficient/stage lists apply to
+both banks and both Horner graphs. Floating interfaces, fixed/floating internals,
+custom formats, bounded precision search and replay are supported. Contracts
+must specify an interval inside `[-1,1]`. NaNs, infinities and excluded finite
+inputs return NaN before kernel evaluation. Endpoints and zeros are lazy;
+asin preserves zero signs and acos(+1) is exact zero. Stored pi limits and
+acos(0) include constant and output-conversion error.
+
+```sh
+julia --startup-file=no --project=. examples/inverse_trig_search.jl
 ```
 
 ## Reference CLI

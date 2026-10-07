@@ -11,11 +11,12 @@ function precision_cost(plan::PlanArtifact)
     p = plan.program
     rows =
         get(plan.settings, "transformation", "none") == "erfc" ? 3 :
-        get(plan.settings, "transformation", "none") in ("sinh", "cosh", "sin", "cos") ? 2 :
-        max(1, length(plan.segments))
+        get(plan.settings, "transformation", "none") in
+        ("sinh", "cosh", "sin", "cos", "asin", "acos") ? 2 : max(1, length(plan.segments))
     evaluations =
         get(plan.settings, "transformation", "none") in ("sinh", "cosh", "erfc") ? 3 :
-        get(plan.settings, "transformation", "none") in ("sin", "cos") ? 2 : 1
+        get(plan.settings, "transformation", "none") in ("sin", "cos", "asin", "acos") ? 2 :
+        1
     operations = [n for n in p.nodes if n isa Union{IR.Mul, IR.Add, IR.FMA}]
     operand_widths = [[_width(IR.format(p, i)) for i in IR.refs(n)] for n in operations]
     return (;
@@ -148,6 +149,25 @@ function _precision_proposals(result, step, minimum)
         return NamedTuple[]
     isempty(result.paths) && return NamedTuple[]
     ranges = _precision_ranges.(result.paths)
+    if get(result.plan.settings, "transformation", "none") in ("asin", "acos")
+        pairs = Tuple{NamedTuple, Dict{Int, _Interval}}[]
+        for (p, r) in zip(layouts, ranges)
+            p.special && continue
+            push!(pairs, (p, r))
+            p.tail && push!(
+                pairs,
+                (
+                    merge(
+                        p.root_kernel,
+                        (; reconstruction_bound = 4p.root_geometry.scale_domain[2]),
+                    ),
+                    r,
+                ),
+            )
+        end
+        isempty(pairs) && return NamedTuple[]
+        layouts, ranges = first.(pairs), last.(pairs)
+    end
     if get(result.plan.settings, "transformation", "none") in ("sinh", "cosh")
         # Both residual signs execute the shared stage formats. Include their
         # distinct ranges when proposing widths; every proposal is recertified.
@@ -199,12 +219,20 @@ function _precision_proposals(result, step, minimum)
         ranges = last.(pairs)
     end
     count = length(precision.coefficient_formats)
-    storage_rows = if get(result.plan.settings, "transformation", "none") == "erfc"
-        layout = _erfc_audit(result.plan)
-        (layout.central_coefficients, layout.scaled_coefficients, layout.exp_coefficients)
-    else
-        [p.coefficients for p in layouts]
-    end
+    storage_rows =
+        if get(result.plan.settings, "transformation", "none") in ("asin", "acos")
+            layout = _inverse_trig_audit(result.plan)
+            (layout.asin_coefficients, layout.sqrt_coefficients)
+        elseif get(result.plan.settings, "transformation", "none") == "erfc"
+            layout = _erfc_audit(result.plan)
+            (
+                layout.central_coefficients,
+                layout.scaled_coefficients,
+                layout.exp_coefficients,
+            )
+        else
+            [p.coefficients for p in layouts]
+        end
     proposals = NamedTuple[]
     for (kind, formats) in
         ((:coefficient, precision.coefficient_formats), (:stage, precision.stage_formats))
