@@ -41,6 +41,9 @@ const _IR_NODES = Dict(
         IR.ExtractBits,
         IR.BitOp,
         IR.ScalePow2,
+        IR.FloatMantissa,
+        IR.ScaleByInputExponent,
+        IR.CopySign,
         IR.Classify,
     )
 )

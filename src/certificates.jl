@@ -396,6 +396,7 @@ function _certificate_data(result::CertificationResult)
             "normalized_segmented_horner",
             "precision_polynomial_horner",
             "odd_polynomial_horner",
+            "reciprocal_polynomial_horner",
         )
             input = result.plan.spec.input_format
             output = result.plan.spec.output_format
@@ -417,6 +418,8 @@ function _certificate_data(result::CertificationResult)
                 "dispatch" =>
                     get(result.settings, "method", "") == "odd_polynomial_horner" ?
                     "single odd central kernel; exact zero branch" :
+                    get(result.settings, "method", "") == "reciprocal_polynomial_horner" ?
+                    "single mantissa kernel; exact exponent and sign reconstruction" :
                     !isempty(result.plan.segments) ?
                     "canonical input-format thresholds; adjacent representable path endpoints; both signed zeros share a path" :
                     "single Horner path",
@@ -449,6 +452,19 @@ function _certificate_data(result::CertificationResult)
                     result.plan.spec.output_format isa FloatFormat ?
                     "both floating zero signs preserved by the lazy zero branch" :
                     "exact zero output",
+            )
+        elseif get(result.settings, "method", "") == "reciprocal_polynomial_horner"
+            path = only(_reciprocal_audit(result.plan).paths)
+            d["transformation"] = Dict(
+                "kind" => "reciprocal",
+                "identity" => "abs(x)=m*2^e; 1/x=sign(x)*(1/m)*2^-e",
+                "norm_domain" => _rational_text.(collect(path.domain)),
+                "input_exponents" => collect(path.exponents),
+                "maximum_error_scale" => _rational_text(path.reconstruction_bound),
+                "normalization" => "exact for every finite nonzero input, including subnormals",
+                "reconstruction_node" => path.reconstruction,
+                "rounding" => "directly from the final Horner stage to the output format",
+                "excluded_inputs" => "zeros, nonfinite values and inputs outside the bounded domain return canonical quiet NaN",
             )
         end
     end

@@ -14,6 +14,7 @@ export FloatFormat,
     IEEE256,
     DecodedFloat,
     decode_ieee,
+    normalize_float,
     round_ieee,
     round_dyadic,
     decode_fixed,
@@ -43,6 +44,7 @@ export FloatFormat,
     emit_harness,
     polynomial_plan,
     odd_polynomial_plan,
+    reciprocal_polynomial_plan,
     segmented_polynomial_plan,
     certified_polynomial,
     PolynomialSearchConfig,
@@ -98,6 +100,7 @@ include("segmentation.jl")
 include("precision_kernels.jl")
 include("planning.jl")
 include("odd.jl")
+include("reciprocal.jl")
 include("search.jl")
 include("search_schema.jl")
 include("precision_optimization.jl")

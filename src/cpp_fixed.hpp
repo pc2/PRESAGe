@@ -124,7 +124,7 @@ template<class T,class Float> T fixed_from_float(Float x,int width,int fraction,
     int power = (exponent == 0 ? 1-bias : int(exponent)-bias)-mantissa;
     return fixed_round<T>(value,-std::int64_t(power)-scale,width,fraction,is_signed,mode,overflow);
 }
-template<class Float,class T> Float float_from_fixed(T value,int fraction,int mode) {
+template<class Float,class T> Float float_from_fixed(T value,std::int64_t fraction,int mode) {
     using Word = typename FloatBits<Float>::Word;
     constexpr int mantissa = FloatBits<Float>::fraction;
     constexpr int exponent_bits = FloatBits<Float>::exponent;

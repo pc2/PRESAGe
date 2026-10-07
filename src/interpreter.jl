@@ -32,6 +32,10 @@ _scale(v::_FixedValue, e, f::FixedFormat, mode) = _fixed(
     ),
     f,
 )
+_scale(v::_FixedValue, e, f::FloatFormat, mode) = _float(
+    round_dyadic(_fixed_units(v.bits, v.format), BigInt(e) - _fraction(v.format), f; mode),
+    f,
+)
 function _scale(v::_FloatValue, e, f::FixedFormat, mode)
     x = decode_ieee(v.bits, v.format)
     x.kind in (:zero, :finite) ||
@@ -154,6 +158,17 @@ function _interpret(p::IR.Program, bits::Integer, trace::Bool)
             _convert(visit(n.source), f, n.rounding)
         elseif n isa IR.ScalePow2
             _scale(visit(n.source), n.exponent, f, n.rounding)
+        elseif n isa IR.FloatMantissa
+            mantissa, _ = normalize_float(visit(n.source).bits, f)
+            _float(mantissa, f)
+        elseif n isa IR.ScaleByInputExponent
+            input = visit(n.input)
+            _, exponent = normalize_float(input.bits, input.format)
+            _scale(visit(n.source), n.multiplier * exponent, f, n.rounding)
+        elseif n isa IR.CopySign
+            source, sign = visit(n.source), visit(n.sign)
+            negative = sign.bits & _sign(sign.format) != 0
+            _float((source.bits & ~_sign(f)) | (negative ? _sign(f) : 0), f)
         elseif n isa IR.Compare
             _compare(n.predicate, visit(n.a), visit(n.b))
         elseif n isa IR.Select

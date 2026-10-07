@@ -81,6 +81,31 @@ function _cpp_ac_expr(p, i, backend)
         return "canonical($(call(n.a)).template $op<AC_RND_CONV,false>($(call(n.b))))"
     elseif n isa IR.FMA
         return "canonical($(call(n.a)).template fma<AC_RND_CONV,false>($(call(n.b)),$(call(n.c))))"
+    elseif n isa IR.FloatMantissa
+        return "normalize_float($(call(n.source))).mantissa"
+    elseif n isa IR.ScaleByInputExponent
+        source = p.types[n.source]
+        if source isa FloatFormat || backend != :portable
+            input = p.types[n.input]
+            bound = (BigInt(1) << (input.exponent_bits - 1)) + input.fraction_bits + 2
+            bound +=
+                source isa FloatFormat ?
+                (BigInt(1) << (source.exponent_bits - 1)) + source.fraction_bits :
+                source.width
+            ndigits(bound; base = 2) + 1 <= 30 || throw(
+                ArgumentError("AC reconstruction needs exponent headroom within 30 bits"),
+            )
+        end
+        if source isa FixedFormat
+            if backend == :portable
+                exponent = "($(n.multiplier) * normalize_float($(call(n.input))).exponent)"
+                return "float_from_fixed<$(_cpp_ac_type(f,backend))>($(call(n.source)),std::int64_t($(_fraction(source)))-$exponent,0)"
+            end
+            return "ac_fixed_reconstruct<$(_cpp_ac_type(f,backend)),$(source.width),$(source.integer_bits),$(source.signed),$(n.multiplier)>($(call(n.source)),$(call(n.input)))"
+        end
+        return "ac_float_reconstruct<$(_cpp_ac_type(f,backend)),$(n.multiplier)>($(call(n.source)),$(call(n.input)))"
+    elseif n isa IR.CopySign
+        return "copy_float_sign($(call(n.source)),$(call(n.sign)))"
     elseif n isa IR.Compare
         op = Dict(
             :eq => "==",
@@ -172,6 +197,7 @@ $(_has_fixed(p) ? "#include <gmpxx.h>\n#include <algorithm>" : "")
 $(_has_fixed(p) && backend != :portable ? _cpp_vendor_include(backend) : "")
 namespace $ns {
 $(read(joinpath(@__DIR__,"cpp_float_traits.hpp"),String))
+$(read(joinpath(@__DIR__,"cpp_reduction.hpp"),String))
 $(read(joinpath(@__DIR__,"cpp_ac_float.hpp"),String))
 $(_has_fixed(p) ? read(joinpath(@__DIR__,"cpp_fixed.hpp"),String) : "")
 $(_has_fixed(p) && backend != :portable ? read(joinpath(@__DIR__,"cpp_vendor.hpp"),String) : "")

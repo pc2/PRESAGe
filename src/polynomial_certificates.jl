@@ -146,7 +146,7 @@ end
 _dyadic_fraction(q) =
     iszero(q) ? 0 :
     ndigits(denominator(q); base = 2) - 1 - trailing_zeros(abs(numerator(q)))
-function _polynomial_ranges(p, layout)
+function _polynomial_ranges(p, layout; stop_before = nothing, range_overrides = Dict())
     ranges, rho = Dict{Int, _Interval}(), Dict{Int, Rational{BigInt}}()
     grids = Dict{Int, Int}()
     needed = Set([p.output])
@@ -154,6 +154,7 @@ function _polynomial_ranges(p, layout)
         i in needed && union!(needed, IR.refs(p.nodes[i]))
     end
     for (i, n) in enumerate(p.nodes)
+        i == stop_before && break
         i in needed || continue
         f = IR.format(p, i)
         f isa Union{FixedFormat, FloatFormat} || continue
@@ -189,6 +190,22 @@ function _polynomial_ranges(p, layout)
             ranges[i] = ranges[n.source]
             grids[i] = grids[n.source]
             continue
+        elseif n isa IR.FloatMantissa
+            ranges[i] = layout.mantissa_domain
+            grids[i] = IR.format(p, n.source).fraction_bits
+            rho[i] = _q(0)
+            continue
+        elseif n isa IR.ScaleByInputExponent
+            exact = _interval_mul(ranges[n.source], layout.scale_domain)
+            scale = grids[n.source] - layout.scale_exponents[1]
+        elseif n isa IR.CopySign
+            lo, hi = ranges[n.source]
+            magnitude =
+                (lo <= 0 <= hi ? _q(0) : min(abs(lo), abs(hi)), max(abs(lo), abs(hi)))
+            ranges[i] = layout.negative ? (-magnitude[2], -magnitude[1]) : magnitude
+            grids[i] = grids[n.source]
+            rho[i] = _q(0)
+            continue
         elseif n isa Union{IR.Convert, IR.Quantize}
             exact, scale = ranges[n.source], grids[n.source]
         elseif n isa IR.ScalePow2
@@ -220,6 +237,12 @@ function _polynomial_ranges(p, layout)
             err isa OverflowError || rethrow()
             throw(OverflowError("node $i may overflow after rounding"))
         end
+        if haskey(range_overrides, i)
+            lo, hi = range_overrides[i]
+            ranges[i] = (max(ranges[i][1], lo), min(ranges[i][2], hi))
+            ranges[i][1] <= ranges[i][2] ||
+                throw(ArgumentError("inconsistent certified node range"))
+        end
         grids[i] =
             ranges[i][1] == ranges[i][2] ? _dyadic_fraction(ranges[i][1]) :
             min(scale, _polynomial_grid(f, ranges[i]))
@@ -232,7 +255,8 @@ function _polynomial_ranges(p, layout)
             f isa FixedFormat ? _pow2(-_fraction(f) - 1) : _float_rounding_bound(exact, f)
         end
     end
-    ranges[p.output] = ranges[get(layout, :output_source, layout.result)]
+    stop_before === nothing &&
+        (ranges[p.output] = ranges[get(layout, :output_source, layout.result)])
     return ranges, rho
 end
 
@@ -346,6 +370,8 @@ function certify_polynomial(
     0 <= max_refinements <= 8 || throw(ArgumentError("refinements must be in 0:8"))
     get(plan.settings, "transformation", "none") == "odd" &&
         return _certify_odd(plan; precision, accuracy, max_refinements)
+    get(plan.settings, "transformation", "none") == "reciprocal" &&
+        return _certify_reciprocal(plan; precision, accuracy, max_refinements)
     (
         plan.precision !== nothing ||
         get(plan.settings, "kernel", "") == "normalized_segmented_horner"

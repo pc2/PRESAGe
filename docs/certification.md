@@ -1,5 +1,51 @@
 # Uniform numerical certification
 
+## Reciprocal mantissa kernels
+
+`certified_polynomial(spec; transformation=:reciprocal, degree=7, …)` and the
+same option in `PolynomialSearchConfig` build `1/x` from one polynomial
+approximating `1/m` on `[1,2]`. For every finite nonzero floating input,
+`normalize_float(bits, format)` gives the exact decomposition
+`abs(x)=m*2^e`, `1≤m<2`, including subnormals. The evaluator converts m to the
+coordinate format, executes the chosen Horner graph, reconstructs with `2^-e`
+and restores the original sign.
+
+Input/output must be floating; internals may be fixed or floating with
+individual coefficient and stage formats. The domain must be bounded and
+strictly positive or strictly negative. Zeros, infinities, NaNs and inputs
+outside that domain return canonical quiet NaN before normalization or kernel
+arithmetic. Full-domain reciprocal special values and disconnected domains are
+not yet supported. Output overflow refuses a finite absolute-error certificate.
+
+The complete graph audit verifies normalization, coefficient payloads, all
+conversions, arithmetic order, reconstruction, sign copying and the domain
+guard. Sollya certifies the actual stored polynomial on `[1,2]`. If its norm
+upper bound is N, coordinate error is C and arithmetic error is V, the kernel
+error is `N+C+V`. The certifier bounds the last Horner value using the exact
+function image `[1/2,1]` enlarged by this error, with outward format rounding.
+This certified enclosure tightens the interval bound before reconstruction;
+no samples determine the range.
+
+For the accepted input exponent interval `[e_min,e_max]`, let `S=2^-e_min`.
+The uniform total error is bounded by
+
+```text
+S * (N + C + V) + R
+```
+
+R bounds the direct reconstruction quantizer, including subnormal output
+rounding. The last stage scales directly into the output format without an
+intermediate output conversion. Exact normalization, exponent multiplication
+and sign copying add no rounding. Since `1/m` is positive, copying its sign to
+the magnitude of a computed kernel cannot increase approximation error:
+`||p|-1/m|≤|p-1/m|`.
+
+This bound covers all representable inputs in the contract without enumerating
+exponents. It is conservative for wide exponent intervals under an absolute
+error target. Search and precision reduction retain the same proof and worker
+limits. See [generation](generation.md) and the
+[worked example](../examples/reciprocal_search.jl).
+
 ## Polynomial kernels
 
 `certify_polynomial(plan)` proves a `polynomial_plan` or normalized segmented

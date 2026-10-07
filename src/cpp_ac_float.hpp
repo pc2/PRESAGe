@@ -66,6 +66,46 @@ template<class T,int Scale> T ac_float_scale(const T& value) {
         return ac_float_convert<T>(product);
     }
 }
+
+// Scale an exactly widened value using official AC multiplication and final
+// conversion. The caller supplies enough exponent range to keep both factors
+// and their product finite and normal; only the final conversion can round.
+template<class Out,class Wide> Out ac_scale_exact(const Wide& value,std::int64_t scale) {
+    constexpr int M = Wide::mant_bits, E = Wide::e_width;
+    constexpr std::int64_t bias = (std::int64_t(1) << (E-1))-1;
+    ac_int<Wide::width,true> raw = ac_int<E,false>(bias+scale);
+    raw <<= M;
+    Wide factor;
+    factor.set_data(raw);
+    return ac_float_convert<Out>(value.template mult<AC_RND_CONV,false>(factor));
+}
+template<class Out,int Multiplier,class In,class Input>
+Out ac_float_reconstruct(const In& value,const Input& input) {
+    using S = FloatBits<In>;
+    using I = FloatBits<Input>;
+    constexpr std::uint64_t bound = (std::uint64_t(1) << (S::exponent-1)) + S::fraction
+                                 + (std::uint64_t(1) << (I::exponent-1)) + I::fraction + 2;
+    constexpr int E = std::bit_width(bound)+1;
+    static_assert(E<=30,"AC reconstruction needs exponent headroom within 30 bits");
+    using Wide = ac_std_float<1+E+S::fraction,E>;
+    auto x = as_ac_float(value);
+    auto wide = x.template convert<Wide::width,E,AC_RND_CONV>();
+    return ac_scale_exact<Out>(wide,Multiplier*normalize_float(input).exponent);
+}
+template<class Out,int Width,int IntegerBits,bool Signed,int Multiplier,class Source,class Input>
+Out ac_fixed_reconstruct(const Source& source,const Input& input) {
+    using I = FloatBits<Input>;
+    constexpr std::uint64_t bound = Width + (std::uint64_t(1) << (I::exponent-1)) + I::fraction + 2;
+    constexpr int E = std::bit_width(bound)+1;
+    constexpr int M = Width>1 ? Width-1 : 1;
+    static_assert(E<=30,"AC reconstruction needs exponent headroom within 30 bits");
+    using Wide = ac_std_float<1+E+M,E>;
+    ac_fixed<Width,IntegerBits,Signed> exact = 0;
+    for (int bit=0;bit<Width;++bit) exact[bit] = bool(source[bit]);
+    Wide wide;
+    wide.template assign_from<AC_RND_CONV>(exact);
+    return ac_scale_exact<Out>(wide,Multiplier*normalize_float(input).exponent);
+}
 template<class Out,int Width,int IntegerBits,bool Signed,int Mode,class Source>
 Out ac_float_from_fixed(const Source& source) {
     ac_fixed<Width,IntegerBits,Signed> exact = 0;

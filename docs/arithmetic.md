@@ -191,6 +191,30 @@ reconstruction product. A lazy original-input zero branch preserves floating
 zero signs; the domain guard runs before either branch. See
 [odd kernel semantics](certification.md#odd-function-kernels).
 
+## Floating magnitude and exponent reconstruction
+
+`IR.FloatMantissa(source)` extracts the exact positive normalized mantissa of
+a finite nonzero floating word. Subnormals are normalized by shifting their
+significand. `IR.ScaleByInputExponent(source,input,multiplier,format)` decodes
+the original input's normalized exponent, multiplies it by `±1`, and rounds
+`source*2^(multiplier*e)` directly into the floating output format. The source
+can be a fixed or floating Horner value. `IR.CopySign(source,sign)` copies a
+floating sign bit exactly. The interpreter supports arbitrary format widths
+and exponents using integer payloads and direct dyadic rounding.
+
+Native CPU reconstruction uses strict floating scaling or the existing exact
+fixed-to-float conversion adapter. With official AC types, floating and vendor
+fixed sources are widened exactly, multiplied by an exact power of two, then
+converted once to the output. The intermediate exponent range must fit AC's
+30-bit limit; emission rejects a request without sufficient headroom. Wider
+significands remain supported. Portable fixed reconstruction uses the existing
+GMP conversion adapter. These local CPU paths have separate conformance checks.
+
+Structural reports count normalizations, exponent scalings and sign copies.
+They do not predict FPGA resources or timing. Reciprocal generation places an
+audited lazy domain guard before these operations; see
+[its complete error proof](certification.md#reciprocal-mantissa-kernels).
+
 ## Fresh erf candidate
 
 `erf_candidate()` approximates `erf(t+center)` with Sollya `fpminimax` in four

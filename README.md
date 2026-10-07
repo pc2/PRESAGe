@@ -17,6 +17,8 @@ Bounded generation also supports normalized segments with complete dispatch,
 coordinate and per-path error proofs. Coefficient storage and Horner stage formats
 can be chosen individually and reduced through a bounded certified search.
 Bounded sin, sinh, atan and erf also support certified `x*q(x²)` kernels.
+Bounded reciprocal kernels normalize floating inputs exactly, including
+subnormals, approximate `1/m` on `[1,2]` and certify exponent reconstruction.
 Binary16 supports a complete lookup table with resolved nearest-even outputs.
 Custom floating formats support wide significands, with automatic `BigInt`
 payloads above 64 bits and official AC headers for C++ arithmetic.

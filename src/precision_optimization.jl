@@ -59,6 +59,7 @@ _precision_ranges(path) = Dict(b.node => b.range for b in path.ranges)
 
 function _precision_amplification(layout, ranges, power)
     factor = _q(1)
+    factor *= get(layout, :reconstruction_bound, _q(1))
     haskey(layout, :reconstruction_coordinate) &&
         (factor *= _interval_magnitude(ranges[layout.reconstruction_coordinate]))
     # h_k and a_k feed the remaining stages k-1,...,0.

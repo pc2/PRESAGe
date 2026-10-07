@@ -292,7 +292,13 @@ function generate_main(args)
         costs.additions,
         " additions, ",
         costs.fmas,
-        " FMAs (static IR counts)",
+        " FMAs, ",
+        costs.normalizations,
+        " normalizations, ",
+        costs.exponent_scalings,
+        " exponent scalings, ",
+        costs.sign_copies,
+        " sign copies (static IR counts)",
     )
     return plan
 end

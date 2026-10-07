@@ -27,6 +27,9 @@ export UIntFormat,
     ExtractBits,
     BitOp,
     ScalePow2,
+    FloatMantissa,
+    ScaleByInputExponent,
+    CopySign,
     Classify,
     Guard,
     Program,
@@ -190,6 +193,34 @@ struct Classify <: Node
     source::Int
 end
 
+"""Exact positive normalized mantissa of a finite nonzero floating source."""
+struct FloatMantissa <: Node
+    source::Int
+end
+"""Round source * 2^(multiplier * exponent(input)) directly to a floating format."""
+struct ScaleByInputExponent <: Node
+    source::Int
+    input::Int
+    multiplier::Int
+    format::FloatFormat
+    rounding::Symbol
+    function ScaleByInputExponent(
+        source::Integer,
+        input::Integer,
+        multiplier::Integer,
+        format::FloatFormat;
+        rounding::Symbol = :nearest_even,
+    )
+        multiplier in (-1, 1) || throw(ArgumentError("exponent multiplier must be ±1"))
+        new(Int(source), Int(input), Int(multiplier), format, _rounding(rounding))
+    end
+end
+"""Copy the sign bit of a floating value without arithmetic or rounding."""
+struct CopySign <: Node
+    source::Int
+    sign::Int
+end
+
 _width(f::FloatFormat) = 1 + f.exponent_bits + f.fraction_bits
 _width(f::FixedFormat) = f.width
 _width(f::UIntFormat) = f.width
@@ -199,6 +230,9 @@ refs(n::FMA) = (n.a, n.b, n.c)
 refs(n::Select) = (n.condition, n.yes, n.no)
 refs(n::Guard) = (n.condition, n.source)
 refs(n::Union{Convert, Quantize, BitCast, ExtractBits, ScalePow2, Classify}) = (n.source,)
+refs(n::FloatMantissa) = (n.source,)
+refs(n::ScaleByInputExponent) = (n.source, n.input)
+refs(n::CopySign) = (n.source, n.sign)
 refs(n::TableLoad) = (n.index,)
 
 function _type(n::Node, types, tables)
@@ -279,6 +313,19 @@ function _type(n::Node, types, tables)
         n.kind in (:nan, :infinity, :finite, :zero, :negative) ||
             throw(ArgumentError("invalid classification"))
         return Bool
+    elseif n isa FloatMantissa
+        types[n.source] isa FloatFormat ||
+            throw(ArgumentError("mantissa normalization needs a floating source"))
+        return types[n.source]
+    elseif n isa ScaleByInputExponent
+        types[n.source] isa ArithmeticFormat && types[n.input] isa FloatFormat || throw(
+            ArgumentError("exponent reconstruction needs arithmetic/floating operands"),
+        )
+        return n.format
+    elseif n isa CopySign
+        types[n.source] isa FloatFormat && types[n.sign] isa FloatFormat ||
+            throw(ArgumentError("sign restoration needs floating operands"))
+        return types[n.source]
     end
     throw(ArgumentError("unsupported IR node"))
 end

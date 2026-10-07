@@ -205,3 +205,24 @@ square/reconstruction node IDs and zero policy. Path domains and ranges still
 refer to actual accepted inputs and executed numeric nodes. Exact signed zeros
 are an audited lazy branch. Recertification reconstructs the graph and proves
 the norm and full arithmetic bound again.
+
+## Exponent reduction artifacts
+
+Reciprocal searches use configuration/report v5, with
+`transformation="reciprocal"`, `segments=[1]` and `degree_then_format` ordering.
+Degrees and optional precision lists describe the mantissa polynomial directly.
+Other configuration versions retain their existing transformation rules.
+
+Plans containing `FloatMantissa`, `ScaleByInputExponent` or `CopySign` use v6.
+The reconstruction node stores its arithmetic source, original floating input,
+exponent multiplier `±1`, output format and rounding mode. Coefficient payloads
+and individual formats retain their existing exact encoding. Earlier versions
+reject these operations. Settings retain `transformation="reciprocal"` for
+generation, precision optimization and replay.
+
+Certificates use method `reciprocal_polynomial_horner`. Their transformation
+table records the identity, norm domain, accepted input exponent interval,
+maximum error scaling, reconstruction node and excluded-input policy. Path
+domains describe original inputs; numerical ranges include the certified
+mantissa-kernel enclosure and reconstructed output. The existing certificate
+schema v2 carries these fields. Replay audits and proves the entire graph again.

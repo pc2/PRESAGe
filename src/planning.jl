@@ -105,6 +105,10 @@ With `transformation=:odd`, generate `x*q(x²)` for bounded sin, sinh, atan or e
 The requested degree is an odd original-function degree in `1:31`; precision
 lists describe the `(degree+1)÷2` coefficients/stages of q. Only one kernel is
 supported. Its proof includes square and reconstruction rounding and exact zeros.
+With `transformation=:reciprocal`, generate `1/m` on `[1,2]` and reconstruct
+with the exact input exponent. Floating interfaces and a bounded domain strictly
+on one side of zero are required. Fixed/floating stages round directly into the
+output during reconstruction, whose rounding and error scaling are certified.
 """
 function certified_polynomial(
     spec::FunctionSpec;
@@ -133,6 +137,7 @@ function certified_polynomial(
     )
     _validate_transformation(transformation, degree, segments)
     transformation == :odd && _validate_odd_spec(spec)
+    transformation == :reciprocal && _reciprocal_geometry(spec)
     _validate_segment_request(spec, segments, internal_format)
     _validate_precision_request(
         precision,
@@ -264,6 +269,19 @@ function _certified_polynomial(
     candidate_ready = identity,
 )
     transformation == :odd && return _certified_odd(
+        spec,
+        domain,
+        degree,
+        internal_format,
+        evaluation,
+        generation_precision,
+        proof_precision,
+        accuracy,
+        max_refinements;
+        precision_layout,
+        candidate_ready,
+    )
+    transformation == :reciprocal && return _certified_reciprocal(
         spec,
         domain,
         degree,

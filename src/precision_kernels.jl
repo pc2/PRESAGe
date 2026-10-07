@@ -158,6 +158,8 @@ end
 
 function _precision_audit(plan)
     get(plan.settings, "transformation", "none") == "odd" && return _odd_audit(plan)
+    get(plan.settings, "transformation", "none") == "reciprocal" &&
+        return _reciprocal_audit(plan)
     p, precision = plan.program, plan.precision
     p !== nothing && precision !== nothing ||
         throw(ArgumentError("missing precision evaluator"))
@@ -236,6 +238,8 @@ end
 function _reformat_polynomial(plan, precision)
     get(plan.settings, "transformation", "none") == "odd" &&
         return _reformat_odd(plan, precision)
+    get(plan.settings, "transformation", "none") == "reciprocal" &&
+        return _reformat_reciprocal(plan, precision)
     old = _stored_precision(plan)
     old.coordinate_format == precision.coordinate_format &&
         old.coefficient_formats == precision.coefficient_formats || throw(

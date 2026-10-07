@@ -80,6 +80,20 @@ function _cpp_expr(p, i, backend = :portable)
         return "canonical(static_cast<$(_cpp_type(f))>($(call(n.source))))"
     elseif n isa IR.ScalePow2
         return "canonical(std::ldexp($(call(n.source)),$(n.exponent)))"
+    elseif n isa IR.FloatMantissa
+        return "normalize_float($(call(n.source))).mantissa"
+    elseif n isa IR.ScaleByInputExponent
+        exponent = "($(n.multiplier) * normalize_float($(call(n.input))).exponent)"
+        source = IR.format(p, n.source)
+        if source isa FixedFormat
+            units =
+                backend == :portable ? call(n.source) :
+                "hls_units<$(source.width),$(source.signed)>($(call(n.source)))"
+            return "float_from_fixed<$(_cpp_type(f))>($units,std::int64_t($(_fraction(source)))-$exponent,0)"
+        end
+        return "canonical(static_cast<$(_cpp_type(f))>(std::ldexp(static_cast<double>($(call(n.source))),static_cast<int>($exponent))))"
+    elseif n isa IR.CopySign
+        return "copy_float_sign($(call(n.source)),$(call(n.sign)))"
     elseif n isa IR.Compare
         op = Dict(
             :eq => "==",
@@ -171,7 +185,16 @@ function emit_cpp(
     inputtype, outputtype = _cpp_storage(inputformat), _cpp_storage(outputformat)
     rounding_check =
         any(f -> f isa FloatFormat, p.types) && any(
-            n -> n isa Union{IR.Mul, IR.Add, IR.FMA, IR.Convert, IR.Quantize, IR.ScalePow2},
+            n ->
+                n isa Union{
+                    IR.Mul,
+                    IR.Add,
+                    IR.FMA,
+                    IR.Convert,
+                    IR.Quantize,
+                    IR.ScalePow2,
+                    IR.ScaleByInputExponent,
+                },
             p.nodes,
         ) ?
         "if (std::fegetround() != FE_TONEAREST) throw std::runtime_error(\"PRESAGe requires FE_TONEAREST\");" :
@@ -204,6 +227,7 @@ inline double canonical(double x) {
 }
 $(any(==(IEEE16),p.types) || any(t -> t.format == IEEE16,p.tables) ? read(joinpath(@__DIR__,"cpp_half.hpp"),String) : "")
 $(read(joinpath(@__DIR__,"cpp_float_traits.hpp"),String))
+$(read(joinpath(@__DIR__,"cpp_reduction.hpp"),String))
 $(_has_fixed(p) ? read(joinpath(@__DIR__,"cpp_fixed.hpp"),String) : "")
 $(_has_fixed(p) && backend != :portable ? read(joinpath(@__DIR__,"cpp_vendor.hpp"),String) : "")
 template<class T,std::size_t N>

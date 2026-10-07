@@ -85,6 +85,33 @@ function decode_ieee(bits::Integer, f::FloatFormat)
     return DecodedFloat(:finite, negative, negative ? -value : value)
 end
 
+"""
+    normalize_float(bits, format)
+
+Decode a finite nonzero floating word as `abs(x) = m * 2^e`, with `1 ≤ m < 2`.
+Return `(mantissa_bits, exponent)`. The mantissa uses the input format and is
+exact, including for subnormals and words wider than 64 bits. Zeros, infinities
+and NaNs have no such decomposition and throw `DomainError`.
+"""
+function normalize_float(bits::Integer, f::FloatFormat)
+    0 <= bits <= _wordmask(f) || throw(ArgumentError("bits exceed format width"))
+    word = _float_word(bits, f)
+    fraction = word & _word_mask(f.fraction_bits)
+    field = Int((word >> f.fraction_bits) & _word_mask(f.exponent_bits))
+    field == (1 << f.exponent_bits) - 1 &&
+        throw(DomainError(bits, "normalization requires a finite nonzero input"))
+    exponent = field - _bias(f)
+    if field == 0
+        iszero(fraction) &&
+            throw(DomainError(bits, "normalization requires a finite nonzero input"))
+        shift = f.fraction_bits - (ndigits(fraction; base = 2) - 1)
+        fraction = (fraction << shift) & _word_mask(f.fraction_bits)
+        exponent = _emin(f) - shift
+    end
+    mantissa = (_float_word(_bias(f), f) << f.fraction_bits) | fraction
+    return (mantissa, exponent)
+end
+
 function _increment(
     q::BigInt,
     remainder::BigInt,

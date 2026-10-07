@@ -56,6 +56,15 @@ arithmetic graph in schema v5. Replay audits and recertifies that graph.
 The [odd example](../examples/odd_search.jl) writes a contract and configuration
 for the same CLI workflow.
 
+For `1/x`, use `transformation=:reciprocal` and `segments=[1]`. Floating
+input/output and a bounded domain strictly on one side of zero are required.
+Degrees and individual precision lists describe the mantissa polynomial on
+`[1,2]`. Fixed and floating internals, separate/FMA evaluation and certified
+precision optimization are supported. Configuration/report v5 and plan v6
+retain the reduction during the same CLI workflow and stored-plan replay.
+See the [reciprocal example](../examples/reciprocal_search.jl) and
+[reconstruction proof](certification.md#reciprocal-mantissa-kernels).
+
 ## Options
 
 With `--search-config`, the CLI accepts `--name`,

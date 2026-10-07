@@ -7,7 +7,19 @@ use each Julia installation's own MPFR/GMP runtime.
 
 ## Results
 
-All **50 test groups are verified: 1,487,066 checks on Julia 1.13.1**, with four
+The reciprocal change passes **six new groups with 472,715 checks** on Julia
+1.13.1, with four threads and official vendor headers required. It covers exact
+normalization, direct exponent reconstruction, complete reciprocal certificates,
+all binary16 encodings, proof refusals, individual precision and CLI replay.
+Another **21 regression groups pass with 778,671 checks**, covering formats,
+schemas, IR, CPU emission, binary16 LUT/fixed kernels, fixed interfaces, official
+AC/AP arithmetic, wide floats and fixed/floating polynomial certificates.
+Together these runs verify **27 groups and 1,251,386 checks** for this change.
+Two partial regression invocations stopped at missing test-helper setup; fresh
+runs with those helpers passed every affected group. The complete package runner
+was not repeated for this change.
+
+The preceding complete gate verified **50 groups with 1,487,066 checks**, with four
 threads and vendor-header tests required. The offline `scripts/check.jl` runner
 passed 28 groups before cold worker jobs exceeded an eight-second fixture budget.
 After increasing those fixture budgets to 30 seconds, a fresh process passed the
@@ -15,6 +27,15 @@ remaining 22 groups against the same implementation. Deadline, kill/reap and
 saved-certificate rejection checks remain enforced. The four odd-kernel groups
 contribute 217,761 checks. Formatting is clean. The count is dominated by
 exhaustive encoding checks, not by function coverage or numerical certificates.
+
+| New group | Checks | Coverage |
+| --- | ---: | --- |
+| Exact floating magnitude normalization | 192,924 | All binary16 and small custom words; both signs; subnormal significand shifts; exact rational reconstruction; 128/256-bit formats, 300/4096-bit fractions and cheap extreme-exponent decomposition. |
+| Exponent reconstruction IR and official CPU headers | 39 | Exhaustive finite nonzero binary16/small custom identity reconstruction; wide words; portable/native/AC/AP interfaces; direct fixed-to-float scaling; a subnormal midpoint exposing double rounding; overflow, invalid normalization, host rounding and AC exponent headroom. |
+| Certified reciprocal mantissa kernels and complete error bounds | 1,158 | Positive/negative domains and separate/FMA fixed kernels; subnormal custom inputs; wide input/output and 96-bit fixed arithmetic; graph ranges, exact rational reciprocal errors, exponent-scaled budgets and artifact recertification. |
+| Exhaustive binary16 reciprocal verification | 278,534 | All 65,536 encodings for each signed domain; exact rational `1/x` bounds and every visited range; native portable and official AC/AP C++; lazy rejection of zeros, nonfinite and out-of-domain values. |
+| Reciprocal proof refusal and exact graph authorization | 26 | Wrong identities and graph mutations refused; invalid domains/interfaces/segmentation; output overflow and unmet budgets; unused coordinate conversion; singleton-domain approximation enclosure. |
+| Reciprocal precision optimization and configuration replay | 34 | Nonuniform Horner stages and complete recertification; exact negative-zero coefficient preservation; supervised coefficient reduction; v5 configuration/report and v6 plan CLI generation/replay through compiled official-header evaluators. |
 
 | Group | Checks | Coverage |
 | --- | ---: | --- |
@@ -511,6 +532,47 @@ CLI generation and AC/AP C++ checks. Tests also cover zero-only contracts with
 unreachable overflowing arithmetic, original nonzero inputs that round to zero,
 reachable square overflow and degree-one evaluators that do not execute a square.
 No tiny-argument shortcut is inferred from these tests.
+
+## Reciprocal exponent reduction
+
+[`examples/reciprocal_search.jl`](../examples/reciprocal_search.jl) generates
+`1/x` for binary16 input/output on `[1/16,16]`, with an absolute target of
+`1/64`, `Fixed(40,12)` internals and FMA evaluation. Degree three exceeds the
+budget; degree seven certifies. The selected graph stores eight coefficients
+and uses seven FMAs, one mantissa normalization, one direct exponent scaling
+and one sign copy. There is no lookup table. These are static IR counts.
+
+| Contribution | Certified upper bound |
+| --- | ---: |
+| Approximation after exponent scaling | `1.754034e-5` |
+| Coordinate conversion | `0` |
+| Arithmetic after exponent scaling | `3.775563e-6` |
+| Direct reconstruction/output rounding | `0.0078125` |
+| Total | `0.007833815906388823` |
+| Contract target | `0.015625` |
+
+Exact normalization covers all finite nonzero binary16/small custom encodings,
+with wide-format and extreme-exponent cases. Reciprocal checks exhaust all
+binary16 encodings for positive and negative bounded contracts, comparing the
+accepted results directly with rational `1/x`; zeros, nonfinite values and
+out-of-domain inputs take the lazy NaN branch. Official AC/AP and native CPU
+paths match the interpreter. A dedicated subnormal case demonstrates direct
+reconstruction: rounding the kernel first would produce encoding 384, while
+the correct direct result is 385.
+
+Generated custom-format contracts also cover subnormal input normalization,
+112-fraction-bit output, 96-bit fixed arithmetic and coordinate conversion
+error. Nonuniform stages, negative-zero coefficient payloads and supervised
+precision reduction retain complete certificates. Configuration/report v5,
+plan v6, actual CLI generation and stored replay are verified through compiled
+evaluators. The standalone example and CLI replay also run successfully.
+
+The reciprocal contract currently accepts one bounded interval strictly on
+one side of zero, with floating interfaces. Overflow refuses certification.
+Full-domain reciprocal special values, disconnected domains and root/log/tail
+reductions remain pending. AC reconstruction requires sufficient intermediate
+exponent headroom within its 30-bit limit; arbitrary significand widths remain
+available within the existing CPU width limits.
 
 ## Limits
 

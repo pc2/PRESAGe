@@ -1,4 +1,6 @@
-const _SCHEMA_VERSION = 5
+const _SCHEMA_VERSION = 6
+_has_exponent_reduction(p::IR.Program) =
+    any(n -> n isa Union{IR.FloatMantissa, IR.ScaleByInputExponent, IR.CopySign}, p.nodes)
 _has_fixed(p::IR.Program) =
     any(f -> f isa FixedFormat, p.types) || any(t -> t.format isa FixedFormat, p.tables)
 _rational_text(q::Rational) = "$(numerator(q))/$(denominator(q))"
@@ -103,6 +105,7 @@ function _plan_data(p::PlanArtifact)
     fixedio = p.spec.input_format isa FixedFormat || p.spec.output_format isa FixedFormat
     guarded = p.program !== nothing && any(n -> n isa IR.Guard, p.program.nodes)
     version =
+        p.program !== nothing && _has_exponent_reduction(p.program) ? 6 :
         p.precision !== nothing ? 5 :
         fixedio || guarded ? 4 : p.program === nothing ? 1 : _has_fixed(p.program) ? 3 : 2
     d = Dict{String, Any}(
@@ -195,6 +198,10 @@ function _read_plan(d)
         )
     end
     program = haskey(d, "program") ? _read_program(d["program"]) : nothing
+    program !== nothing &&
+        _has_exponent_reduction(program) &&
+        d["schema_version"] < 6 &&
+        throw(ArgumentError("exponent reduction requires schema v6"))
     program !== nothing &&
         _has_fixed(program) &&
         d["schema_version"] < 3 &&
