@@ -14,6 +14,18 @@ write_plan("polynomial.toml", plan)
 emit_cpp("evaluator.hpp", plan)
 ```
 
+Emission writes one self-contained `evaluator.hpp`. It contains shared type aliases, exact constants and tables,
+then local arithmetic stages and ordinary `if` blocks. Shared work is evaluated
+once while preserving operand order, lazy branches and rejection order. Rounding
+and overflow arguments use named policies. Only helpers referenced by emitted
+operations and their dependencies are included. Unreachable nodes and unused
+tables are validated but omitted from the generated code.
+
+Tracing is disabled by default: normal output has no trace storage, recording
+calls or runtime trace checks. Use `emit_cpp(...; trace=true)` and
+`emit_harness(...; trace=true)` for local debugging. In that output,
+`evaluate_bits(bits, &trace)` records visited nodes and their intermediate values.
+
 The coefficients are supplied explicitly, in ascending order, and stored in the
 declared internal format. The expression states the mathematical target; this
 constructor does not check that the coefficients approximate it. A bounded
@@ -166,12 +178,13 @@ rejected during emission before writing a header. The portable backend retains
 arbitrary-width arithmetic and huge-exponent handling. The `ap_fixed` header
 requires `AP_INT_MAX_W >= 4096`; generated code supplies this default when unset.
 
-The binary harness processes one input word at a time. `--trace-index` adds an
+The binary harness processes one input word at a time. When generated with
+`trace=true`, `--trace-index` adds an
 eight-byte first-table-index field after each output; an unvisited index is
 `UINT64_MAX`. `--trace-fixed` also appends, for each fixed node in graph order,
 one visitation byte and `ceil(W/8)` little-endian payload bytes, with zero padding.
-Unvisited nodes have zero payload and are not evaluated. The CPU checker uses
-this mode for fixed programs to detect differences hidden by final IEEE rounding.
+Unvisited nodes have zero payload and are not evaluated. Run the CPU checker with
+`--trace` to detect intermediate differences hidden by final IEEE rounding.
 
 ## Polynomial certification
 

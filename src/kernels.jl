@@ -222,5 +222,7 @@ interpret_trace(plan::PlanArtifact, bits::Integer) =
 emit_cpp(io::IO, plan::PlanArtifact; kwargs...) =
     plan.program === nothing ? throw(ArgumentError("plan has no evaluator")) :
     emit_cpp(io, plan.program; kwargs...)
-emit_cpp(path::AbstractString, plan::PlanArtifact; kwargs...) =
-    open(io -> emit_cpp(io, plan; kwargs...), path, "w")
+function emit_cpp(path::AbstractString, plan::PlanArtifact; kwargs...)
+    plan.program === nothing && throw(ArgumentError("plan has no evaluator"))
+    return emit_cpp(path, plan.program; kwargs...)
+end

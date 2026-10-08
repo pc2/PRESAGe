@@ -16,6 +16,27 @@ _kernel_width(f::Union{FixedFormat, FloatFormat}) = _width(f)
 _kernel_width(f::IR.UIntFormat) = f.width
 _kernel_width(::Type{Bool}) = 1
 
+function _kernel_has_float_arithmetic(p)
+    return any(eachindex(p.nodes)) do i
+        n = p.nodes[i]
+        n isa IR.FloatReciprocal ||
+            n isa Union{IR.Mul, IR.Add, IR.FMA} && IR.format(p, i) isa FloatFormat
+    end
+end
+
+function _kernel_float_arithmetic(n, f, backend)
+    backend == :ac_fixed ||
+        throw(ArgumentError("floating kernel arithmetic requires the ac_fixed backend"))
+    (n isa IR.FloatReciprocal || n.rounding == :nearest_even) ||
+        throw(ArgumentError("AC floating kernel arithmetic requires nearest-even rounding"))
+    f.exponent_bits <= 30 ||
+        throw(ArgumentError("AC floating arithmetic exponent fields must fit 30 bits"))
+    # Reserve headroom for AC's product/FMA accumulator and rounding temporaries.
+    2BigInt(f.fraction_bits + 1) + 12 <= _VENDOR_WIDTH_LIMIT ||
+        throw(ArgumentError("AC floating arithmetic work widths exceed the 4096-bit limit"))
+    return nothing
+end
+
 function _kernel_scale_limit(source, output)
     # Beyond this magnitude, even an extreme finite source overflows or falls
     # below half the smallest output subnormal. E <= 62 keeps the sum in Int64.
@@ -25,8 +46,16 @@ function _kernel_scale_limit(source, output)
     return source_bound + _bias(output) + output.fraction_bits + 2
 end
 
-function _kernel_scale_expr(source, output, backend, mode, value, scale)
-    type = _kernel_type(output, backend)
+function _kernel_scale_expr(
+    source,
+    output,
+    backend,
+    mode,
+    value,
+    scale;
+    type = f -> _kernel_type(f, backend),
+)
+    type = type(output)
     return source isa FixedFormat ?
            "fixed_scale<$type,$(source.width),$(source.integer_bits),$(source.signed),$mode>($value,$scale)" :
            "float_scale<$type,$mode>($value,$scale)"
@@ -38,14 +67,8 @@ function _kernel_chunks(bits, width)
             "0x$(string((BigInt(bits) >> k) & typemax(UInt64);base=16))ULL" for
             k = 0:64:(width - 1)
         ),
-        ",",
+        ", ",
     )
-end
-
-function _kernel_constant(bits, f, backend)
-    f == Bool && return bits == 0 ? "false" : "true"
-    width = _kernel_width(f)
-    return "([]() { const unsigned long long words[] = {$(_kernel_chunks(bits,width))}; return from_chunks<$(_kernel_type(f,backend)),$width>(words); }())"
 end
 
 function _kernel_validate(p, backend, toolchain)
@@ -85,53 +108,70 @@ function _kernel_validate(p, backend, toolchain)
     return nothing
 end
 
-function _kernel_expr(p, i, backend)
+function _kernel_expr(
+    p,
+    i,
+    backend;
+    call = j -> "arg$j",
+    type = f -> _kernel_type(f, backend),
+    vendor_type = _vendor_type,
+    scale_name = "scale",
+)
     n, f = p.nodes[i], IR.format(p, i)
-    call(j) = "arg$j"
     if n isa IR.Input
         return "input"
     elseif n isa IR.Const
-        return _kernel_constant(n.bits, f, backend)
+        return _cpp_value_name(p, i)
     elseif n isa IR.TableLoad
-        return "load$(n.table)($(call(n.index)))"
+        return "load$(n.table)($(call(n.index)), status)"
     elseif n isa Union{IR.Convert, IR.Quantize, IR.ScalePow2}
         source = IR.format(p, n.source)
         scale = n isa IR.ScalePow2 ? n.exponent : 0
         mode = _cpp_mode(n.rounding)
         if source isa FloatFormat && f isa FixedFormat
-            return "float_to_fixed<$(_kernel_type(f,backend)),$(f.width),$(f.integer_bits),$(f.signed),$mode,$(_cpp_overflow(f.overflow)),$scale>($(call(n.source)),status)"
+            return "float_to_fixed<$(type(f)),$(f.width),$(f.integer_bits),$(f.signed),$mode,$(_cpp_overflow(f.overflow)),$scale>($(call(n.source)),status)"
         elseif source isa FixedFormat && f isa FloatFormat
-            return "fixed_to_float<$(_kernel_type(f,backend)),$(source.width),$(source.integer_bits),$(source.signed),$mode,$scale>($(call(n.source)))"
+            return "fixed_to_float<$(type(f)),$(source.width),$(source.integer_bits),$(source.signed),$mode,$scale>($(call(n.source)))"
         elseif source isa FloatFormat && f isa FloatFormat
-            return "float_convert<$(_kernel_type(f,backend)),$mode,$scale>($(call(n.source)))"
+            return "float_convert<$(type(f)),$mode,$scale>($(call(n.source)))"
         end
         return _cpp_vendor_expr(
             p,
             i,
             backend;
             call,
-            quantizer = "quantize",
+            quantizer = "kernel_quantize",
             reinterpret = "copy_bits",
+            type = vendor_type,
+            outtype = type,
+            status = "status",
         )
     elseif n isa Union{IR.Mul, IR.Add, IR.FMA}
-        f isa FixedFormat || throw(
-            ArgumentError(
-                "floating arithmetic is not supported by the kernel emitter; use fixed internal arithmetic",
-            ),
-        )
+        if f isa FloatFormat
+            _kernel_float_arithmetic(n, f, backend)
+            operation =
+                n isa IR.Add ? "float_add" : n isa IR.Mul ? "float_mul" : "float_fma"
+            return "$operation($(join(call.(IR.refs(n)),",")))"
+        end
         return _cpp_vendor_expr(
             p,
             i,
             backend;
             call,
-            quantizer = "quantize",
+            quantizer = "kernel_quantize",
             reinterpret = "copy_bits",
+            type = vendor_type,
+            outtype = type,
+            status = "status",
         )
     elseif n isa Union{IR.FloatMantissa, IR.RootArgument}
         divisor = n isa IR.RootArgument ? n.divisor : 1
-        return "normalized_argument<$(_kernel_type(f,backend)),$divisor>($(call(n.source)),status)"
+        return "normalized_argument<$(type(f)),$divisor>($(call(n.source)),status)"
     elseif n isa IR.FloatExponent
-        return "float_exponent<$(_kernel_type(f,backend))>($(call(n.source)),status)"
+        return "float_exponent<$(type(f))>($(call(n.source)),status)"
+    elseif n isa IR.FloatReciprocal
+        _kernel_float_arithmetic(n, f, backend)
+        return "float_reciprocal($(call(n.source)))"
     elseif n isa IR.ScaleByInputExponent
         return _kernel_scale_expr(
             IR.format(p, n.source),
@@ -139,7 +179,8 @@ function _kernel_expr(p, i, backend)
             backend,
             _cpp_mode(n.rounding),
             call(n.source),
-            "$(n.multiplier) * scale",
+            "$(n.multiplier) * $scale_name";
+            type,
         )
     elseif n isa IR.ScaleByExponent
         source, exponent = IR.format(p, n.source), IR.format(p, n.exponent)
@@ -150,7 +191,8 @@ function _kernel_expr(p, i, backend)
             backend,
             _cpp_mode(n.rounding),
             call(n.source),
-            scale,
+            scale;
+            type,
         )
     elseif n isa IR.Compare
         if IR.format(p, n.a) isa FloatFormat
@@ -167,9 +209,9 @@ function _kernel_expr(p, i, backend)
         )[n.predicate]
         return "($(call(n.a)) $op $(call(n.b)))"
     elseif n isa IR.BitCast
-        return "copy_bits<$(_kernel_type(f,backend)),$(_kernel_width(f))>($(call(n.source)))"
+        return "copy_bits<$(type(f)),$(_kernel_width(f))>($(call(n.source)))"
     elseif n isa IR.ExtractBits
-        return "$(_kernel_type(f,backend))($(call(n.source)) >> $(n.offset))"
+        return "$(type(f))($(call(n.source)) >> $(n.offset))"
     elseif n isa IR.BitOp
         op = Dict(
             :bitand => "&",
@@ -179,9 +221,9 @@ function _kernel_expr(p, i, backend)
             :shiftright => ">>",
         )[n.operation]
         if n.operation in (:shiftleft, :shiftright)
-            return "($(call(n.b)) >= $(f.width) ? $(_kernel_type(f,backend))(0) : $(_kernel_type(f,backend))($(call(n.a)) $op $(call(n.b)).to_uint()))"
+            return "($(call(n.b)) >= $(f.width) ? $(type(f))(0) : $(type(f))($(call(n.a)) $op $(call(n.b)).to_uint()))"
         end
-        return "$(_kernel_type(f,backend))($(call(n.a)) $op $(call(n.b)))"
+        return "$(type(f))($(call(n.a)) $op $(call(n.b)))"
     elseif n isa IR.Classify
         if IR.format(p, n.source) isa FloatFormat
             method = Dict(
@@ -204,13 +246,23 @@ function _kernel_expr(p, i, backend)
     throw(ArgumentError("unsupported kernel node $(typeof(n))"))
 end
 
-function _kernel_table(io, number, t, backend, toolchain)
+function _kernel_table(
+    io,
+    number,
+    t,
+    backend,
+    toolchain;
+    type = f -> _kernel_type(f, backend),
+)
     width = _kernel_width(t.format)
     rows, chunks = cld(length(t.values), t.banks), cld(width, 64)
-    type = _kernel_type(t.format, backend)
-    println(io, "    static constexpr unsigned table$(number)_banks = $(t.banks);")
-    println(io, "    static constexpr bool table$(number)_unroll = $(t.unroll);")
-    println(io, "    template<class Index> $type load$number(const Index& index) {")
+    type = type(t.format)
+    println(io, "inline constexpr unsigned table$(number)_banks = $(t.banks);")
+    println(io, "inline constexpr bool table$(number)_unroll = $(t.unroll);")
+    println(
+        io,
+        "template<class Index> inline $type load$number(const Index& index, Status& status) {",
+    )
     println(
         io,
         "        if (index >= $(length(t.values))) { status = Status::table_index_rejected; return $type(0); }",
@@ -232,7 +284,11 @@ function _kernel_table(io, number, t, backend, toolchain)
             "{$(_kernel_chunks(index <= length(t.values) ? t.values[index] : 0,width))}"
             for index = bank:(t.banks):(rows * t.banks)
         ]
-        println(io, "            {", join(values, ","), "},")
+        println(io, "            {")
+        for value in values
+            println(io, "                $value,")
+        end
+        println(io, "            },")
     end
     println(io, "        };")
     if toolchain == :vitis
@@ -255,59 +311,36 @@ function _kernel_table(io, number, t, backend, toolchain)
     else
         println(io, "        return from_chunks<$type,$width>(table[bank][row]);")
     end
-    println(io, "    }")
+    println(io, "}\n")
 end
 
-function _kernel_node(io, p, i, expression, backend)
+function _kernel_support(io, body; name, backend, toolchain)
+    files = ["cpp_policies.hpp", "cpp_kernel.hpp", "cpp_kernel_float.hpp"]
+    backend == :ac_fixed && push!(files, "cpp_kernel_ac_float.hpp")
+    prelude =
+        "// presage:helper UInt\n" *
+        "template <int Width> using UInt = $(backend == :ap_fixed ? "ap_uint<Width>" : "ac_int<Width, false>");\n"
+    return _cpp_emit_header(io, body, files; name, target = :kernel, toolchain, prelude)
+end
+
+function _kernel_emit_constant(io, p, i, types)
     n, f = p.nodes[i], IR.format(p, i)
-    type = _kernel_type(f, backend)
-    println(io, "    $type n$i() {")
-    println(io, "        if (status != Status::ok || ready$i) return value$i;")
-    if n isa Union{IR.Select, IR.Guard}
-        println(io, "        bool condition = n$(n.condition)();")
-        println(io, "        if (status != Status::ok) return value$i;")
-        if n isa IR.Select
-            println(io, "        value$i = condition ? n$(n.yes)() : n$(n.no)();")
-        else
-            println(
-                io,
-                "        if (!condition) { status = Status::domain_rejected; return value$i; }",
-            )
-            println(io, "        value$i = n$(n.source)();")
-        end
-    elseif n isa IR.ScaleByInputExponent
-        # The interpreter normalizes the input before visiting the source.
-        println(io, "        auto arg$(n.input) = n$(n.input)();")
-        println(io, "        if (status != Status::ok) return value$i;")
-        println(
-            io,
-            "        long long scale = input_exponent<$(n.divisor)>(arg$(n.input),status);",
-        )
-        println(io, "        if (status != Status::ok) return value$i;")
-        if n.source != n.input
-            println(io, "        auto arg$(n.source) = n$(n.source)();")
-            println(io, "        if (status != Status::ok) return value$i;")
-        end
-        println(io, "        value$i = $expression;")
+    name, type = _cpp_value_name(p, i), _cpp_alias!(types, f)
+    if f == Bool
+        println(io, "inline constexpr bool $name = $(n.bits != 0);")
     else
-        for ref in unique(IR.refs(n))
-            println(io, "        [[maybe_unused]] auto arg$ref = n$ref();")
-            println(io, "        if (status != Status::ok) return value$i;")
-        end
-        println(io, "        value$i = $expression;")
+        width = _kernel_width(f)
+        println(io, "inline const $type $name = from_chunks<$type, $width>(")
+        println(io, "    {$(_kernel_chunks(n.bits, width))});")
     end
-    println(io, "        if (status == Status::ok) ready$i = true;")
-    println(io, "        return value$i;")
-    println(io, "    }")
 end
 
-"""Emit a C++17 vendor fixed kernel with encoded floating interfaces and explicit rejection status.
+"""Emit a C++17 evaluator using official vendor arithmetic and explicit rejection status.
 
-`toolchain=:generic` uses the supplied public headers. `:vitis` and `:oneapi`
-select vendor include paths and guarded memory hints; actual synthesis needs
-the corresponding vendor compiler. Fixed arithmetic, IEEE conversions/branches,
-normalization and exponent reconstruction are supported. Floating arithmetic is
-explicitly unsupported.
+The header includes only the arithmetic helpers needed by its emitted operations.
+`trace=true` adds optional intermediate-value instrumentation for conformance tests.
+`toolchain=:generic` uses public headers; `:vitis` and `:oneapi` select vendor
+include paths and guarded memory hints. AC floating arithmetic is nearest-even.
 """
 function emit_kernel(
     io::IO,
@@ -315,83 +348,103 @@ function emit_kernel(
     name::AbstractString = "evaluator",
     backend::Symbol = :ac_fixed,
     toolchain::Symbol = :generic,
+    trace::Bool = false,
 )
     ns = _cpp_name(name)
     _kernel_validate(p, backend, toolchain)
-    expressions = [_kernel_expr(p, i, backend) for i in eachindex(p.nodes)]
+    # Validate every node before writing, including unreachable operations.
+    foreach(i -> _kernel_expr(p, i, backend), eachindex(p.nodes))
+    flow, scopes = _cpp_flow(p)
+    reachable = _cpp_reachable(flow)
+    tables = _cpp_used_tables(p, reachable)
+    types = _CppTypes(backend)
+    type = f -> _cpp_alias!(types, f)
+    vendor_type = (args...) -> _cpp_vendor_alias!(types, args...)
+    foreach(i -> type(p.types[i]), trace ? eachindex(p.types) : sort!(collect(reachable)))
+    foreach(i -> type(p.tables[i].format), sort!(collect(tables)))
+    expressions = [
+        i in reachable ?
+        _kernel_expr(
+            p,
+            i,
+            backend;
+            call = j -> _cpp_value_name(p, j),
+            type,
+            vendor_type,
+            scale_name = "scale_$i",
+        ) : "" for i in eachindex(p.nodes)
+    ]
     inputformat, outputformat = IR.format(p, p.input), IR.format(p)
-    intype, outtype =
-        _kernel_type(inputformat, backend), _kernel_type(outputformat, backend)
-    inputwidth, outputwidth = _kernel_width(inputformat), _kernel_width(outputformat)
-    inword = _kernel_type(IR.UIntFormat(inputwidth), backend)
-    outword = _kernel_type(IR.UIntFormat(outputwidth), backend)
-    include = if toolchain == :oneapi
-        """
-#if defined(__INTEL_LLVM_COMPILER)
-#include <sycl/ext/intel/ac_types/ac_fixed.hpp>
-#include <sycl/ext/intel/ac_types/ac_int.hpp>
-#else
-#include <ac_fixed.h>
-#endif
-"""
-    else
-        _cpp_vendor_include(backend; context = "kernel")
+    intype, outtype = type(inputformat), type(outputformat)
+    inword, outword = type(IR.UIntFormat(_kernel_width(inputformat))),
+    type(IR.UIntFormat(_kernel_width(outputformat)))
+    body_io = IOBuffer()
+    println(body_io, "\n// PRESAGe evaluator; backend=$backend, toolchain=$toolchain.")
+    println(body_io, "namespace $ns {\nusing namespace $(ns)_support;\n")
+    for (alias, definition) in types.declarations
+        println(body_io, "using $alias = $(replace(definition, r",\s*" => ", "));")
     end
     println(
-        io,
+        body_io,
         """
-#pragma once
-#include <cstddef>
-$include
-// PRESAGe fixed arithmetic kernel; backend=$backend, toolchain=$toolchain.
-namespace $ns {
-template<int Width> using UInt = $(backend == :ap_fixed ? "ap_uint<Width>" : "ac_int<Width,false>");
-$(read(joinpath(@__DIR__, "cpp_kernel.hpp"), String))
-$(any(f -> f isa FloatFormat,p.types) || any(t -> t.format isa FloatFormat,p.tables) ? read(joinpath(@__DIR__, "cpp_kernel_float.hpp"), String) : "")
+
 using Input = $intype;
 using Output = $outtype;
 using InputBits = $inword;
 using OutputBits = $outword;
-struct Result { Output value; Status status; bool valid() const { return status == Status::ok; } };
-struct BitsResult { OutputBits bits; Status status; bool valid() const { return status == Status::ok; } };
-struct Context {
-    Input input;
-    Status status = Status::ok;
-    explicit Context(const Input& value) : input(value) {}
-    template<class Out,class Wide,int Width,bool Signed,int Mode,int Overflow,class Source>
-    Out quantize(const Source& source) {
-        return kernel_quantize<Out,Wide,Width,Signed,Mode,Overflow>(source,status);
-    }
+
+struct Result {
+    Output value;
+    Status status;
+    bool valid() const { return status == Status::ok; }
+};
+struct BitsResult {
+    OutputBits bits;
+    Status status;
+    bool valid() const { return status == Status::ok; }
+};
 """,
     )
     for (i, t) in enumerate(p.tables)
-        _kernel_table(io, i, t, backend, toolchain)
+        i in tables || continue
+        _kernel_table(body_io, i, t, backend, toolchain; type)
     end
-    for (i, f) in enumerate(p.types)
-        println(
-            io,
-            "    bool ready$i = false; $(_kernel_type(f,backend)) value$i = $(_kernel_type(f,backend))(0);",
-        )
+    for i in sort!(collect(flow.constants))
+        _kernel_emit_constant(body_io, p, i, types)
     end
-    for i in eachindex(p.nodes)
-        _kernel_node(io, p, i, expressions[i], backend)
+    if trace
+        println(body_io, "\nstruct Trace {")
+        for (i, f) in enumerate(p.types)
+            println(
+                body_io,
+                "    bool visited$i = false; $(type(f)) value$i = $(type(f))(0);",
+            )
+        end
+        println(body_io, "};")
     end
     println(
-        io,
+        body_io,
+        "\ninline Result evaluate([[maybe_unused]] const Input& input$(trace ? ", Trace* trace = nullptr" : "")) {",
+    )
+    println(body_io, "    [[maybe_unused]] Status status = Status::ok;")
+    for i in sort!(collect(flow.cached))
+        println(body_io, "    bool computed_$(_cpp_value_name(p, i)) = false;")
+    end
+    _cpp_render_block(body_io, flow, 1, scopes, expressions, types, "    ", trace)
+    println(body_io, "    return {$(_cpp_value_name(p, p.output)), status};\n}")
+    println(
+        body_io,
         """
-};
-inline Result evaluate(const Input& input) {
-    Context context(input);
-    Output value = context.n$(p.output)();
-    return {context.status == Status::ok ? value : Output(0), context.status};
-}
+
 inline BitsResult evaluate_bits(const InputBits& bits) {
-    Result result = evaluate(copy_bits<Input,$inputwidth>(bits));
-    return {copy_bits<OutputBits,$outputwidth>(result.value), result.status};
+    Result result = evaluate(copy_bits<Input, $(_kernel_width(inputformat))>(bits));
+    return {copy_bits<OutputBits, $(_kernel_width(outputformat))>(result.value), result.status};
 }
 } // namespace $ns
 """,
     )
+    body = String(take!(body_io))
+    _kernel_support(io, body; name, backend, toolchain)
     return nothing
 end
 
@@ -400,9 +453,16 @@ function emit_kernel(io::IO, plan::PlanArtifact; kwargs...)
     return emit_kernel(io, plan.program; kwargs...)
 end
 
-# Render before opening a destination: unsupported graphs leave existing files intact.
-function emit_kernel(path::AbstractString, p; kwargs...)
-    text = sprint(io -> emit_kernel(io, p; kwargs...))
+# Render before opening the destination: unsupported graphs leave the file intact.
+function emit_kernel(
+    path::AbstractString,
+    p;
+    name = "evaluator",
+    backend = :ac_fixed,
+    toolchain = :generic,
+    trace = false,
+)
+    text = sprint(io -> emit_kernel(io, p; name, backend, toolchain, trace))
     write(path, text)
     return nothing
 end

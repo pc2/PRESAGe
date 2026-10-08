@@ -18,22 +18,32 @@ _cpp_type(f::FixedFormat, backend) =
     backend == :portable ? _cpp_type(f) :
     _vendor_type(f.width, f.integer_bits, f.signed, f.rounding, f.overflow, backend)
 
-function _cpp_vendor_constant(bits, f, backend)
-    return "hls_bits<$(_cpp_type(f,backend)),$(f.width)>(\"$(string(bits;base=16))\")"
+function _cpp_vendor_constant(bits, f, backend; type = f -> _cpp_type(f, backend))
+    return "hls_bits<$(type(f)),$(f.width)>(\"$(string(bits;base=16))\")"
 end
 
-function _vendor_round(expression, source, f, backend; quantizer = "hls_quantize")
+function _vendor_round(
+    expression,
+    source,
+    f,
+    backend;
+    quantizer = "hls_quantize",
+    type = _vendor_type,
+    outtype = f -> _cpp_type(f, backend),
+    status = nothing,
+)
     w, i, s = source
     if backend == :ap_fixed && i < 1
         # Public AP simulation reads beyond the source MSB when rounding away
         # more fraction bits than its payload contains. Exact sign/zero extension
         # supplies that bit without changing the value or the binary point.
-        padded = _vendor_type(w + 1 - i, 1, s, :down, :wrap, backend)
+        padded = type(w + 1 - i, 1, s, :down, :wrap, backend)
         expression = "$padded($expression)"
     end
     integer = max(i + !s, f.integer_bits + !f.signed) + 1
-    wide = _vendor_type(integer + _fraction(f), integer, true, f.rounding, :wrap, backend)
-    return "$quantizer<$(_cpp_type(f,backend)),$wide,$(f.width),$(f.signed),$(_cpp_mode(f.rounding)),$(_cpp_overflow(f.overflow))>($expression)"
+    wide = type(integer + _fraction(f), integer, true, f.rounding, :wrap, backend)
+    arguments = status === nothing ? expression : "$expression,$status"
+    return "$quantizer<$(outtype(f)),$wide,$(f.width),$(f.signed),$(_cpp_mode(f.rounding)),$(_cpp_overflow(f.overflow))>($arguments)"
 end
 _vendor_shape(f::FixedFormat) = (f.width, f.integer_bits, f.signed)
 
@@ -48,9 +58,12 @@ function _cpp_vendor_expr(
     p,
     i,
     backend;
-    call = j -> "n$j()",
+    call = j -> _cpp_value_name(p, j),
     quantizer = "hls_quantize",
     reinterpret = "hls_reinterpret",
+    type = _vendor_type,
+    outtype = f -> _cpp_type(f, backend),
+    status = nothing,
 )
     n, f = p.nodes[i], IR.format(p, i)
     if n isa Union{IR.Convert, IR.Quantize, IR.ScalePow2}
@@ -64,7 +77,7 @@ function _cpp_vendor_expr(
         w, integer, signed = shape
         scaled_integer = BigInt(integer) + exponent
         # Scaling reinterprets the exact payload at a new binary point.
-        scaled = _vendor_type(w, scaled_integer, signed, :down, :wrap, backend)
+        scaled = type(w, scaled_integer, signed, :down, :wrap, backend)
         expression = if source isa FloatFormat
             "hls_from_float<$scaled,$(w-integer)>($(call(n.source)))"
         elseif exponent != 0
@@ -72,7 +85,16 @@ function _cpp_vendor_expr(
         else
             call(n.source)
         end
-        return _vendor_round(expression, (w, scaled_integer, signed), f, backend; quantizer)
+        return _vendor_round(
+            expression,
+            (w, scaled_integer, signed),
+            f,
+            backend;
+            quantizer,
+            type,
+            outtype,
+            status,
+        )
     end
     a, b = IR.format(p, n.a), IR.format(p, n.b)
     fa, fb = _fraction(a), _fraction(b)
@@ -93,8 +115,17 @@ function _cpp_vendor_expr(
         end
     end
     # Store the native expression in a full-width, exact temporary before narrowing.
-    exact = _vendor_type(shape..., :down, :wrap, backend)
-    return _vendor_round("$exact($expression)", shape, f, backend; quantizer)
+    exact = type(shape..., :down, :wrap, backend)
+    return _vendor_round(
+        "$exact($expression)",
+        shape,
+        f,
+        backend;
+        quantizer,
+        type,
+        outtype,
+        status,
+    )
 end
 
 function _cpp_vendor_include(backend; context = "CPU evaluation")

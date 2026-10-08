@@ -1,3 +1,4 @@
+// presage:helper EncodedFloat
 // IEEE encodings use vendor integers. This type performs no floating arithmetic.
 template <class Word, int E, int M> struct EncodedFloat {
     using Bits = Word;
@@ -24,6 +25,7 @@ template <class Word, int E, int M> struct EncodedFloat {
     }
 };
 
+// presage:helper highest_bit
 template <int Width> inline int highest_bit(const UInt<Width> &value) {
     int highest = -1;
     for (int bit = 0; bit < Width; ++bit)
@@ -32,6 +34,7 @@ template <int Width> inline int highest_bit(const UInt<Width> &value) {
     return highest;
 }
 
+// presage:helper ShiftResult
 template <class Word> struct ShiftResult {
     Word value;
     bool overflow;
@@ -39,6 +42,7 @@ template <class Word> struct ShiftResult {
 
 // Round unsigned magnitude with its original sign. Large shifts are tested
 // before conversion to int; discarded bits are read only at bounded indices.
+// presage:helper rounded_shift
 template <int Work, int SourceWidth, int Mode>
 inline ShiftResult<UInt<Work>> rounded_shift(const UInt<SourceWidth> &source,
                                              long long shift, bool negative) {
@@ -67,6 +71,7 @@ inline ShiftResult<UInt<Work>> rounded_shift(const UInt<SourceWidth> &source,
     return {result, false};
 }
 
+// presage:helper float_special
 template <class Out> inline Out float_special(bool negative, bool nan) {
     Out result(0);
     for (int bit = 0; bit < Out::exponent_bits; ++bit)
@@ -77,6 +82,7 @@ template <class Out> inline Out float_special(bool negative, bool nan) {
     return result;
 }
 
+// presage:helper float_overflow
 template <class Out, int Mode> inline Out float_overflow(bool negative) {
     Out result = float_special<Out>(negative, false);
     bool infinity = Mode == 0 || (Mode == 2 && !negative) || (Mode == 3 && negative);
@@ -85,6 +91,7 @@ template <class Out, int Mode> inline Out float_overflow(bool negative) {
     return result;
 }
 
+// presage:helper dyadic_to_float
 template <class Out, int SourceWidth, int Mode>
 inline Out dyadic_to_float(const UInt<SourceWidth> &magnitude, long long power,
                            bool negative) {
@@ -120,6 +127,7 @@ inline Out dyadic_to_float(const UInt<SourceWidth> &magnitude, long long power,
     return result;
 }
 
+// presage:helper float_to_fixed
 template <class Out, int Width, int IntegerBits, bool Signed, int Mode, int Overflow,
           int Scale, class In>
 inline Out float_to_fixed(const In &value, Status &status) {
@@ -153,6 +161,7 @@ inline Out float_to_fixed(const In &value, Status &status) {
     return copy_bits<Out, Width>(raw);
 }
 
+// presage:helper fixed_scale
 template <class Out, int Width, int IntegerBits, bool Signed, int Mode, class In>
 inline Out fixed_scale(const In &value, long long scale) {
     UInt<Width> magnitude = copy_bits<UInt<Width>, Width>(value);
@@ -165,11 +174,13 @@ inline Out fixed_scale(const In &value, long long scale) {
                                              negative);
 }
 
+// presage:helper fixed_to_float
 template <class Out, int Width, int IntegerBits, bool Signed, int Mode, int Scale, class In>
 inline Out fixed_to_float(const In &value) {
     return fixed_scale<Out, Width, IntegerBits, Signed, Mode>(value, Scale);
 }
 
+// presage:helper float_scale
 template <class Out, int Mode, class In>
 inline Out float_scale(const In &value, long long scale) {
     if (value.is_nan())
@@ -180,11 +191,13 @@ inline Out float_scale(const In &value, long long scale) {
         value.significand(), value.power() + scale, value.negative());
 }
 
+// presage:helper float_convert
 template <class Out, int Mode, int Scale, class In>
 inline Out float_convert(const In &value) {
     return float_scale<Out, Mode>(value, Scale);
 }
 
+// presage:helper normalization_top
 template <class In> inline int normalization_top(const In &value, Status &status) {
     if (!value.is_finite() || value.is_zero()) {
         status = Status::domain_rejected;
@@ -193,6 +206,7 @@ template <class In> inline int normalization_top(const In &value, Status &status
     return highest_bit<In::fraction_bits + 1>(value.significand());
 }
 
+// presage:helper input_exponent
 template <int Divisor, class In>
 inline long long input_exponent(const In &value, Status &status) {
     static_assert(Divisor >= 1 && Divisor <= 3, "unsupported exponent divisor");
@@ -203,6 +217,7 @@ inline long long input_exponent(const In &value, Status &status) {
     return exponent / Divisor - (exponent % Divisor < 0);
 }
 
+// presage:helper normalized_argument
 template <class Out, int Divisor, class In>
 inline Out normalized_argument(const In &value, Status &status) {
     static_assert(Out::fraction_bits == In::fraction_bits, "normalization must be exact");
@@ -217,12 +232,14 @@ inline Out normalized_argument(const In &value, Status &status) {
                                                           remainder - top, false);
 }
 
+// presage:helper float_exponent
 template <class Out, class In> inline Out float_exponent(const In &value, Status &status) {
     return Out(input_exponent<1>(value, status));
 }
 
 // A scale beyond Limit gives the same overflow/underflow result as Limit.
 // Compare the full signed integer magnitude before narrowing to a scalar.
+// presage:helper bounded_exponent
 template <int Width, long long Limit, class In>
 inline long long bounded_exponent(const In &value) {
     static_assert(Limit > 0, "positive scale bound required");
@@ -240,6 +257,7 @@ inline long long bounded_exponent(const In &value) {
     return negative ? -scale : scale;
 }
 
+// presage:helper float_compare
 template <int Predicate, class T> inline bool float_compare(const T &a, const T &b) {
     if (a.is_nan() || b.is_nan())
         return Predicate == 1;
@@ -260,6 +278,7 @@ template <int Predicate, class T> inline bool float_compare(const T &a, const T 
     return !less;
 }
 
+// presage:helper float_copy_sign
 template <class T, class Sign> inline T float_copy_sign(T value, const Sign &sign) {
     value.bits[T::width - 1] = sign.negative();
     return value;

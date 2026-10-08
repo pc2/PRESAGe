@@ -1,3 +1,4 @@
+// presage:helper Status
 // Fixed kernel support. All loops have bounds fixed by the generated formats.
 enum class Status : unsigned char {
     ok = 0,
@@ -6,6 +7,7 @@ enum class Status : unsigned char {
     table_index_rejected = 3
 };
 
+// presage:helper copy_bits
 template <class T, int Width, class U> inline T copy_bits(const U &source) {
     T result = T(0);
     for (int bit = 0; bit < Width; ++bit)
@@ -13,6 +15,7 @@ template <class T, int Width, class U> inline T copy_bits(const U &source) {
     return result;
 }
 
+// presage:helper from_chunks
 template <class T, int Width, std::size_t N>
 inline T from_chunks(const unsigned long long (&words)[N]) {
     static_assert(N == (Width + 63) / 64, "incorrect constant word count");
@@ -22,6 +25,7 @@ inline T from_chunks(const unsigned long long (&words)[N]) {
     return result;
 }
 
+// presage:helper limit
 template <class T, int Width, bool Signed> inline T limit(bool upper) {
     T result = 0;
     for (int bit = 0; bit < Width; ++bit)
@@ -29,6 +33,7 @@ template <class T, int Width, bool Signed> inline T limit(bool upper) {
     return result;
 }
 
+// presage:helper kernel_quantize
 template <class Out, class Wide, int Width, bool Signed, int Mode, int Overflow,
           class Source>
 inline Out kernel_quantize(const Source &source, Status &status) {

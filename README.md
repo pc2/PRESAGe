@@ -341,9 +341,11 @@ within explicit width limits and requires a successful certificate.
 
 The header exposes `presage_evaluator::evaluate(float)` and `evaluate_bits`.
 The harness reads and writes little-endian words. `verify_cpu.jl` checks output
-bits, the first table index and every visited fixed node's exact payload against
-the interpreter, including boundary
-neighbours and special values. CMake uses strict floating semantics. Manual
+bits against the interpreter, including boundary neighbours and special values.
+Tracing is disabled by default. `PRESAGE_TRACE=ON` adds checks of the first table
+index and every visited fixed node's exact payload. The standalone generator uses
+`--trace=true`, and its verifier uses `--trace`. Each evaluator is one
+self-contained header containing only required helpers. CMake uses strict floating semantics. Manual
 compilation needs C++20, `-ffp-contract=off -fno-fast-math -frounding-math`,
 GMP include/library paths and `-lgmpxx -lgmp` for fixed evaluators.
 Vendor builds also need the selected library's include directory.

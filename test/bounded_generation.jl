@@ -297,6 +297,8 @@ end
             write(joinpath(directory, name), "old $name")
         end
         write(joinpath(directory, "notes.txt"), "keep these notes")
+        companion = joinpath(directory, "evaluator_support.hpp")
+        write(companion, "obsolete generated support")
         old = generation_snapshot(directory)
         count = Ref(0)
         install =
@@ -312,6 +314,7 @@ end
         )
         @test count[] == 2
         @test generation_snapshot(directory) == old
+        @test read(companion, String) == "obsolete generated support"
         @test read(joinpath(directory, "notes.txt"), String) == "keep these notes"
         @test !any(name -> startswith(name, ".presage-"), readdir(directory))
         _publish_generation(
@@ -322,6 +325,7 @@ end
             "evaluator.hpp" => collect(codeunits("new header")),
             "evaluate.cpp" => collect(codeunits("new harness")),
         )
+        @test !isfile(companion)
         @test read(joinpath(directory, "notes.txt"), String) == "keep these notes"
         mkpath(joinpath(directory, "plan.toml"))
         snapshot = generation_snapshot(directory)

@@ -1,10 +1,14 @@
-# C++ kernels with fixed arithmetic
+# C++ kernels with vendor arithmetic
 
 `emit_kernel` generates a C++17 evaluator using official `ap_fixed`/`ap_uint`
 or `ac_fixed`/`ac_int` types throughout. Floating values use an explicit IEEE
-encoding backed by vendor integers. The header contains bounded arrays,
-scalar values and a finite DAG of inline functions. PRESAGe's GMP/MPFR helpers,
-streams, tracing and exceptions belong to host tools.
+encoding backed by vendor integers; AC floating arithmetic uses official
+`ac_std_float` operations. `evaluator.hpp` contains type aliases, exact constants,
+tables and one evaluator with local stages and ordinary branches. The same
+header includes only required arithmetic helpers and their dependencies. The host adapter remains
+separate. Kernel code uses bounded arrays and scalar values without GMP/MPFR,
+streams or exceptions. Tracing is disabled by default; `trace=true` adds
+intermediate-value instrumentation for local tests.
 
 ## Generate and verify locally
 
@@ -23,6 +27,9 @@ write_plan("plan.toml", plan)
 emit_kernel("evaluator.hpp", plan; backend=:ac_fixed)
 emit_kernel_harness("evaluate.cpp", plan.program)
 ```
+
+Path and IO emission both produce one self-contained header. The generation CLI
+writes `evaluator.hpp`; `--trace=true` enables optional instrumentation.
 
 Compile the host adapter against the supplied AC headers:
 
@@ -188,9 +195,12 @@ Fixed arithmetic graphs accept independent fixed or floating interfaces,
 including ordinary, normalized segmented and individually sized polynomial
 evaluators. Canonical fixed binary16/IEEE32 erf and floating LUTs are supported.
 Unsigned nodes and fixed/unsigned/floating tables are supported. Fixed-internal
-reciprocal, sqrt/rsqrt, cbrt and log transformations are also supported. Floating
-arithmetic (`Add`, `Mul`, `FMA`, reciprocal) is rejected explicitly, including
-reductions that use those operations. The CPU emitter covers those graphs.
+reciprocal, sqrt/rsqrt, cbrt and log transformations are also supported. AC
+supports floating `Add`, `Mul`, `FMA` and reciprocal with nearest-even rounding
+and subnormals. Arithmetic canonicalizes NaNs; loads and bit operations retain
+payloads. Directed floating arithmetic and AP floating arithmetic are rejected
+explicitly. AP still supports encoded floating conversions, branches,
+normalization and fixed-core reconstruction.
 
 Formats are parameterized by `FloatFormat(E,M)`; binary16/32/64/128/256 and
 custom encodings have local checks. Floating widths and vendor work words must
@@ -199,6 +209,12 @@ its fixed destination width must be below 4096. A table must
 fit the C `int` index range; bank counts cannot exceed its entry count or 4096.
 OneAPI bank counts must be powers of two. Unsupported emission leaves an
 existing destination header or generated bundle intact.
+
+AC floating arithmetic additionally requires at most 30 exponent bits and
+`2*(fraction_bits+1)+12 <= 4096` for its work words. Encoded-only operations
+retain their wider exponent support. Binary32 is the initial oneAPI candidate;
+other combinations are checked with the public headers locally, and require
+separate toolchain validation.
 
 Local conformance establishes arithmetic agreement with the interpreter and
 reference checker. It does not establish vendor compiler acceptance, resources,

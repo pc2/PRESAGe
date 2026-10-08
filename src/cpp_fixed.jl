@@ -1,7 +1,16 @@
 _cpp_type(f::FixedFormat) =
     f.width <= 63 ? "std::int64_t" : f.width <= 126 ? "__int128_t" : "Big"
-_cpp_mode(mode) = findfirst(==(mode), (:nearest_even, :toward_zero, :up, :down)) - 1
-_cpp_overflow(mode) = findfirst(==(mode), (:reject, :saturate, :wrap)) - 1
+_cpp_mode(mode) = Dict(
+    :nearest_even => "round_nearest",
+    :toward_zero => "round_zero",
+    :up => "round_up",
+    :down => "round_down",
+)[mode]
+_cpp_overflow(mode) = Dict(
+    :reject => "overflow_reject",
+    :saturate => "overflow_saturate",
+    :wrap => "overflow_wrap",
+)[mode]
 function _cpp_fixed_constant(bits, f::FixedFormat)
     units = _fixed_units(bits, f)
     f.width > 126 && return "Big(\"$units\")"
@@ -11,30 +20,30 @@ function _cpp_fixed_constant(bits, f::FixedFormat)
     text = "((__int128_t{$(hi)ULL} << 64) | __int128_t{$(lo)ULL})"
     return units < 0 ? "(-$text)" : text
 end
-function _cpp_fixed_round(expression, source_fraction, f, mode)
-    return "fixed_round<$(_cpp_type(f))>($expression,$source_fraction,$(f.width),$(_fraction(f)),$(f.signed),$(_cpp_mode(mode)),$(_cpp_overflow(f.overflow)))"
+function _cpp_fixed_round(expression, source_fraction, f, mode; type = _cpp_type)
+    return "fixed_round<$(type(f))>($expression,$source_fraction,$(f.width),$(_fraction(f)),$(f.signed),$(_cpp_mode(mode)),$(_cpp_overflow(f.overflow)))"
 end
-function _cpp_fixed_expr(p, i)
+function _cpp_fixed_expr(p, i; call = j -> _cpp_value_name(p, j), type = _cpp_type)
     n, f = p.nodes[i], IR.format(p, i)
-    call(j) = "n$j()"
     if n isa Union{IR.Convert, IR.Quantize}
         source = IR.format(p, n.source)
         if source isa FloatFormat
-            return "fixed_from_float<$(_cpp_type(f))>($(call(n.source)),$(f.width),$(_fraction(f)),$(f.signed),$(_cpp_mode(n.rounding)),$(_cpp_overflow(f.overflow)))"
+            return "fixed_from_float<$(type(f))>($(call(n.source)),$(f.width),$(_fraction(f)),$(f.signed),$(_cpp_mode(n.rounding)),$(_cpp_overflow(f.overflow)))"
         elseif f isa FloatFormat
-            return "float_from_fixed<$(_cpp_type(f))>($(call(n.source)),$(_fraction(source)),$(_cpp_mode(n.rounding)))"
+            return "float_from_fixed<$(type(f))>($(call(n.source)),$(_fraction(source)),$(_cpp_mode(n.rounding)))"
         end
-        return _cpp_fixed_round(call(n.source), _fraction(source), f, n.rounding)
+        return _cpp_fixed_round(call(n.source), _fraction(source), f, n.rounding; type)
     elseif n isa IR.ScalePow2
         source = IR.format(p, n.source)
         if source isa FloatFormat
-            return "fixed_from_float<$(_cpp_type(f))>($(call(n.source)),$(f.width),$(_fraction(f)),$(f.signed),$(_cpp_mode(n.rounding)),$(_cpp_overflow(f.overflow)),$(n.exponent))"
+            return "fixed_from_float<$(type(f))>($(call(n.source)),$(f.width),$(_fraction(f)),$(f.signed),$(_cpp_mode(n.rounding)),$(_cpp_overflow(f.overflow)),$(n.exponent))"
         end
         return _cpp_fixed_round(
             call(n.source),
             BigInt(_fraction(source)) - n.exponent,
             f,
-            n.rounding,
+            n.rounding;
+            type,
         )
     end
     a, b = IR.format(p, n.a), IR.format(p, n.b)
@@ -64,5 +73,5 @@ function _cpp_fixed_expr(p, i)
         n isa IR.Mul ? product :
         "($(align(product,source_fraction-fa-fb)) + $(align(promote(n.c),source_fraction-_fraction(IR.format(p,n.c)))))"
     end
-    return _cpp_fixed_round(expression, source_fraction, f, n.rounding)
+    return _cpp_fixed_round(expression, source_fraction, f, n.rounding; type)
 end

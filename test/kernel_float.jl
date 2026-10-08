@@ -186,7 +186,11 @@ end
         IR.FloatReciprocal(1),
     )
         io = IOBuffer()
-        @test_throws ArgumentError emit_kernel(io, IR.Program([IR.Input(IEEE32), node]))
+        @test_throws ArgumentError emit_kernel(
+            io,
+            IR.Program([IR.Input(IEEE32), node]);
+            backend = :ap_fixed,
+        )
         @test isempty(take!(io))
     end
     @test_throws ArgumentError emit_kernel(

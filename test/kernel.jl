@@ -70,6 +70,7 @@ function kernel_trace_check(fixtures, backend)
                     name = "test$i",
                     backend,
                     toolchain = backend == :ap_fixed ? :vitis : :oneapi,
+                    trace = true,
                 )
                 println(io, "#include \"$header\"")
             end
@@ -109,18 +110,18 @@ template<class T> T read_word(int width) {
                     io,
                     "Input input = copy_bits<Input,$(kernel_width(IR.format(p,p.input)))>(raw);",
                 )
-                println(io, "Context context(input); auto value = context.n$(p.output)();")
+                println(io, "Trace trace; auto observed = evaluate(input, &trace);")
                 println(
                     io,
                     "auto typed = evaluate(input); auto result = evaluate_bits(raw);",
                 )
                 println(
                     io,
-                    "if (typed.status != context.status || result.status != context.status || typed.valid() != result.valid()) std::exit(4);",
+                    "if (typed.status != observed.status || result.status != observed.status || typed.valid() != result.valid()) std::exit(4);",
                 )
                 println(
                     io,
-                    "if (result.valid() && (copy_bits<OutputBits,$(kernel_width(IR.format(p)))>(value) != result.bits || copy_bits<OutputBits,$(kernel_width(IR.format(p)))>(typed.value) != result.bits)) std::exit(5);",
+                    "if (result.valid() && (copy_bits<OutputBits,$(kernel_width(IR.format(p)))>(observed.value) != result.bits || copy_bits<OutputBits,$(kernel_width(IR.format(p)))>(typed.value) != result.bits)) std::exit(5);",
                 )
                 println(
                     io,
@@ -130,7 +131,7 @@ template<class T> T read_word(int width) {
                 for (j, f) in enumerate(p.types)
                     println(
                         io,
-                        "std::cout.put(context.ready$j ? 1 : 0); write_word(context.value$j,$(kernel_width(f)));",
+                        "std::cout.put(trace.visited$j ? 1 : 0); write_word(trace.value$j,$(kernel_width(f)));",
                     )
                 end
                 println(io, "} }")
@@ -382,7 +383,68 @@ function kernel_fixtures()
         push!(nodes, guarded ? IR.Guard(3, 8) : IR.Select(3, 2, 8))
         add(IR.Program(nodes; tables), 0:255)
     end
+    # A shared value computed in only one branch must be reused afterwards,
+    # without eagerly visiting its dependencies in the other branch.
+    f = FixedFormat(8, 4; overflow = :wrap)
+    nodes = IR.Node[
+        IR.Input(f),
+        IR.constant(0, f),
+        IR.constant(1, f),
+        IR.Compare(:lt, 1, 2),
+        IR.Add(1, 3, f),
+        IR.Select(4, 5, 2),
+        IR.Add(6, 5, f),
+    ]
+    add(IR.Program(nodes), 0:255)
+    # Common work may occur after a different rejection in one branch. It must
+    # stay there: negative inputs reject on the table, others on the guard.
+    nodes = IR.Node[
+        IR.Input(f),
+        IR.constant(0, f),
+        IR.Compare(:lt, 1, 2),
+        IR.Const(Bool, 0),
+        IR.Guard(4, 2),
+        IR.Const(IR.UIntFormat(2), 1),
+        IR.TableLoad(1, 6),
+        IR.Add(7, 5, f),
+        IR.Select(3, 8, 5),
+    ]
+    add(IR.Program(nodes; tables = [IR.Table(f, [0])]), 0:255)
     return fixtures
+end
+
+@testset "Readable kernel output" begin
+    f = FixedFormat(8, 4; overflow = :wrap)
+    nodes = IR.Node[IR.Input(f), IR.constant(1, f)]
+    value = 1
+    for k = 1:24
+        push!(nodes, IR.constant(k // 16, f))
+        push!(nodes, IR.Compare(:lt, 1, length(nodes)))
+        condition = length(nodes)
+        push!(nodes, IR.Add(value, 2, f))
+        push!(nodes, IR.Select(condition, length(nodes), value))
+        value = length(nodes)
+    end
+    p = IR.Program(nodes)
+    mktempdir() do directory
+        path = joinpath(directory, "evaluator.hpp")
+        emit_kernel(path, p)
+        text = read(path, String)
+        @test !isfile(joinpath(directory, "evaluator_support.hpp"))
+        @test occursin("kernel_quantize", text)
+        @test !occursin(r"Context|ready\d|\bn\d+\(\)|EncodedFloat|struct Trace", text)
+        @test occursin("using Fixed8_4", text)
+        @test occursin("if (condition_", text)
+        @test !occursin("computed_", text) # all shared work is a common prefix
+        @test sizeof(text) < 20_000 # nested selections must not duplicate the DAG
+        @test text == sprint(io -> emit_kernel(io, p))
+        source = joinpath(directory, "check.cpp")
+        write(
+            source,
+            "#include \"evaluator.hpp\"\nint main() { return presage_evaluator::evaluate(presage_evaluator::Input(0)).valid() ? 0 : 1; }\n",
+        )
+        @test kernel_compile(source, joinpath(directory, "check"), :ac_fixed)
+    end
 end
 
 @testset "AP CPU scaling regression" begin
@@ -429,7 +491,7 @@ end
         @test_throws ArgumentError emit_kernel(io, good; options...)
         @test isempty(take!(io))
     end
-    @test_throws ArgumentError emit_kernel(IOBuffer(), float)
+    @test_throws ArgumentError emit_kernel(IOBuffer(), float; backend = :ap_fixed)
     @test_throws ArgumentError emit_kernel(
         IOBuffer(),
         IR.Program([IR.Input(FixedFormat(4097, 4))]),
@@ -444,7 +506,7 @@ end
     @test_throws ArgumentError emit_kernel(IOBuffer(), good; name = "bad::name")
     f = FixedFormat(8, 4)
     p = IR.Program(
-        [IR.Input(f)];
+        [IR.Input(f), IR.Const(IR.UIntFormat(2), 0), IR.TableLoad(1, 2)];
         tables = [IR.Table(f, [0, 1, 2]; banks = 3, unroll = true)],
     )
     text = sprint(io -> emit_kernel(io, p))
@@ -459,13 +521,13 @@ end
     mktempdir() do directory
         file = joinpath(directory, "kernel.hpp")
         write(file, "existing")
-        @test_throws ArgumentError emit_kernel(file, float)
+        @test_throws ArgumentError emit_kernel(file, float; backend = :ap_fixed)
         @test read(file, String) == "existing"
     end
     for backend in (:ap_fixed, :ac_fixed)
         text = sprint(io -> emit_kernel(io, good; backend))
         @test !occursin(r"gmp|mpfr|std::(cin|cout)|throw|stdexcept|Big", text)
-        @test occursin("Status::overflow_rejected", text)
+        @test !occursin("kernel_quantize", text)
     end
 end
 
@@ -551,14 +613,17 @@ end
             @test process.exitcode == 1
             @test occursin("status=1", String(take!(errors)))
             saved = read(joinpath(generated, "evaluator.hpp"))
+            @test !isfile(joinpath(generated, "evaluator_support.hpp"))
             write_plan(source, polynomial_plan(FunctionSpec("x"), [0, 1]))
             @test_throws ArgumentError generate_main([
                 source,
                 generated,
                 "--target=kernel",
                 "--backend=$backend",
+                "--name=bad::name",
             ])
             @test read(joinpath(generated, "evaluator.hpp")) == saved
+            @test !isfile(joinpath(generated, "evaluator_support.hpp"))
             write_plan(source, plan)
         end
         @test_throws ErrorException generate_main([source, directory, "--target=unknown"])

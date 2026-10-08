@@ -62,7 +62,7 @@
     @test_throws ArgumentError IR.Program([
         IR.Input(IEEE32),
         IR.Convert(1, f),
-        IR.BitCast(2, IR.UIntFormat(4)),
+        IR.BitCast(2, IR.UIntFormat(3)),
         IR.Const(IEEE32, 0),
     ])
     for overflow in (:wrap, :saturate, :reject)

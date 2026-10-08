@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 project(PRESAGeCPU LANGUAGES CXX)
 include(CTest)
 option(PRESAGE_CHECKER_ONLY "Build the standalone checker without Julia or an evaluator" OFF)
+option(PRESAGE_TRACE "Generate intermediate-value tracing for local debugging" OFF)
 find_path(PRESAGE_GMP_INCLUDE_DIR gmpxx.h HINTS /opt/homebrew/opt/gmp/include REQUIRED)
 find_library(PRESAGE_GMPXX gmpxx HINTS /opt/homebrew/opt/gmp/lib REQUIRED)
 find_library(PRESAGE_GMP gmp HINTS /opt/homebrew/opt/gmp/lib REQUIRED)
@@ -62,8 +63,24 @@ if(PRESAGE_PLAN)
   set(options)
   execute_process(
     COMMAND "${PRESAGE_JULIA}" --startup-file=no "--project=${CMAKE_CURRENT_SOURCE_DIR}"
-      -e "using PRESAGe; p=read_plan(ARGS[1]).program; p===nothing && error(\"plan has no evaluator\"); kernel=ARGS[3]==\"kernel\"; print(!kernel && PRESAGe._has_fixed(p) ? \"ON\" : \"OFF\", \" \", !kernel && PRESAGe._resolved_float_backend(p,Symbol(ARGS[2]))==:ac_std_float ? \"ON\" : \"OFF\")"
-      "${PRESAGE_PLAN}" "${PRESAGE_FLOAT_BACKEND}" "${PRESAGE_TARGET}"
+      -e [=[
+        using PRESAGe
+        p = read_plan(ARGS[1]).program
+        p === nothing && error("plan has no evaluator")
+        backend = Symbol(ARGS[4])
+        trace = ARGS[5] == "ON"
+        header = sprint() do io
+            if ARGS[3] == "kernel"
+                emit_kernel(io, p; backend, trace)
+            else
+                emit_cpp(io, p; backend, trace, float_backend = Symbol(ARGS[2]))
+            end
+        end
+        gmp = occursin("#include <gmpxx.h>", header)
+        ac = occursin(r"#include <ac_(std_float|fixed|int)\.h>", header)
+        print(gmp ? "ON" : "OFF", " ", ac ? "ON" : "OFF")
+      ]=]
+      "${PRESAGE_PLAN}" "${PRESAGE_FLOAT_BACKEND}" "${PRESAGE_TARGET}" "${PRESAGE_BACKEND}" "${PRESAGE_TRACE}"
     RESULT_VARIABLE inspect_result OUTPUT_VARIABLE resources OUTPUT_STRIP_TRAILING_WHITESPACE)
   if(NOT inspect_result EQUAL 0)
     message(FATAL_ERROR "Could not inspect evaluator plan dependencies")
@@ -80,6 +97,11 @@ else()
 endif()
 list(APPEND options "--backend=${PRESAGE_BACKEND}")
 list(APPEND options "--target=${PRESAGE_TARGET}")
+set(trace_options)
+if(PRESAGE_TRACE)
+  list(APPEND options --trace=true)
+  set(trace_options --trace)
+endif()
 if(PRESAGE_TARGET STREQUAL "kernel")
   set(needs_gmp OFF)
   list(APPEND options "--toolchain=${PRESAGE_TOOLCHAIN}")
@@ -130,7 +152,7 @@ if(BUILD_TESTING)
   if(PRESAGE_TARGET STREQUAL "cpu")
     add_test(NAME cpu_conformance COMMAND "${PRESAGE_JULIA}" --startup-file=no
       "--project=${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_cpu.jl"
-      "${generated}/plan.toml" "$<TARGET_FILE:presage_cpu>")
+      "${generated}/plan.toml" "$<TARGET_FILE:presage_cpu>" ${trace_options})
     set(verification_test sampled_verification)
   else()
     set(verification_test kernel_verification)

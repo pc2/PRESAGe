@@ -6,7 +6,7 @@ include(joinpath(@__DIR__, "generation_artifacts.jl"))
 
 function generate_main(args)
     length(args) >= 2 || error(
-        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false]",
+        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false] [--trace=true|false]",
     )
     source, directory = args[1:2]
     options = Dict{String, String}()
@@ -37,6 +37,7 @@ function generate_main(args)
             "search-config",
             "target",
             "toolchain",
+            "trace",
         ) || error("unknown option $key")
         haskey(options, key) && error("duplicate option $key")
         options[key] = value
@@ -58,6 +59,9 @@ function generate_main(args)
     float_backend = Symbol(get(options, "float-backend", "auto"))
     float_backend in PRESAGe._CPP_FLOAT_BACKENDS ||
         error("float-backend must be auto, native or ac_std_float")
+    trace_flag = get(options, "trace", "false")
+    trace_flag in ("true", "false") || error("trace must be true or false")
+    trace = trace_flag == "true"
     flag = get(
         options,
         "certify",
@@ -80,6 +84,7 @@ function generate_main(args)
                 "certify",
                 "target",
                 "toolchain",
+                "trace",
             ),
             keys(options),
         ) || error("search settings belong in the search configuration file")
@@ -237,6 +242,7 @@ function generate_main(args)
                 "float-backend",
                 "target",
                 "toolchain",
+                "trace",
             ),
             keys(options),
         ) || error("generation options require the erf source")
@@ -262,18 +268,18 @@ function generate_main(args)
     try
         if target == :kernel
             artifacts["evaluator.hpp"] = _generation_text(
-                (io, p) -> emit_kernel(io, p; name, backend, toolchain),
+                (io, p) -> emit_kernel(io, p; name, backend, toolchain, trace),
                 plan,
             )
             artifacts["evaluate.cpp"] =
                 _generation_text((io, p) -> emit_kernel_harness(io, p; name), plan.program)
         else
             artifacts["evaluator.hpp"] = _generation_text(
-                (io, p) -> emit_cpp(io, p; name, backend, float_backend),
+                (io, p) -> emit_cpp(io, p; name, backend, float_backend, trace),
                 plan,
             )
             artifacts["evaluate.cpp"] =
-                _generation_text((io, p) -> emit_harness(io, p; name), plan.program)
+                _generation_text((io, p) -> emit_harness(io, p; name, trace), plan.program)
         end
         artifacts["plan.toml"] = _generation_text(write_plan, plan)
         result === nothing ||

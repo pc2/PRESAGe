@@ -7,6 +7,8 @@ const _GENERATION_OUTPUTS = (
     "certificate-failure.toml",
     "search-failure.toml",
 )
+# Remove a previously generated companion header when publishing a new bundle.
+const _GENERATION_MANAGED = (_GENERATION_OUTPUTS..., "evaluator_support.hpp")
 
 function _generation_text(writer, value)
     io = IOBuffer()
@@ -40,13 +42,13 @@ function _publish_generation(directory, artifacts; install = mv)
         for (name, content) in artifacts
             write(joinpath(staged, name), content)
         end
-        for name in _GENERATION_OUTPUTS
+        for name in _GENERATION_MANAGED
             isdir(joinpath(directory, name)) &&
                 error("artifact destination is a directory: $name")
         end
         saved, installed = String[], String[]
         try
-            for name in _GENERATION_OUTPUTS
+            for name in _GENERATION_MANAGED
                 path = joinpath(directory, name)
                 if ispath(path) || islink(path)
                     mv(path, joinpath(backup, name))

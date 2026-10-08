@@ -72,7 +72,8 @@ function verify_cpu(
     plan,
     executable;
     words = verification_inputs(plan),
-    trace_fixed = plan.program !== nothing && PRESAGe._has_fixed(plan.program),
+    trace = false,
+    trace_fixed = trace && plan.program !== nothing && PRESAGe._has_fixed(plan.program),
 )
     p = plan.program
     p === nothing && error("plan has no evaluator")
@@ -81,7 +82,11 @@ function verify_cpu(
     outsize = PRESAGe._word_bytes(plan.spec.output_format)
     fixed =
         trace_fixed ? [(i, f) for (i, f) in enumerate(p.types) if f isa FixedFormat] : []
-    stride = outsize + 8 + sum((1 + cld(f.width, 8) for (_, f) in fixed); init = 0)
+    tracing = trace || trace_fixed
+    stride =
+        outsize +
+        (tracing ? 8 : 0) +
+        sum((1 + cld(f.width, 8) for (_, f) in fixed); init = 0)
     mktempdir() do directory
         input, output = joinpath(directory, "input.bin"), joinpath(directory, "output.bin")
         open(input, "w") do io
@@ -95,27 +100,29 @@ function verify_cpu(
             end
         end
         option = trace_fixed ? "--trace-fixed" : "--trace-index"
-        run(pipeline(`$executable $option`; stdin = input, stdout = output))
+        command = tracing ? `$executable $option` : `$executable`
+        run(pipeline(command; stdin = input, stdout = output))
         bytes = read(output)
         length(bytes) == length(words) * stride || error("incorrect CPU output size")
         for (i, word) in enumerate(words)
-            trace = interpret_trace(p, word)
+            observations = interpret_trace(p, word)
             offset = 1 + (i - 1) * stride
             actual = PRESAGe._read_word(bytes, offset, outsize, :little)
-            actual == trace.bits || error(
+            actual == observations.bits || error(
                 "CPU/interpreter mismatch at $(hex_bits(word,plan.spec.input_format))",
             )
+            tracing || continue
             selected = PRESAGe._read_word(bytes, offset + outsize, 8, :little)
             expected =
                 index === nothing ? typemax(UInt64) :
-                get(trace.values, index, typemax(UInt64))
+                get(observations.values, index, typemax(UInt64))
             selected == expected || error(
                 "table selection mismatch at $(hex_bits(word,plan.spec.input_format))",
             )
             offset += outsize + 8
             for (node, f) in fixed
                 ready = bytes[offset]
-                visited = haskey(trace.values, node)
+                visited = haskey(observations.values, node)
                 ready == visited || error(
                     "fixed node $node visitation mismatch at $(hex_bits(word,plan.spec.input_format))",
                 )
@@ -123,7 +130,7 @@ function verify_cpu(
                 for byte = 0:(cld(f.width, 8) - 1)
                     payload |= BigInt(bytes[offset + 1 + byte]) << (8byte)
                 end
-                expected = visited ? trace.values[node].bits : BigInt(0)
+                expected = visited ? observations.values[node].bits : BigInt(0)
                 payload == expected || error(
                     "fixed node $node payload mismatch at $(hex_bits(word,plan.spec.input_format))",
                 )
@@ -134,10 +141,13 @@ function verify_cpu(
     return length(words)
 end
 if abspath(PROGRAM_FILE) == @__FILE__
-    length(ARGS) == 2 || error("Usage: verify_cpu.jl PLAN.toml EXECUTABLE")
-    count = verify_cpu(read_plan(ARGS[1]), abspath(ARGS[2]))
+    length(ARGS) in (2, 3) && (length(ARGS) == 2 || ARGS[3] == "--trace") ||
+        error("Usage: verify_cpu.jl PLAN.toml EXECUTABLE [--trace]")
+    trace = length(ARGS) == 3
+    count = verify_cpu(read_plan(ARGS[1]), abspath(ARGS[2]); trace)
     println(
-        "CPU/interpreter outputs, table selections and fixed intermediates agree on ",
+        trace ? "CPU/interpreter outputs and traces agree on " :
+        "CPU/interpreter outputs agree on ",
         count,
         " inputs",
     )

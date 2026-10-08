@@ -88,6 +88,12 @@ Supplying a candidate plan with `--search-config` is rejected.
 | `search.toml` | Ordered choices, numerical/time limits, history and selected attempt. |
 | `evaluator.hpp`, `evaluate.cpp` | C++ evaluator and binary CPU harness. |
 
+The evaluator is one self-contained header with only required helpers. Tracing
+is disabled by default. Use `--trace=true` to generate CPU instrumentation, then
+`scripts/verify_cpu.jl PLAN.toml EXECUTABLE --trace` to check table selections and
+fixed intermediates as well as final outputs. CMake exposes the same option as
+`PRESAGE_TRACE=ON`.
+
 Only a passing complete certificate authorizes publication of bounded search
 output. The selected plan is sufficient for later recertification and emission;
 replaying it does not regenerate coefficients or rerun the search:

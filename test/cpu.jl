@@ -9,6 +9,7 @@ function cpu_check(
     input_bytes = nothing,
     host_rounding = nothing,
     generated_directory = nothing,
+    trace = generated_directory === nothing,
 )
     compiler = get(
         ENV,
@@ -20,8 +21,8 @@ function cpu_check(
         header, source, exe =
             joinpath.(Ref(directory), ("evaluator.hpp", "evaluate.cpp", "evaluate"))
         if generated_directory === nothing
-            emit_cpp(header, plan; backend, float_backend)
-            emit_harness(source, plan.program)
+            emit_cpp(header, plan; backend, float_backend, trace)
+            emit_harness(source, plan.program; trace)
         else
             cp(joinpath(generated_directory, "evaluator.hpp"), header)
             cp(joinpath(generated_directory, "evaluate.cpp"), source)
@@ -48,18 +49,15 @@ function cpu_check(
             replacement = """
             using namespace presage_evaluator;
             $(!any(f -> f isa FloatFormat,plan.program.types) ? "std::fesetround(FE_DOWNWARD);" : "")
-            auto result = evaluate_bits(word);
+            auto result = evaluate_bits(word$(trace ? ", (trace || fixed_trace) ? &observations : nullptr" : ""));
             auto typed = evaluate($decode);
-            if ($encode != result || context.output_bits() != result)
+            if ($encode != result)
                 throw std::runtime_error("public evaluator API mismatch");
             """
             text = read(source, String)
-            occursin("auto result = context.output_bits();", text) ||
-                error("missing harness output call")
-            write(
-                source,
-                replace(text, "auto result = context.output_bits();" => replacement),
-            )
+            original = "auto result = presage_evaluator::evaluate_bits(word$(trace ? ", (trace || fixed_trace) ? &observations : nullptr" : ""));"
+            occursin(original, text) || error("missing harness output call")
+            write(source, replace(text, original => replacement))
         end
         gmp = if PRESAGe._has_fixed(plan.program)
             prefix = get(
@@ -115,7 +113,7 @@ function cpu_check(
                 error("CPU did not report the expected failure")
             return length(words)
         end
-        return verify_cpu(read_plan(path), exe; words)
+        return verify_cpu(read_plan(path), exe; words, trace)
     end
 end
 

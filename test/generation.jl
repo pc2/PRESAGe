@@ -7,7 +7,7 @@ include(joinpath(@__DIR__, "..", "scripts", "certify.jl"))
         write_plan(source, plan)
         generate_main([source, output])
         text = read(joinpath(output, "evaluator.hpp"), String)
-        @test occursin("ac_std_float<128,15>", text)
+        @test occursin(r"ac_std_float<128,\s*15>", text)
         @test !occursin("gmpxx.h", text)
         @test TOML.parsefile(joinpath(output, "certificate.toml"))["total_bound"] == "0/1"
         @test_throws ArgumentError generate_main([source, output, "--float-backend=native"])
@@ -20,7 +20,7 @@ include(joinpath(@__DIR__, "..", "scripts", "certify.jl"))
         write_plan(source, polynomial_plan(FunctionSpec("x"), [0, 1]))
         generate_main([source, output, "--float-backend=ac_std_float"])
         @test occursin(
-            "ac_std_float<32,8>",
+            r"ac_std_float<32,\s*8>",
             read(joinpath(output, "evaluator.hpp"), String),
         )
     end
