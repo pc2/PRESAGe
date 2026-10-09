@@ -14,9 +14,11 @@ config = PolynomialSearchConfig(degrees=[5,9],
     internal_formats=[FixedFormat(24+g,6) for g in (0,3,6,8,10)],
     evaluation=:fma, max_attempts=10, job_timeout=60, total_timeout=300)
 result = sweep_polynomial(spec, config;
-    max_parallel=2, cache=NumericalCache("build/numerical-cache"))
+    max_parallel=2, cache=NumericalCache("build/numerical-cache"),
+    memory_model=BlockMemoryModel(depth=512, word_bits=32),
+    max_table_blocks=8, objective=:memory)
 mkpath("build")
-write_sweep_report("build/sweep.toml", result)
+write_sweep_artifacts("build/sweep", result)
 ```
 
 At most `max_parallel` (1:64) owned Julia processes run concurrently. Native
@@ -49,17 +51,64 @@ Rows contain the complete certificate: approximation, coordinate, arithmetic
 and output-rounding contributions for every path, with transformation-specific
 reconstruction details. Reports contain operation counts, coefficient/table
 bits, individual coefficient/stage widths and operand/result widths. The Pareto
-set compares certified total error and coefficient, stage, arithmetic-result and
-table bits **within each contract**. A row is dominated only when another row is
-no worse in all five metrics and strictly better in at least one. Equal rows
-remain in the set. These are declared structural costs, without calibrated FPGA
-resources, latency or initiation interval. Samples are not used as proof.
+set compares eligible certified rows **within each contract**, using total error,
+modeled table blocks, arithmetic result bits, operand bits, stage bits and static
+comparison/conversion/table-read counts. A row is dominated only when another
+eligible row is no worse in all eight metrics and strictly better in at least
+one. Equal rows remain in the set. Logical coefficient/table bits are retained
+as diagnostics and final selection tie breakers. These are structural costs,
+without calibrated FPGA resources, latency or initiation interval.
+Samples are not used as proof.
 
 `elapsed_seconds` measures the current job including cache work. On a hit,
 `compute_seconds`, `generation_seconds` and `proof_seconds` retain the original
 computation's measurements. Generation/proof phases exclude Julia startup and
 artifact transfer; stored replay has zero coefficient-generation time. Timing
 is diagnostic and is not a Pareto metric.
+
+## Memory budgets and design selection
+
+`memory_model=BlockMemoryModel(depth=512, word_bits=32)` describes an assumed
+rectangular block. Each reachable ROM column is allocated independently, with
+depth/width tiling and cyclic bank padding. Center storage is included.
+For a 32-bit column, 128 rows and 512 rows each occupy one modeled block.
+More segments may allow fewer coefficient columns and less Horner arithmetic,
+even when logical table bits increase. See [memory layout](kernels.md#coefficient-memory-layout).
+The [memory sweep example](../examples/memory_sweep.jl) generates 128/512-row
+`exp(x)` candidates and reselects them under a different block depth and priority.
+
+`max_table_blocks=nothing` permits any modeled allocation; a nonnegative integer
+sets a per-candidate budget. Over-budget candidates retain their certificates
+and costs, but are excluded from Pareto membership and selection. A budget of
+zero permits untabled designs. Each contract has one `result.selections` entry:
+`:selected`, `:no_certified_candidate` or `:memory_budget_exceeded`. A selected
+entry identifies a request row and explains the decision. An incomplete sweep
+can select the best examined candidate; the result still records the search limit.
+
+Selection minimizes a recorded lexicographic order:
+
+| Objective | Priority order |
+| --- | --- |
+| `:memory` (default) | Blocks, arithmetic result bits, operand bits, stage bits, comparisons, conversions, table reads. |
+| `:arithmetic` | Arithmetic result bits, operand bits, stage bits, comparisons, conversions, table reads, blocks. |
+
+Both orders then compare certified total error, logical table bits and coefficient
+bits. Exact ties use the original request index. The policy uses declared widths
+and static operation counts; it makes no latency or DSP estimate.
+
+Change the model, budget or objective without rerunning numerical jobs:
+
+```julia
+reselected = select_sweep(result;
+    memory_model=BlockMemoryModel(depth=512, word_bits=36),
+    max_table_blocks=6, objective=:arithmetic)
+write_sweep_artifacts("build/reselected", reselected)
+```
+
+Rows and certificates remain identical. These selection settings are excluded
+from numerical cache keys; new sweeps with the same numerical requests can reuse
+their cached proofs and recompute costs. Counts exceeding TOML's signed 64-bit
+integer range are stored as exact decimal strings.
 
 ## Sampled observations
 
@@ -77,7 +126,8 @@ cases. The default runner is the exact interpreter; generated C++ and later devi
 outputs use the same bundle/checker. See [sampled verification](sampled-verification.md).
 Observations are separate from proof status and Pareto metrics. Their postprocessing
 does not consume the sweep's search deadline or enter its numerical cache.
-Reports with observations use schema v2; ordinary reports remain v1. The CLI's
+All current sweep reports use schema v3 and record the model, budget, ranking
+order, eligibility and selections. Observations are optional. The CLI's
 optional `--checker=EXEC` adds these observations and requires sampled passing
 results for certified rows before returning success.
 
@@ -116,27 +166,37 @@ existing caching is useful for reruns and completed results from interrupted wor
 ```sh
 julia --startup-file=no --project=. scripts/sweep.jl \
   contract.toml search-config.toml build/sweep \
-  --max-parallel=2 --cache=build/numerical-cache --checker=build/presage_check
+  --max-parallel=2 --cache=build/numerical-cache --checker=build/presage_check \
+  --memory-depth=512 --memory-word-bits=32 --max-table-blocks=8 --objective=memory
 ```
 
 The command accepts a stored `plan.toml` with a compatible explicit stage
-configuration too. It atomically replaces `build/sweep/sweep.toml`. Exit code zero
-means a complete sweep; a limit returns one. The report retains every available
-plan/certificate, including failures, and identifies passing Pareto rows. Extract
-a passing plan for ordinary generation/replay:
+configuration too. It publishes `build/sweep/sweep.toml` and exact selected
+artifacts under `build/sweep/selected/N/`, where `N` is the contract index starting
+at one. `write_sweep_artifacts` provides the same Julia workflow;
+`write_sweep_report` writes only the report.
+
+The report and `selected/` tree are managed outputs. Publication stages the
+bundle, restores previous outputs on ordinary file-operation failures, preserves
+unrelated files in the output directory and removes stale selections. Keep
+user files outside `selected/`. Report-only writes contain relative selection
+paths but do not create the selected files.
+
+Exit code zero requires a complete sweep, one eligible certified selection per
+contract and, when requested, passing sampled checks for certified rows. Limits,
+missing selections or sampled failures return one. Numerical certification and
+memory eligibility remain separate in the report. Selected plans can be used
+directly for ordinary generation/replay:
 
 ```julia
-using PRESAGe, TOML
-data = TOML.parsefile("build/sweep/sweep.toml")
-i = first(data["pareto_indices"])
-open("build/selected-plan.toml", "w") do io
-    TOML.print(io, data["rows"][i]["plan"]; sorted=true)
-end
+using PRESAGe
+selected = read_plan("build/sweep/selected/1/plan.toml")
+@assert certify_plan(selected).status == :certified
 ```
 
 ```sh
 julia --startup-file=no --project=. scripts/generate.jl \
-  build/selected-plan.toml build/replayed --backend=ac_fixed
+  build/sweep/selected/1/plan.toml build/replayed --backend=ac_fixed
 ```
 
 Generation freshly recertifies the stored plan before emitting C++.

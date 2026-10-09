@@ -47,8 +47,10 @@ Asin/acos support bounded intervals inside `[-1,1]`, with exact endpoint
 coordinates, composed sqrt/asin kernels and complete reconstruction bounds.
 See the [inverse trig example](examples/inverse_trig_search.jl).
 Local design sweeps evaluate all configured candidates with bounded concurrent
-workers, exact numerical caching and structural Pareto reports. They can also
-hold coefficients fixed while varying stage precision. See the
+workers, exact numerical caching and structural Pareto reports. A configurable
+memory model and block budget select a certified design per contract, with
+memory or arithmetic priority and exported plan/certificate pairs. Sweeps can
+also hold coefficients fixed while varying stage precision. See the
 [sweep workflow](docs/sweeps.md) and [guard example](examples/design_sweep.jl).
 Portable sampled verification uses Julia-generated reference bundles and one
 standalone C++ checker, shared by local runs and saved runner outputs. It reports

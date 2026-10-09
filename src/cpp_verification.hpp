@@ -421,11 +421,12 @@ inline int check(const std::string &directory, const std::string &outputs_path,
                     status == "nonfinite_output",
                 "unknown reference status");
         bool special = status == "special" || status == "domain_error";
-        bool special_match = true;
-        if (special && row[4] != "-") {
+        // An exact finite identity supplies a numerical reference, not a
+        // correct-rounding requirement. Raw IR agreement is checked separately.
+        // Non-numeric special results (poles/NaNs) still require their exact word.
+        if (special && !numeric && row[4] != "-") {
             ++counts["special_checked"];
-            special_match = actual_bits == word(row[4], outfmt);
-            accuracy = special_match ? "passed" : "failed";
+            accuracy = actual_bits == word(row[4], outfmt) ? "passed" : "failed";
         }
         if (numeric) {
             ++counts["numeric_checked"];
@@ -467,8 +468,6 @@ inline int check(const std::string &directory, const std::string &outputs_path,
             accuracy = verdict(lower, upper, target);
             if (rational_reference && actual.kind == "finite")
                 accuracy = rational_verdict(y, exact_lo, exact_hi, target);
-            if (!special_match)
-                accuracy = "failed";
             if (row[8] != "-") {
                 auto bound = rational(row[8]);
                 require(bound >= 0, "negative certificate bound");

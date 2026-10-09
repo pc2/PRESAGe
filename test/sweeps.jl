@@ -65,7 +65,7 @@ sweep_config(; kwargs...) = PolynomialSearchConfig(;
         io = IOBuffer()
         write_sweep_report(io, warm)
         data = TOML.parse(String(take!(io)))
-        @test data["schema"] == "presage-polynomial-sweep" && data["schema_version"] == 1
+        @test data["schema"] == "presage-polynomial-sweep" && data["schema_version"] == 3
         @test data["pareto_indices"] == collect(warm.pareto_indices)
         @test all(
             r ->

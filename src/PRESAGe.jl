@@ -68,9 +68,12 @@ export FloatFormat,
     write_search_report,
     NumericalCache,
     PolynomialSweepRow,
+    PolynomialSweepSelection,
     PolynomialSweepResult,
     sweep_polynomial,
+    select_sweep,
     write_sweep_report,
+    write_sweep_artifacts,
     VerificationSampling,
     sample_inputs,
     write_verification_bundle,
@@ -144,6 +147,7 @@ include("search_schema.jl")
 include("precision_optimization.jl")
 include("numerical_cache.jl")
 include("sweeps.jl")
+include("sweep_artifacts.jl")
 include("verification.jl")
 
 end

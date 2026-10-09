@@ -46,8 +46,11 @@ Each input has independent checks:
   signed zeros and canonical NaNs. This check also covers nonfinite inputs and
   finite inputs outside the contract where the evaluator defines an output.
 - **Accuracy:** compare a finite-contract output with a mathematical reference
-  enclosure. Finite poles and primitive special identities retain their explicit
-  reference policy. Fixed saturation/wrap does not replace the mathematical value.
+  enclosure. Exact finite identities such as `exp(0)=1` use the same declared
+  error allowance; they do not impose correct rounding. Both signed zeros have
+  numerical value zero, while bit agreement still checks the IR's chosen sign.
+  Non-numeric special references, including poles and NaNs, require their exact
+  reference word. Fixed saturation/wrap does not replace the mathematical value.
 - **Certificate:** compare the same error enclosure with a supplied global
   certificate bound on finite inputs in the declared domain.
 
@@ -148,6 +151,6 @@ This is separate postprocessing after the bounded search, with its own sampling
 and reference limits. It checks available interpreter graphs, including candidates
 that exceed the proof budget, and preserves expected arithmetic/domain failures
 as observations. Search deadlines, cache payloads and certified Pareto metrics
-retain their existing meanings. Reports with observations use sweep schema v2;
-ordinary reports remain v1. The sweep CLI accepts `--checker=EXEC` and returns a
-nonzero status if a certified candidate's sampled verification does not pass.
+retain their existing meanings. All sweep reports use schema v3; observations
+are optional. The sweep CLI accepts `--checker=EXEC` and returns a nonzero status
+if a certified candidate's sampled verification does not pass.

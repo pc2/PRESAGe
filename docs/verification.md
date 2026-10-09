@@ -1328,3 +1328,40 @@ The complete error bound is zero. Table allocation is eight assumed 512-by-32
 blocks, including the center table. AP/Vitis and AC/oneAPI CMake builds with
 tracing disabled both pass the standalone C++ checker through CTest.
 Actual BRAM inference and timing still require synthesis.
+
+## Memory-aware sweep selection
+
+Sweeps now rank certified candidates under an explicit block-memory model and
+optional block budget. Memory and arithmetic priorities use deterministic
+lexicographic costs, with request order resolving exact ties. Changing the model,
+budget or priority reuses existing plans and certificates. Selected artifacts
+are published together with schema-v3 reports.
+
+| Check | Assertions | Coverage |
+| --- | ---: | --- |
+| Candidate selection | 78 | Depth/width tiling, center storage, individual coefficient widths, inclusive budgets, priorities, per-contract choices, ties, failed/late proofs, huge exact counts and report consistency. |
+| Artifact publication | 27 | Exact plan/certificate replay, partial sweeps, replacement, stale selections, unrelated files, rollback and destination collisions. |
+| CLI and selected evaluator conformance | 286 | Fresh generation, model changes through cached numerical replay, CLI validation and exit status, exhaustive small fixed inputs, portable/AP/AC CPU APIs and AP/AC kernel intermediates. |
+
+These 391 new assertions pass, along with the existing 121 sweep/cache checks.
+The complete sampled-verification suite passes 219 checks, including 49 new
+checks for exact finite reference identities. The checker now treats identities
+such as `exp(0)=1` according to the declared absolute-error allowance; these
+references do not impose correct rounding. Exact IR bit agreement and non-numeric
+special-result checks remain independent requirements.
+
+The [memory sweep example](../examples/memory_sweep.jl) generates `exp(x)` on
+`[-1,1]` with a 12-bit fixed input, 32-bit fixed output and target `2^-18`.
+Under a 512-by-32 model and five-block budget, it selects a 512-row linear
+polynomial occupying three modeled blocks. Under a 128-by-32 model, it selects
+a 128-row cubic occupying five blocks. Their complete bounds are
+`2.598505978889244e-6` and `3.2905266981969506e-8`, respectively.
+
+Both selected plans freshly recertify. AP/Vitis and AC/oneAPI CMake builds with
+tracing disabled pass all four CTests. Separate captured-output checks pass
+their global certificates for all 1,025 accepted input words on each backend,
+with zero bit mismatches or accuracy failures. These checks add 22 assertions.
+Julia formatting and whitespace checks pass. The full package runner was not
+repeated; verification uses ordinary local C++ compilation with public vendor
+headers. Memory allocation is a configurable assumption; hardware inference,
+resource calibration and timing remain pending synthesis.

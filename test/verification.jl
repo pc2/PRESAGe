@@ -13,6 +13,7 @@ function checker_fixture(
     format;
     expected = 0,
     actual = expected,
+    reference_bits = expected,
     lower = "0/1",
     upper = lower,
     target = "1/2",
@@ -40,7 +41,7 @@ function checker_fixture(
                     hex_bits(0, format),
                     hex_bits(expected, format),
                     status,
-                    hex_bits(expected, format),
+                    hex_bits(reference_bits, format),
                     lower,
                     upper,
                     256,
@@ -375,7 +376,7 @@ mktempdir() do root
         report =
             verify_samples(p; checker, inputs = words, backend = :mpfr, directory = bundle)
         @test report["status"] == "passed"
-        @test report["counts"]["special_checked"] == 2
+        @test report["counts"]["special_checked"] == 0
         @test report["counts"]["outside_domain"] == 2
         output = joinpath(bundle, "wrong-zero.bin")
         bytes = read(joinpath(bundle, "expected.bin"))
@@ -383,7 +384,71 @@ mktempdir() do root
         write(output, bytes)
         changed = check_outputs(bundle, output; checker)
         @test changed["counts"]["bit_mismatches"] == 1
-        @test changed["counts"]["accuracy_failed"] == 1
+        @test changed["counts"]["accuracy_failed"] == 0 # Signed zeros have equal numerical value.
+    end
+
+    @testset "Exact finite references respect the declared error allowance" begin
+        for (i, format) in enumerate((IEEE32, FixedFormat(32, 6))),
+            reference_value in (0, 1),
+            delta in (-1 // 4, 1 // 4)
+
+            bits(value) =
+                format isa FloatFormat ? round_ieee(value, format) :
+                round_fixed(value, format)
+            output = bits(reference_value + delta)
+            q = PRESAGe._rational_text(PRESAGe._q(reference_value))
+            directory = joinpath(root, "finite-special-$i-$reference_value-$(delta > 0)")
+            outputs = checker_fixture(
+                directory,
+                format;
+                expected = output,
+                reference_bits = bits(reference_value),
+                lower = q,
+                upper = q,
+                status = "special",
+                target = "1/4",
+                bound = "1/4",
+            )
+            report = check_outputs(directory, outputs; checker)
+            @test report["status"] == "passed"
+            @test report["counts"]["bit_mismatches"] == 0
+            @test report["counts"]["accuracy_passed"] == 1
+            @test report["counts"]["certificate_passed"] == 1
+            @test report["counts"]["special_checked"] == 0
+        end
+        outputs = checker_fixture(
+            joinpath(root, "finite-special-over-budget"),
+            IEEE32;
+            expected = round_ieee(3 // 4, IEEE32),
+            reference_bits = round_ieee(1, IEEE32),
+            lower = "1/1",
+            upper = "1/1",
+            status = "special",
+            target = "1/8",
+            bound = "1/8",
+        )
+        report = check_outputs(dirname(outputs), outputs; checker)
+        @test report["status"] == "failed"
+        @test report["counts"]["accuracy_failed"] == 1
+        @test report["counts"]["certificate_failed"] == 1
+        for (name, output, verdict) in (
+            ("pole", PRESAGe._inf(IEEE32), "passed"),
+            ("wrong-pole", PRESAGe._nan(IEEE32), "failed"),
+        )
+            outputs = checker_fixture(
+                joinpath(root, name),
+                IEEE32;
+                expected = output,
+                reference_bits = PRESAGe._inf(IEEE32),
+                lower = "-",
+                upper = "-",
+                status = "special",
+            )
+            report = check_outputs(dirname(outputs), outputs; checker)
+            @test report["status"] == verdict
+            @test report["counts"]["special_checked"] == 1
+            @test report["counts"]["bit_mismatches"] == 0
+        end
     end
 
     @testset "Selective reference refinement and reduction transitions" begin
@@ -534,7 +599,7 @@ mktempdir() do root
         io = IOBuffer()
         write_sweep_report(io, result; observations)
         data = TOML.parse(String(take!(io)))
-        @test data["schema_version"] == 2
+        @test data["schema_version"] == 3
         @test data["rows"][1]["sampled"]["counts"]["tested"] == 65
         @test data["pareto_indices"] == collect(result.pareto_indices)
         @test_throws ArgumentError write_sweep_report(
@@ -558,7 +623,7 @@ mktempdir() do root
         destination = joinpath(root, "cli-sweep")
         @test sweep_main([contract, settings, destination, "--checker=$checker"]) == 0
         data = TOML.parsefile(joinpath(destination, "sweep.toml"))
-        @test data["schema_version"] == 2
+        @test data["schema_version"] == 3
         @test data["rows"][1]["sampled"]["status"] == "passed"
     end
 end

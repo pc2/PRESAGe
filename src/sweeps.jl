@@ -8,6 +8,14 @@ struct PolynomialSweepRow
     compute_seconds::Float64
 end
 
+"""One contract's selected row, or an explicit reason no certified design was eligible."""
+struct PolynomialSweepSelection
+    spec_index::Int
+    row_index::Union{Nothing, Int}
+    status::Symbol
+    reason::String
+end
+
 """All completed/started candidates in request order; Pareto indices refer to rows."""
 struct PolynomialSweepResult
     specs::Tuple{Vararg{FunctionSpec}}
@@ -19,29 +27,149 @@ struct PolynomialSweepResult
     elapsed_seconds::Float64
     stop_reason::Symbol
     max_parallel::Int
+    memory_model::BlockMemoryModel
+    max_table_blocks::Union{Nothing, BigInt}
+    objective::Symbol
+    selections::Tuple{Vararg{PolynomialSweepSelection}}
 end
 
-function _sweep_metrics(row)
+const _SWEEP_PARETO_METRICS = (
+    :total_bound,
+    :table_blocks,
+    :arithmetic_result_bits,
+    :operand_bits,
+    :stage_bits,
+    :comparisons,
+    :conversions,
+    :table_reads,
+)
+
+function _sweep_selection_order(objective)
+    arithmetic = (
+        :arithmetic_result_bits,
+        :operand_bits,
+        :stage_bits,
+        :comparisons,
+        :conversions,
+        :table_reads,
+    )
+    primary =
+        objective == :memory ? (:table_blocks, arithmetic...) :
+        (arithmetic..., :table_blocks)
+    return (primary..., :total_bound, :table_bits, :coefficient_bits)
+end
+
+function _validate_sweep_selection(max_table_blocks, objective)
+    (
+        max_table_blocks === nothing ||
+        max_table_blocks isa Integer &&
+        !(max_table_blocks isa Bool) &&
+        max_table_blocks >= 0
+    ) || throw(ArgumentError("max_table_blocks must be a nonnegative integer or nothing"))
+    objective in (:memory, :arithmetic) ||
+        throw(ArgumentError("objective must be memory or arithmetic"))
+    return max_table_blocks === nothing ? nothing : BigInt(max_table_blocks)
+end
+
+function _sweep_metrics(row, memory_model)
     result = row.attempt.certificate
     cost = precision_cost(result.plan)
-    (
-        result.total_bound,
-        cost.coefficient_bits,
-        cost.stage_bits,
-        cost.arithmetic_result_bits,
-        cost.table_bits,
+    implementation = implementation_cost(result.plan; memory_model)
+    return (;
+        total_bound = result.total_bound,
+        table_blocks = implementation.table_blocks,
+        arithmetic_result_bits = cost.arithmetic_result_bits,
+        operand_bits = cost.operand_bits,
+        stage_bits = cost.stage_bits,
+        comparisons = implementation.comparisons,
+        conversions = implementation.conversions,
+        table_reads = implementation.table_reads,
+        table_bits = cost.table_bits,
+        coefficient_bits = cost.coefficient_bits,
     )
 end
 
-function _sweep_pareto(rows)
+function _sweep_choices(rows, spec_count, memory_model, max_table_blocks, objective)
     passing = [i for (i, r) in enumerate(rows) if r.attempt.status == :certified]
-    metrics = Dict(i => _sweep_metrics(rows[i]) for i in passing)
-    Tuple(
-        i for i in passing if !any(passing) do j
+    metrics = Dict(i => _sweep_metrics(rows[i], memory_model) for i in passing)
+    eligible = filter(passing) do i
+        max_table_blocks === nothing || metrics[i].table_blocks <= max_table_blocks
+    end
+    pareto = Tuple(
+        rows[i].index for i in eligible if !any(eligible) do j
             rows[j].spec_index == rows[i].spec_index &&
-                all(metrics[j] .<= metrics[i]) &&
-                any(metrics[j] .< metrics[i])
+                all(k -> metrics[j][k] <= metrics[i][k], _SWEEP_PARETO_METRICS) &&
+                any(k -> metrics[j][k] < metrics[i][k], _SWEEP_PARETO_METRICS)
         end
+    )
+    order = _sweep_selection_order(objective)
+    selections = Tuple(
+        map(1:spec_count) do spec_index
+            choices = filter(i -> rows[i].spec_index == spec_index, eligible)
+            if isempty(choices)
+                certified = count(i -> rows[i].spec_index == spec_index, passing)
+                if certified == 0
+                    return PolynomialSweepSelection(
+                        spec_index,
+                        nothing,
+                        :no_certified_candidate,
+                        "No certified candidate among the completed rows for this contract",
+                    )
+                end
+                return PolynomialSweepSelection(
+                    spec_index,
+                    nothing,
+                    :memory_budget_exceeded,
+                    "All $certified certified candidates exceed the $max_table_blocks modeled table-block budget",
+                )
+            end
+            key(i) = (Tuple(metrics[i][k] for k in order)..., rows[i].index)
+            chosen = first(sort(choices; by = key))
+            cost = metrics[chosen]
+            PolynomialSweepSelection(
+                spec_index,
+                rows[chosen].index,
+                :selected,
+                "Selected row $(rows[chosen].index) from $(length(choices)) eligible certified candidates using $objective priority; $(cost.table_blocks) modeled table blocks, $(cost.arithmetic_result_bits) arithmetic result bits, $(cost.comparisons) comparisons; exact ties use request order",
+            )
+        end,
+    )
+    return pareto, selections
+end
+
+"""
+    select_sweep(result; memory_model=result.memory_model,
+        max_table_blocks=result.max_table_blocks, objective=result.objective)
+
+Recompute Pareto membership and one selection per contract from existing
+certified rows, without numerical workers or new proofs. `:memory` prioritizes
+modeled blocks; `:arithmetic` prioritizes declared arithmetic widths. The exact
+lexicographic order is recorded in reports. Exclude over-budget rows from both
+selection and Pareto membership while retaining their certificates in the result.
+"""
+function select_sweep(
+    result::PolynomialSweepResult;
+    memory_model::BlockMemoryModel = result.memory_model,
+    max_table_blocks = result.max_table_blocks,
+    objective::Symbol = result.objective,
+)
+    budget = _validate_sweep_selection(max_table_blocks, objective)
+    pareto, selections =
+        _sweep_choices(result.rows, length(result.specs), memory_model, budget, objective)
+    return PolynomialSweepResult(
+        result.specs,
+        result.config,
+        result.mode,
+        result.status,
+        result.rows,
+        pareto,
+        result.elapsed_seconds,
+        result.stop_reason,
+        result.max_parallel,
+        memory_model,
+        budget,
+        objective,
+        selections,
     )
 end
 
@@ -196,14 +324,18 @@ function _sweep_job(
 end
 
 """
-    sweep_polynomial(spec_or_specs_or_plan, config; max_parallel=1, cache=nothing)
+    sweep_polynomial(spec_or_specs_or_plan, config; max_parallel=1, cache=nothing,
+        memory_model=BlockMemoryModel(), max_table_blocks=nothing, objective=:memory)
 
 Evaluate every candidate in spec/segment/degree/format order, up to the global
 `config.max_attempts` and `total_timeout`. Run at most `max_parallel` owned Julia
 workers concurrently; job limits include startup. Preserve failures and order
 regardless of completion order. `status=:complete` means all choices were visited,
-not that every candidate passed. Pareto indices compare certified rows within
-each spec using total error and declared coefficient/stage/arithmetic/table bits.
+not that every candidate passed. Pareto indices compare eligible certified rows
+within each spec using total error, modeled blocks, declared arithmetic widths
+and static comparison/conversion/table-read counts. Select one candidate per
+contract under the optional table-block budget, using an explicit lexicographic
+memory or arithmetic priority. Costs are local proxies, not synthesis estimates.
 
 A stored plan requires explicit layouts with unchanged coordinates and coefficient
 storage, plus matching degree/segments/transformation/evaluation. Only stage widths
@@ -217,19 +349,34 @@ sweep_polynomial(
     config::PolynomialSearchConfig;
     max_parallel::Integer = 1,
     cache::Union{Nothing, NumericalCache} = nothing,
-) = _sweep_polynomial(inputs, config; max_parallel, cache)
+    memory_model::BlockMemoryModel = BlockMemoryModel(),
+    max_table_blocks = nothing,
+    objective::Symbol = :memory,
+) = _sweep_polynomial(
+    inputs,
+    config;
+    max_parallel,
+    cache,
+    memory_model,
+    max_table_blocks,
+    objective,
+)
 
 function _sweep_polynomial(
     inputs,
     config;
     max_parallel::Integer = 1,
     cache = nothing,
+    memory_model::BlockMemoryModel = BlockMemoryModel(),
+    max_table_blocks = nothing,
+    objective::Symbol = :memory,
     worker_command = _polynomial_worker_command,
     process_started = (process, directory) -> nothing,
     cache_identity = _numerical_identity,
 )
     !(max_parallel isa Bool) && 1 <= max_parallel <= 64 ||
         throw(ArgumentError("max_parallel must be an integer in 1:64"))
+    budget = _validate_sweep_selection(max_table_blocks, objective)
     specs, requests, count, mode = _sweep_requests(inputs, config)
     started = time_ns()
     identity = cache === nothing ? nothing : cache_identity()
@@ -285,25 +432,40 @@ function _sweep_polynomial(
     reason =
         _search_remaining(started, config.total_timeout) <= 0 ? :total_deadline :
         BigInt(length(rows)) < count ? :attempt_limit : :choices_exhausted
+    pareto, selections =
+        _sweep_choices(rows, length(specs), memory_model, budget, objective)
     PolynomialSweepResult(
         specs,
         config,
         mode,
         reason == :choices_exhausted ? :complete : :sweep_limit,
         rows,
-        _sweep_pareto(rows),
+        pareto,
         _elapsed(started),
         reason,
         Int(max_parallel),
+        memory_model,
+        budget,
+        objective,
+        selections,
     )
 end
+
+# TOML integers are signed 64-bit; retain larger modeled counts as decimal text.
+_sweep_integer_data(value::Integer) =
+    typemin(Int64) <= value <= typemax(Int64) ? Int64(value) : string(value)
+
+_sweep_selection_paths(selection) = (
+    plan = "selected/$(selection.spec_index)/plan.toml",
+    certificate = "selected/$(selection.spec_index)/certificate.toml",
+)
 
 function _sweep_data(result; observations = Dict())
     all(i -> i in (r.index for r in result.rows), keys(observations)) ||
         throw(ArgumentError("observation index is not a sweep row"))
     data = Dict{String, Any}(
         "schema" => "presage-polynomial-sweep",
-        "schema_version" => isempty(observations) ? 1 : 2,
+        "schema_version" => 3,
         "status" => string(result.status),
         "stop_reason" => string(result.stop_reason),
         "mode" => string(result.mode),
@@ -312,14 +474,36 @@ function _sweep_data(result; observations = Dict())
         "max_parallel" => result.max_parallel,
         "elapsed_seconds" => result.elapsed_seconds,
         "pareto_indices" => collect(result.pareto_indices),
-        "pareto_metrics" => [
-            "total_bound",
-            "coefficient_bits",
-            "stage_bits",
-            "arithmetic_result_bits",
-            "table_bits",
-        ],
+        "pareto_metrics" => string.(collect(_SWEEP_PARETO_METRICS)),
+        "memory_model" => Dict(
+            "depth" => result.memory_model.depth,
+            "word_bits" => result.memory_model.word_bits,
+        ),
+        "selection_policy" => Dict{String, Any}(
+            "objective" => string(result.objective),
+            "order" => [
+                string.(_sweep_selection_order(result.objective))...,
+                "request_index",
+            ],
+        ),
     )
+    result.max_table_blocks === nothing || (
+        data["selection_policy"]["max_table_blocks"] =
+            _sweep_integer_data(result.max_table_blocks)
+    )
+    data["selections"] = map(collect(result.selections)) do selection
+        d = Dict{String, Any}(
+            "spec_index" => selection.spec_index,
+            "status" => string(selection.status),
+            "reason" => selection.reason,
+        )
+        if selection.row_index !== nothing
+            d["row_index"] = selection.row_index
+            paths = _sweep_selection_paths(selection)
+            d["plan_path"], d["certificate_path"] = paths.plan, paths.certificate
+        end
+        d
+    end
     data["rows"] = map(collect(result.rows)) do row
         a = row.attempt
         d = Dict{String, Any}(
@@ -333,6 +517,7 @@ function _sweep_data(result; observations = Dict())
             "elapsed_seconds" => a.elapsed_seconds,
             "compute_seconds" => row.compute_seconds,
             "cache_status" => string(row.cache_status),
+            "selection_eligible" => false,
         )
         row.cache_key === nothing || (d["cache_key"] = row.cache_key)
         a.precision === nothing || (d["precision"] = _precision_data(a.precision))
@@ -343,7 +528,9 @@ function _sweep_data(result; observations = Dict())
             d["plan"] = _plan_data(a.plan)
             if a.plan.program !== nothing
                 d["operations"] = Dict(
-                    string(k) => v for (k, v) in pairs(implementation_cost(a.plan))
+                    string(k) => _sweep_integer_data(v) for (k, v) in pairs(
+                        implementation_cost(a.plan; memory_model = result.memory_model),
+                    )
                 )
                 # Interrupted/malformed candidates may not have auditable widths.
                 try
@@ -353,6 +540,17 @@ function _sweep_data(result; observations = Dict())
                 end
             end
         end
+        if a.status == :certified
+            cost = _sweep_metrics(row, result.memory_model)
+            d["selection_cost"] = Dict(
+                string(k) =>
+                    k == :total_bound ? _rational_text(v) : _sweep_integer_data(v)
+                for (k, v) in pairs(cost)
+            )
+            d["selection_eligible"] =
+                result.max_table_blocks === nothing ||
+                cost.table_blocks <= result.max_table_blocks
+        end
         a.certificate === nothing ||
             (d["certificate"] = _certificate_data(a.certificate))
         haskey(observations, row.index) && (d["sampled"] = observations[row.index])
@@ -361,7 +559,7 @@ function _sweep_data(result; observations = Dict())
     data
 end
 
-"""Write every candidate, exact artifacts, error contributions and structural Pareto set."""
+"""Write every candidate, exact artifacts, assumed memory model, Pareto set and selections."""
 write_sweep_report(io::IO, result::PolynomialSweepResult; observations = Dict()) =
     TOML.print(io, _sweep_data(result; observations); sorted = true)
 write_sweep_report(path::AbstractString, result::PolynomialSweepResult; kwargs...) =
