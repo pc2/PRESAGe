@@ -32,6 +32,25 @@ function _write_sweep_artifacts(directory, result; observations = Dict(), instal
             mkpath(dirname(joinpath(staged, paths.plan)))
             write_plan(joinpath(staged, paths.plan), row.attempt.plan)
             write_certificate(joinpath(staged, paths.certificate), row.attempt.certificate)
+            if result.resource_model !== nothing
+                root = dirname(joinpath(staged, paths.plan))
+                write_resource_report(
+                    joinpath(root, "resources.toml"),
+                    estimate_resources(
+                        row.attempt.plan;
+                        model = result.resource_model,
+                        memory_model = result.memory_model,
+                    ),
+                )
+                model_data = _resource_model_data(result.resource_model)
+                model_data["memory"]["depth"] = result.memory_model.depth
+                model_data["memory"]["word_bits"] = result.memory_model.word_bits
+                open(
+                    io -> TOML.print(io, model_data; sorted = true),
+                    joinpath(root, "resource-model.toml"),
+                    "w",
+                )
+            end
         end
         managed = ("sweep.toml", "selected")
         isdir(joinpath(directory, "sweep.toml")) &&

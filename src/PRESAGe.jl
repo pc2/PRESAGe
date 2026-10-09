@@ -95,6 +95,15 @@ export FloatFormat,
     certify_lut,
     ImplementationModel,
     BlockMemoryModel,
+    ResourceBudget,
+    ResourceFormula,
+    ResourceRule,
+    ResourceModel,
+    read_resource_model,
+    write_resource_model,
+    estimate_resources,
+    compare_resources,
+    write_resource_report,
     table_memory_cost,
     select_implementation,
     implementation_cost,
@@ -124,8 +133,10 @@ include("cpp_ac_float.jl")
 include("cpp_cpu_emit.jl")
 include("kernels.jl")
 include("fixed_kernels.jl")
-include("cpp_kernel.jl")
 include("costs.jl")
+include("resources.jl")
+include("resource_schema.jl")
+include("cpp_kernel.jl")
 include("certificates.jl")
 include("lut.jl")
 include("polynomial_certificates.jl")

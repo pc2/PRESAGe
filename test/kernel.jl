@@ -71,6 +71,8 @@ function kernel_trace_check(fixtures, backend)
                     backend,
                     toolchain = backend == :ap_fixed ? :vitis : :oneapi,
                     trace = true,
+                    resource_model = hasproperty(fixture, :resource_model) ?
+                                     fixture.resource_model : nothing,
                 )
                 println(io, "#include \"$header\"")
             end

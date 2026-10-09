@@ -3,11 +3,13 @@ using PRESAGe
 
 function sweep_main(args)
     length(args) >= 3 || error(
-        "Usage: scripts/sweep.jl CONTRACT_OR_PLAN.toml SEARCH.toml OUTPUT_DIR [--cache=DIR] [--max-parallel=N] [--checker=EXEC] [--memory-depth=512] [--memory-word-bits=32] [--max-table-blocks=N] [--objective=memory|arithmetic]",
+        "Usage: scripts/sweep.jl CONTRACT_OR_PLAN.toml SEARCH.toml OUTPUT_DIR [--cache=DIR] [--max-parallel=N] [--checker=EXEC] [--memory-depth=N] [--memory-word-bits=N] [--max-table-blocks=N] [--resource-model=MODEL.toml] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams]",
     )
     input, settings, destination = args[1:3]
     cache, parallel, checker = nothing, 1, nothing
-    depth, word_bits, budget, objective = 512, 32, nothing, :memory
+    depth, word_bits, budget, objective = nothing, nothing, nothing, :memory
+    resource_model = nothing
+    limits = Dict{Symbol, BigInt}()
     seen = Set{String}()
     for argument in args[4:end]
         parts = split(argument, '='; limit = 2)
@@ -20,6 +22,11 @@ function sweep_main(args)
                 "--memory-word-bits",
                 "--max-table-blocks",
                 "--objective",
+                "--resource-model",
+                "--max-luts",
+                "--max-ffs",
+                "--max-dsps",
+                "--max-rams",
             ) &&
             !(parts[1] in seen) || error("Invalid or duplicate option: $argument")
         push!(seen, parts[1])
@@ -37,18 +44,28 @@ function sweep_main(args)
             word_bits = parse(Int, parts[2])
         elseif parts[1] == "--max-table-blocks"
             budget = parse(BigInt, parts[2])
+        elseif parts[1] == "--resource-model"
+            resource_model = read_resource_model(parts[2])
+        elseif startswith(parts[1], "--max-")
+            limits[Symbol(parts[1][7:end])] = parse(BigInt, parts[2])
         else
             objective = Symbol(parts[2])
         end
     end
     plan = read_plan(input)
     config = read_search_config(settings)
+    memory = resource_model === nothing ? BlockMemoryModel() : resource_model.memory
     result = sweep_polynomial(
         plan.program === nothing ? plan.spec : plan,
         config;
         cache,
         max_parallel = parallel,
-        memory_model = BlockMemoryModel(; depth, word_bits),
+        memory_model = BlockMemoryModel(
+            depth = depth === nothing ? memory.depth : depth,
+            word_bits = word_bits === nothing ? memory.word_bits : word_bits,
+        ),
+        resource_model,
+        resource_budget = ResourceBudget(; limits...),
         max_table_blocks = budget,
         objective,
     )

@@ -31,6 +31,8 @@ struct PolynomialSweepResult
     max_table_blocks::Union{Nothing, BigInt}
     objective::Symbol
     selections::Tuple{Vararg{PolynomialSweepSelection}}
+    resource_model::Union{Nothing, ResourceModel}
+    resource_budget::ResourceBudget
 end
 
 const _SWEEP_PARETO_METRICS = (
@@ -44,7 +46,11 @@ const _SWEEP_PARETO_METRICS = (
     :table_reads,
 )
 
-function _sweep_selection_order(objective)
+_sweep_pareto_metrics(model) =
+    model === nothing ? _SWEEP_PARETO_METRICS :
+    (_SWEEP_PARETO_METRICS..., _RESOURCE_NAMES...)
+
+function _sweep_selection_order(objective, model = nothing)
     arithmetic = (
         :arithmetic_result_bits,
         :operand_bits,
@@ -55,27 +61,40 @@ function _sweep_selection_order(objective)
     )
     primary =
         objective == :memory ? (:table_blocks, arithmetic...) :
-        (arithmetic..., :table_blocks)
+        objective == :arithmetic ? (arithmetic..., :table_blocks) :
+        objective == :resources ? (model.priority..., :table_blocks, arithmetic...) :
+        (objective, :table_blocks, arithmetic...)
     return (primary..., :total_bound, :table_bits, :coefficient_bits)
 end
 
-function _validate_sweep_selection(max_table_blocks, objective)
+function _validate_sweep_selection(
+    max_table_blocks,
+    objective,
+    model = nothing,
+    resources = ResourceBudget(),
+)
     (
         max_table_blocks === nothing ||
         max_table_blocks isa Integer &&
         !(max_table_blocks isa Bool) &&
         max_table_blocks >= 0
     ) || throw(ArgumentError("max_table_blocks must be a nonnegative integer or nothing"))
-    objective in (:memory, :arithmetic) ||
-        throw(ArgumentError("objective must be memory or arithmetic"))
+    objective in (:memory, :arithmetic, :resources, _RESOURCE_NAMES...) ||
+        throw(ArgumentError("unknown sweep objective $objective"))
+    model !== nothing ||
+        (
+            objective in (:memory, :arithmetic) &&
+            all(name -> getfield(resources, name) === nothing, _RESOURCE_NAMES)
+        ) ||
+        throw(ArgumentError("resource objectives and budgets require a resource_model"))
     return max_table_blocks === nothing ? nothing : BigInt(max_table_blocks)
 end
 
-function _sweep_metrics(row, memory_model)
+function _sweep_metrics(row, memory_model, resource_model = nothing)
     result = row.attempt.certificate
     cost = precision_cost(result.plan)
     implementation = implementation_cost(result.plan; memory_model)
-    return (;
+    metrics = (;
         total_bound = result.total_bound,
         table_blocks = implementation.table_blocks,
         arithmetic_result_bits = cost.arithmetic_result_bits,
@@ -87,22 +106,77 @@ function _sweep_metrics(row, memory_model)
         table_bits = cost.table_bits,
         coefficient_bits = cost.coefficient_bits,
     )
+    resource_model === nothing && return metrics
+    estimate = estimate_resources(result.plan; model = resource_model, memory_model)
+    return merge(metrics, estimate.totals)
 end
 
-function _sweep_choices(rows, spec_count, memory_model, max_table_blocks, objective)
-    passing = [i for (i, r) in enumerate(rows) if r.attempt.status == :certified]
-    metrics = Dict(i => _sweep_metrics(rows[i], memory_model) for i in passing)
-    eligible = filter(passing) do i
-        max_table_blocks === nothing || metrics[i].table_blocks <= max_table_blocks
+function _sweep_resource_requirements(objective, model, budget)
+    ranked =
+        objective == :resources ? model.priority :
+        objective in _RESOURCE_NAMES ? (objective,) : ()
+    return unique((
+        ranked...,
+        (name for name in _RESOURCE_NAMES if getfield(budget, name) !== nothing)...,
+    ))
+end
+
+function _sweep_eligibility(cost, max_table_blocks, objective, model, budget)
+    reasons = String[]
+    max_table_blocks === nothing ||
+        cost.table_blocks <= max_table_blocks ||
+        push!(
+            reasons,
+            "table allocation $(cost.table_blocks) exceeds block budget $max_table_blocks",
+        )
+    for name in _sweep_resource_requirements(objective, model, budget)
+        value, limit = getfield(cost, name), getfield(budget, name)
+        if value === nothing
+            push!(reasons, "$name estimate is unknown")
+        elseif limit !== nothing && value > limit
+            push!(reasons, "$name estimate $value exceeds budget $limit")
+        end
     end
+    return reasons
+end
+
+function _sweep_choices(
+    rows,
+    spec_count,
+    memory_model,
+    max_table_blocks,
+    objective,
+    resource_model = nothing,
+    resource_budget = ResourceBudget(),
+)
+    passing = [i for (i, r) in enumerate(rows) if r.attempt.status == :certified]
+    metrics =
+        Dict(i => _sweep_metrics(rows[i], memory_model, resource_model) for i in passing)
+    reasons = Dict(
+        i => _sweep_eligibility(
+            metrics[i],
+            max_table_blocks,
+            objective,
+            resource_model,
+            resource_budget,
+        ) for i in passing
+    )
+    eligible = filter(i -> isempty(reasons[i]), passing)
+    pareto_metrics = _sweep_pareto_metrics(resource_model)
     pareto = Tuple(
         rows[i].index for i in eligible if !any(eligible) do j
             rows[j].spec_index == rows[i].spec_index &&
-                all(k -> metrics[j][k] <= metrics[i][k], _SWEEP_PARETO_METRICS) &&
-                any(k -> metrics[j][k] < metrics[i][k], _SWEEP_PARETO_METRICS)
+                all(
+                    k ->
+                        metrics[j][k] !== nothing &&
+                            metrics[i][k] !== nothing &&
+                            metrics[j][k] <= metrics[i][k],
+                    pareto_metrics,
+                ) &&
+                any(k -> metrics[j][k] < metrics[i][k], pareto_metrics)
         end
     )
-    order = _sweep_selection_order(objective)
+    order = _sweep_selection_order(objective, resource_model)
     selections = Tuple(
         map(1:spec_count) do spec_index
             choices = filter(i -> rows[i].spec_index == spec_index, eligible)
@@ -116,21 +190,51 @@ function _sweep_choices(rows, spec_count, memory_model, max_table_blocks, object
                         "No certified candidate among the completed rows for this contract",
                     )
                 end
+                rejected = [i for i in passing if rows[i].spec_index == spec_index]
+                if all(
+                    i ->
+                        max_table_blocks !== nothing &&
+                            metrics[i].table_blocks > max_table_blocks,
+                    rejected,
+                )
+                    return PolynomialSweepSelection(
+                        spec_index,
+                        nothing,
+                        :memory_budget_exceeded,
+                        "All $certified certified candidates exceed the $max_table_blocks modeled table-block budget",
+                    )
+                end
+                missing = any(
+                    i -> any(reason -> occursin("unknown", reason), reasons[i]),
+                    rejected,
+                )
+                status =
+                    missing ? :resource_model_incomplete : :resource_budget_exceeded
+                detail = join(unique(vcat([reasons[i] for i in rejected]...)), "; ")
                 return PolynomialSweepSelection(
                     spec_index,
                     nothing,
-                    :memory_budget_exceeded,
-                    "All $certified certified candidates exceed the $max_table_blocks modeled table-block budget",
+                    status,
+                    "No eligible candidate among $certified certified rows: $detail",
                 )
             end
             key(i) = (Tuple(metrics[i][k] for k in order)..., rows[i].index)
             chosen = first(sort(choices; by = key))
             cost = metrics[chosen]
+            resources =
+                resource_model === nothing ? "" :
+                "; " * join(
+                    [
+                        "$name=$(cost[name] === nothing ? "unknown" : cost[name])" for
+                        name in _RESOURCE_NAMES
+                    ],
+                    ", ",
+                )
             PolynomialSweepSelection(
                 spec_index,
                 rows[chosen].index,
                 :selected,
-                "Selected row $(rows[chosen].index) from $(length(choices)) eligible certified candidates using $objective priority; $(cost.table_blocks) modeled table blocks, $(cost.arithmetic_result_bits) arithmetic result bits, $(cost.comparisons) comparisons; exact ties use request order",
+                "Selected row $(rows[chosen].index) from $(length(choices)) eligible certified candidates using $objective priority; $(cost.table_blocks) modeled table blocks, $(cost.arithmetic_result_bits) arithmetic result bits, $(cost.comparisons) comparisons$resources; exact ties use request order",
             )
         end,
     )
@@ -139,7 +243,8 @@ end
 
 """
     select_sweep(result; memory_model=result.memory_model,
-        max_table_blocks=result.max_table_blocks, objective=result.objective)
+        max_table_blocks=result.max_table_blocks, objective=result.objective,
+        resource_model=result.resource_model, resource_budget=result.resource_budget)
 
 Recompute Pareto membership and one selection per contract from existing
 certified rows, without numerical workers or new proofs. `:memory` prioritizes
@@ -152,10 +257,24 @@ function select_sweep(
     memory_model::BlockMemoryModel = result.memory_model,
     max_table_blocks = result.max_table_blocks,
     objective::Symbol = result.objective,
+    resource_model::Union{Nothing, ResourceModel} = result.resource_model,
+    resource_budget::ResourceBudget = result.resource_budget,
 )
-    budget = _validate_sweep_selection(max_table_blocks, objective)
-    pareto, selections =
-        _sweep_choices(result.rows, length(result.specs), memory_model, budget, objective)
+    budget = _validate_sweep_selection(
+        max_table_blocks,
+        objective,
+        resource_model,
+        resource_budget,
+    )
+    pareto, selections = _sweep_choices(
+        result.rows,
+        length(result.specs),
+        memory_model,
+        budget,
+        objective,
+        resource_model,
+        resource_budget,
+    )
     return PolynomialSweepResult(
         result.specs,
         result.config,
@@ -170,6 +289,8 @@ function select_sweep(
         budget,
         objective,
         selections,
+        resource_model,
+        resource_budget,
     )
 end
 
@@ -335,7 +456,8 @@ not that every candidate passed. Pareto indices compare eligible certified rows
 within each spec using total error, modeled blocks, declared arithmetic widths
 and static comparison/conversion/table-read counts. Select one candidate per
 contract under the optional table-block budget, using an explicit lexicographic
-memory or arithmetic priority. Costs are local proxies, not synthesis estimates.
+memory, arithmetic or resource priority. Resource limits/ranking require known
+estimates from an editable profile. Costs remain assumptions pending synthesis.
 
 A stored plan requires explicit layouts with unchanged coordinates and coefficient
 storage, plus matching degree/segments/transformation/evaluation. Only stage widths
@@ -349,7 +471,10 @@ sweep_polynomial(
     config::PolynomialSearchConfig;
     max_parallel::Integer = 1,
     cache::Union{Nothing, NumericalCache} = nothing,
-    memory_model::BlockMemoryModel = BlockMemoryModel(),
+    resource_model::Union{Nothing, ResourceModel} = nothing,
+    resource_budget::ResourceBudget = ResourceBudget(),
+    memory_model::BlockMemoryModel = resource_model === nothing ? BlockMemoryModel() :
+                                     resource_model.memory,
     max_table_blocks = nothing,
     objective::Symbol = :memory,
 ) = _sweep_polynomial(
@@ -358,6 +483,8 @@ sweep_polynomial(
     max_parallel,
     cache,
     memory_model,
+    resource_model,
+    resource_budget,
     max_table_blocks,
     objective,
 )
@@ -367,7 +494,10 @@ function _sweep_polynomial(
     config;
     max_parallel::Integer = 1,
     cache = nothing,
-    memory_model::BlockMemoryModel = BlockMemoryModel(),
+    resource_model::Union{Nothing, ResourceModel} = nothing,
+    resource_budget::ResourceBudget = ResourceBudget(),
+    memory_model::BlockMemoryModel = resource_model === nothing ? BlockMemoryModel() :
+                                     resource_model.memory,
     max_table_blocks = nothing,
     objective::Symbol = :memory,
     worker_command = _polynomial_worker_command,
@@ -376,7 +506,12 @@ function _sweep_polynomial(
 )
     !(max_parallel isa Bool) && 1 <= max_parallel <= 64 ||
         throw(ArgumentError("max_parallel must be an integer in 1:64"))
-    budget = _validate_sweep_selection(max_table_blocks, objective)
+    budget = _validate_sweep_selection(
+        max_table_blocks,
+        objective,
+        resource_model,
+        resource_budget,
+    )
     specs, requests, count, mode = _sweep_requests(inputs, config)
     started = time_ns()
     identity = cache === nothing ? nothing : cache_identity()
@@ -432,8 +567,15 @@ function _sweep_polynomial(
     reason =
         _search_remaining(started, config.total_timeout) <= 0 ? :total_deadline :
         BigInt(length(rows)) < count ? :attempt_limit : :choices_exhausted
-    pareto, selections =
-        _sweep_choices(rows, length(specs), memory_model, budget, objective)
+    pareto, selections = _sweep_choices(
+        rows,
+        length(specs),
+        memory_model,
+        budget,
+        objective,
+        resource_model,
+        resource_budget,
+    )
     PolynomialSweepResult(
         specs,
         config,
@@ -448,6 +590,8 @@ function _sweep_polynomial(
         budget,
         objective,
         selections,
+        resource_model,
+        resource_budget,
     )
 end
 
@@ -465,7 +609,7 @@ function _sweep_data(result; observations = Dict())
         throw(ArgumentError("observation index is not a sweep row"))
     data = Dict{String, Any}(
         "schema" => "presage-polynomial-sweep",
-        "schema_version" => 3,
+        "schema_version" => result.resource_model === nothing ? 3 : 4,
         "status" => string(result.status),
         "stop_reason" => string(result.stop_reason),
         "mode" => string(result.mode),
@@ -474,7 +618,8 @@ function _sweep_data(result; observations = Dict())
         "max_parallel" => result.max_parallel,
         "elapsed_seconds" => result.elapsed_seconds,
         "pareto_indices" => collect(result.pareto_indices),
-        "pareto_metrics" => string.(collect(_SWEEP_PARETO_METRICS)),
+        "pareto_metrics" =>
+            string.(collect(_sweep_pareto_metrics(result.resource_model))),
         "memory_model" => Dict(
             "depth" => result.memory_model.depth,
             "word_bits" => result.memory_model.word_bits,
@@ -482,11 +627,16 @@ function _sweep_data(result; observations = Dict())
         "selection_policy" => Dict{String, Any}(
             "objective" => string(result.objective),
             "order" => [
-                string.(_sweep_selection_order(result.objective))...,
+                string.(_sweep_selection_order(result.objective, result.resource_model))...,
                 "request_index",
             ],
         ),
     )
+    if result.resource_model !== nothing
+        data["resource_model"] = _resource_model_data(result.resource_model)
+        data["selection_policy"]["resource_budget"] =
+            _resource_budget_data(result.resource_budget)
+    end
     result.max_table_blocks === nothing || (
         data["selection_policy"]["max_table_blocks"] =
             _sweep_integer_data(result.max_table_blocks)
@@ -527,6 +677,15 @@ function _sweep_data(result; observations = Dict())
         if a.plan !== nothing
             d["plan"] = _plan_data(a.plan)
             if a.plan.program !== nothing
+                if result.resource_model !== nothing
+                    d["resources"] = _resource_estimate_data(
+                        estimate_resources(
+                            a.plan;
+                            model = result.resource_model,
+                            memory_model = result.memory_model,
+                        ),
+                    )
+                end
                 d["operations"] = Dict(
                     string(k) => _sweep_integer_data(v) for (k, v) in pairs(
                         implementation_cost(a.plan; memory_model = result.memory_model),
@@ -541,15 +700,22 @@ function _sweep_data(result; observations = Dict())
             end
         end
         if a.status == :certified
-            cost = _sweep_metrics(row, result.memory_model)
+            cost = _sweep_metrics(row, result.memory_model, result.resource_model)
             d["selection_cost"] = Dict(
                 string(k) =>
+                    v === nothing ? "unknown" :
                     k == :total_bound ? _rational_text(v) : _sweep_integer_data(v)
                 for (k, v) in pairs(cost)
             )
-            d["selection_eligible"] =
-                result.max_table_blocks === nothing ||
-                cost.table_blocks <= result.max_table_blocks
+            reasons = _sweep_eligibility(
+                cost,
+                result.max_table_blocks,
+                result.objective,
+                result.resource_model,
+                result.resource_budget,
+            )
+            d["selection_eligible"] = isempty(reasons)
+            isempty(reasons) || (d["selection_reasons"] = reasons)
         end
         a.certificate === nothing ||
             (d["certificate"] = _certificate_data(a.certificate))

@@ -210,8 +210,10 @@ inference, device resources and timing require vendor synthesis.
 
 `implementation_cost(plan)` exposes the default model's block count, allocated
 bits and assumed depth/word width alongside its existing static IR counts.
-Use `memory_model=BlockMemoryModel(...)` to change those assumptions. The sweep
-Pareto criteria continue to use logical table bits and arithmetic counts.
+Use `memory_model=BlockMemoryModel(...)` to change those assumptions. Sweep
+Pareto criteria use modeled blocks, certified error, arithmetic widths and
+comparison/conversion/table-read counts; logical storage remains diagnostic.
+See [sweep selection](sweeps.md#memory-budgets-and-design-selection).
 
 ## Floating interfaces
 

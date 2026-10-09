@@ -151,6 +151,6 @@ This is separate postprocessing after the bounded search, with its own sampling
 and reference limits. It checks available interpreter graphs, including candidates
 that exceed the proof budget, and preserves expected arithmetic/domain failures
 as observations. Search deadlines, cache payloads and certified Pareto metrics
-retain their existing meanings. All sweep reports use schema v3; observations
-are optional. The sweep CLI accepts `--checker=EXEC` and returns a nonzero status
+retain their existing meanings. Sweep reports use schema v3, or v4 with a resource
+profile; observations are optional. The sweep CLI accepts `--checker=EXEC` and returns a nonzero status
 if a certified candidate's sampled verification does not pass.

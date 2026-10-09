@@ -18,6 +18,7 @@ if(PRESAGE_CHECKER_ONLY)
 endif()
 find_program(PRESAGE_JULIA julia REQUIRED)
 set(PRESAGE_PLAN "" CACHE FILEPATH "Existing evaluator plan; empty generates a fresh erf candidate")
+set(PRESAGE_RESOURCE_MODEL "" CACHE FILEPATH "Optional editable resource profile and kernel memory policy")
 set(PRESAGE_TARGET cpu CACHE STRING "Evaluator target: cpu or kernel")
 set_property(CACHE PRESAGE_TARGET PROPERTY STRINGS cpu kernel)
 set(PRESAGE_TOOLCHAIN generic CACHE STRING "Kernel memory hints: generic, vitis or oneapi")
@@ -71,7 +72,8 @@ if(PRESAGE_PLAN)
         trace = ARGS[5] == "ON"
         header = sprint() do io
             if ARGS[3] == "kernel"
-                emit_kernel(io, p; backend, trace)
+                model = isempty(ARGS[6]) ? nothing : read_resource_model(ARGS[6])
+                emit_kernel(io, p; backend, trace, resource_model = model)
             else
                 emit_cpp(io, p; backend, trace, float_backend = Symbol(ARGS[2]))
             end
@@ -80,7 +82,7 @@ if(PRESAGE_PLAN)
         ac = occursin(r"#include <ac_(std_float|fixed|int)\.h>", header)
         print(gmp ? "ON" : "OFF", " ", ac ? "ON" : "OFF")
       ]=]
-      "${PRESAGE_PLAN}" "${PRESAGE_FLOAT_BACKEND}" "${PRESAGE_TARGET}" "${PRESAGE_BACKEND}" "${PRESAGE_TRACE}"
+      "${PRESAGE_PLAN}" "${PRESAGE_FLOAT_BACKEND}" "${PRESAGE_TARGET}" "${PRESAGE_BACKEND}" "${PRESAGE_TRACE}" "${PRESAGE_RESOURCE_MODEL}"
     RESULT_VARIABLE inspect_result OUTPUT_VARIABLE resources OUTPUT_STRIP_TRAILING_WHITESPACE)
   if(NOT inspect_result EQUAL 0)
     message(FATAL_ERROR "Could not inspect evaluator plan dependencies")
@@ -96,6 +98,11 @@ else()
   set(options "--evaluation=${PRESAGE_EVALUATION}" "--internal=${PRESAGE_INTERNAL}")
 endif()
 list(APPEND options "--backend=${PRESAGE_BACKEND}")
+set(resource_outputs)
+if(PRESAGE_RESOURCE_MODEL)
+  list(APPEND options "--resource-model=${PRESAGE_RESOURCE_MODEL}")
+  set(resource_outputs "${generated}/resources.toml" "${generated}/resource-model.toml")
+endif()
 list(APPEND options "--target=${PRESAGE_TARGET}")
 set(trace_options)
 if(PRESAGE_TRACE)
@@ -116,12 +123,12 @@ else()
   list(APPEND options --certify=false)
 endif()
 add_custom_command(
-  OUTPUT "${generated}/evaluator.hpp" "${generated}/evaluate.cpp" "${generated}/plan.toml" ${certificate_output}
+  OUTPUT "${generated}/evaluator.hpp" "${generated}/evaluate.cpp" "${generated}/plan.toml" ${certificate_output} ${resource_outputs}
   COMMAND "${PRESAGE_JULIA}" --startup-file=no "--project=${CMAKE_CURRENT_SOURCE_DIR}"
           "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate.jl" "${source}" "${generated}" ${options}
   DEPENDS ${PRESAGE_JULIA_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate.jl"
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generation_artifacts.jl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/polynomial_worker.jl" ${PRESAGE_PLAN}
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/polynomial_worker.jl" ${PRESAGE_PLAN} ${PRESAGE_RESOURCE_MODEL}
   VERBATIM)
 add_executable(presage_cpu "${generated}/evaluate.cpp" "${generated}/evaluator.hpp")
 target_compile_features(presage_cpu PRIVATE cxx_std_20)

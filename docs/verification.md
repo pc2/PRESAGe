@@ -1365,3 +1365,41 @@ Julia formatting and whitespace checks pass. The full package runner was not
 repeated; verification uses ordinary local C++ compilation with public vendor
 headers. Memory allocation is a configurable assumption; hardware inference,
 resource calibration and timing remain pending synthesis.
+
+## Configurable resource profiles and CI examples
+
+Five new groups pass 230 assertions:
+
+| Group | Assertions | Coverage |
+| --- | ---: | --- |
+| Exact rules and historical floating costs | 77 | All existing single/double Vitis multiply/add/FMA and oneAPI FMA constants, precision/rounding scope, first-rule priority, exact rational formulas, oriented DSP tiling, wide counts and strict profile validation. |
+| ROM policy and kernel hints | 33 | Block/distributed/auto policy, independent width/depth tiling, cyclic padding, MLAB-shaped storage, unreachable tables and matching guarded Vitis/oneAPI hints. |
+| Budgets, selection and profile replay | 30 | LUT/ALUT, FF, DSP and RAM limits/objectives, profile-defined priority, unknown required estimates, exact selected profile/report replay and preserved numerical certificates. |
+| Synthesis-count protocol and examples | 70 | Exact tolerance boundaries, missing/unknown data, pass/fail/unresolved suite exits, duplicate names, six fixed examples, two optional AC floating examples and nontrivial table columns. |
+| CLI/cache/generation integration | 20 | Resource changes reuse numerical cache entries without workers, effective memory overrides, all CLI resource limits, selected resource artifacts, generated storage hints and removal of stale companion reports. |
+
+The existing 391 sweep-selection checks and all 121 sweep/cache checks pass,
+for 742 targeted assertions. Fixed example conformance executes all 15,360
+input words per AP/AC backend, checking visited intermediate values, typed/raw
+results, lazy branches and rejection status. AC also checks 20 single/double
+floating input records, including invalid/nonfinite inputs and signed zero.
+
+The table fixtures approximate `1/(2-x)` and `sin(256*x)` with varying
+coefficients. Six AP and eight AC callable tops compile under ordinary C++17,
+with official public headers and exceptions/RTTI disabled. Both resource-aware
+CMake builds and CTests pass with tracing disabled: Vitis/AP requests distributed
+ROM for the 128-row case; oneAPI/AC requests block storage for the 512-row case.
+Each checks all 1,025 accepted fixed inputs against the IR and mathematical
+reference. Their complete bounds are `6.014950810134985e-5` and
+`3.803390878683835e-6`, within the declared `2^-10` target.
+
+Reviewable artifacts are under `build/resource-examples-vitis/`,
+`build/resource-examples-oneapi/` and `build/resource-cmake-{ap,ac}/`.
+The normalized measurement checker was tested with explicitly synthetic counts;
+no synthesis measurements were fabricated or used for calibration. Historical
+floating constants remain initial estimates for matching rules. Fixed/control
+costs, DSP dimensions, ROM thresholds and register coefficients remain editable
+assumptions. Actual vendor compilation, simulation, inference and resource
+accuracy are later CI gates. See [resource models](resources.md).
+Julia formatting and whitespace checks pass. The full package runner was not
+repeated, and Sollya.jl was not changed.

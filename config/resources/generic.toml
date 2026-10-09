@@ -1,0 +1,152 @@
+# Editable assumptions. Fixed/control costs and DSP dimensions are illustrative.
+# Floating constants below are copied from generator/ResourceEstimation.hpp.
+# One rule per reachable node; no scheduling, sharing or constant-folding model.
+schema = "presage-resource-model"
+schema_version = 1
+name = "generic-initial"
+toolchain = "generic"
+priority = ["luts", "rams", "dsps", "ffs"]
+
+[memory]
+depth = 512
+word_bits = 32
+policy = "auto"
+# <= this padded bit count uses distributed ROM; override freely.
+distributed_max_bits = 4096
+distributed_depth = 64
+distributed_word_bits = 1
+distributed_luts = 1
+
+[dsp]
+# Illustrative usable signed operand widths; calibrate for the chosen mapping.
+operand_bits = [24, 17]
+
+[[rules]]
+operation = "input"
+luts = 0
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "constant"
+luts = 0
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "table_load"
+luts = 0
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "bitcast"
+luts = 0
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "extract_bits"
+luts = 0
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "copy_sign"
+luts = 0
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "compare"
+luts = { max_operand_bits = 1 }
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "select"
+luts = { result_bits = 1 }
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "guard"
+luts = { result_bits = 1 }
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "bitop"
+luts = { result_bits = 1 }
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "classify"
+luts = { max_operand_bits = 1 }
+ffs = 0
+dsps = 0
+rams = 0
+
+[[rules]]
+operation = "add"
+format = "fixed"
+max_width = 256
+luts = { result_bits = 1 }
+ffs = { result_bits = 1 }
+dsps = { dsp_tiles = 0 }
+rams = 0
+
+[[rules]]
+operation = "mul"
+format = "fixed"
+max_width = 256
+luts = { result_bits = 1 }
+ffs = { result_bits = 2 }
+dsps = { dsp_tiles = 1 }
+rams = 0
+
+[[rules]]
+operation = "fma"
+format = "fixed"
+max_width = 256
+luts = { result_bits = 2 }
+ffs = { result_bits = 2 }
+dsps = { dsp_tiles = 1 }
+rams = 0
+
+[[rules]]
+operation = "convert"
+format = "fixed"
+max_width = 256
+luts = { result_bits = 1 }
+ffs = { result_bits = 1 }
+dsps = { dsp_tiles = 0 }
+rams = 0
+
+[[rules]]
+operation = "scale_pow2"
+format = "fixed"
+max_width = 256
+luts = { result_bits = 1 }
+ffs = { result_bits = 1 }
+dsps = { dsp_tiles = 0 }
+rams = 0
+
+[[rules]]
+operation = "add"
+format = "uint"
+luts = { result_bits = 1 }
+ffs = { result_bits = 1 }
+dsps = 0
+rams = 0

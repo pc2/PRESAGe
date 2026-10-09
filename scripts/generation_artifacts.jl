@@ -6,6 +6,8 @@ const _GENERATION_OUTPUTS = (
     "search.toml",
     "certificate-failure.toml",
     "search-failure.toml",
+    "resources.toml",
+    "resource-model.toml",
 )
 # Remove a previously generated companion header when publishing a new bundle.
 const _GENERATION_MANAGED = (_GENERATION_OUTPUTS..., "evaluator_support.hpp")

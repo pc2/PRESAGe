@@ -57,6 +57,8 @@ function selection_fixture(
         nothing,
         :memory,
         (),
+        nothing,
+        ResourceBudget(),
     )
     return select_sweep(result)
 end
@@ -243,6 +245,8 @@ end
             result.max_table_blocks,
             result.objective,
             (),
+            result.resource_model,
+            result.resource_budget,
         )
         partial = select_sweep(limited)
         @test [s.status for s in partial.selections] == [:selected, :no_certified_candidate]

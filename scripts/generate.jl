@@ -6,7 +6,7 @@ include(joinpath(@__DIR__, "generation_artifacts.jl"))
 
 function generate_main(args)
     length(args) >= 2 || error(
-        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false] [--trace=true|false]",
+        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--resource-model=MODEL.toml] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false] [--trace=true|false]",
     )
     source, directory = args[1:2]
     options = Dict{String, String}()
@@ -38,6 +38,7 @@ function generate_main(args)
             "target",
             "toolchain",
             "trace",
+            "resource-model",
         ) || error("unknown option $key")
         haskey(options, key) && error("duplicate option $key")
         options[key] = value
@@ -62,6 +63,9 @@ function generate_main(args)
     trace_flag = get(options, "trace", "false")
     trace_flag in ("true", "false") || error("trace must be true or false")
     trace = trace_flag == "true"
+    resource_model =
+        haskey(options, "resource-model") ? read_resource_model(options["resource-model"]) :
+        nothing
     flag = get(
         options,
         "certify",
@@ -85,6 +89,7 @@ function generate_main(args)
                 "target",
                 "toolchain",
                 "trace",
+                "resource-model",
             ),
             keys(options),
         ) || error("search settings belong in the search configuration file")
@@ -243,6 +248,7 @@ function generate_main(args)
                 "target",
                 "toolchain",
                 "trace",
+                "resource-model",
             ),
             keys(options),
         ) || error("generation options require the erf source")
@@ -268,7 +274,8 @@ function generate_main(args)
     try
         if target == :kernel
             artifacts["evaluator.hpp"] = _generation_text(
-                (io, p) -> emit_kernel(io, p; name, backend, toolchain, trace),
+                (io, p) ->
+                    emit_kernel(io, p; name, backend, toolchain, trace, resource_model),
                 plan,
             )
             artifacts["evaluate.cpp"] =
@@ -282,6 +289,14 @@ function generate_main(args)
                 _generation_text((io, p) -> emit_harness(io, p; name, trace), plan.program)
         end
         artifacts["plan.toml"] = _generation_text(write_plan, plan)
+        if resource_model !== nothing
+            artifacts["resources.toml"] = _generation_text(
+                write_resource_report,
+                estimate_resources(plan; model = resource_model),
+            )
+            artifacts["resource-model.toml"] =
+                _generation_text(write_resource_model, resource_model)
+        end
         result === nothing ||
             (artifacts["certificate.toml"] = _generation_text(write_certificate, result))
         search === nothing ||
@@ -350,6 +365,17 @@ function generate_main(args)
         costs.sign_copies,
         " sign copies (static IR counts)",
     )
+    if resource_model !== nothing
+        resources = estimate_resources(plan; model = resource_model)
+        println(
+            "Resource model ",
+            resource_model.name,
+            ": ",
+            resources.status,
+            " ",
+            resources.totals,
+        )
+    end
     return plan
 end
 if abspath(PROGRAM_FILE) == @__FILE__

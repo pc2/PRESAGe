@@ -255,6 +255,7 @@ function _kernel_table(
     backend,
     toolchain;
     type = f -> _kernel_type(f, backend),
+    storage::Symbol = :auto,
 )
     width = _kernel_width(t.format)
     rows = cld(length(t.values), t.banks)
@@ -275,7 +276,7 @@ function _kernel_table(
         println(io, "#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)")
         println(
             io,
-            "    [[intel::numbanks($(t.banks)), intel::max_replicates(1), intel::fpga_memory]]",
+            "    [[intel::numbanks($(t.banks)), intel::max_replicates(1), intel::fpga_memory$(storage == :auto ? "" : storage == :block ? "(\"M20K\")" : "(\"MLAB\")")]]",
         )
         println(io, "#endif")
     end
@@ -297,6 +298,10 @@ function _kernel_table(
     if toolchain == :vitis
         println(io, "#if defined(__SYNTHESIS__)")
         println(io, "#pragma HLS array_partition variable=table complete dim=1")
+        storage == :auto || println(
+            io,
+            "#pragma HLS bind_storage variable=table type=rom_1p impl=$(storage == :block ? "bram" : "lutram")",
+        )
         println(io, "#endif")
     end
     if t.banks == 1
@@ -345,6 +350,7 @@ The header includes only the arithmetic helpers needed by its emitted operations
 `trace=true` adds optional intermediate-value instrumentation for conformance tests.
 `toolchain=:generic` uses public headers; `:vitis` and `:oneapi` select vendor
 include paths and guarded memory hints. AC floating arithmetic is nearest-even.
+`resource_model` applies its per-table block/distributed-ROM storage policy.
 """
 function emit_kernel(
     io::IO,
@@ -353,9 +359,14 @@ function emit_kernel(
     backend::Symbol = :ac_fixed,
     toolchain::Symbol = :generic,
     trace::Bool = false,
+    resource_model::Union{Nothing, ResourceModel} = nothing,
 )
     ns = _cpp_name(name)
     _kernel_validate(p, backend, toolchain)
+    resource_model === nothing ||
+        resource_model.toolchain in (:generic, toolchain) ||
+        toolchain == :generic ||
+        throw(ArgumentError("resource model toolchain does not match kernel toolchain"))
     # Validate every node before writing, including unreachable operations.
     foreach(i -> _kernel_expr(p, i, backend), eachindex(p.nodes))
     flow, scopes = _cpp_flow(p)
@@ -415,7 +426,9 @@ struct BitsResult {
     )
     for (i, t) in enumerate(p.tables)
         i in tables || continue
-        _kernel_table(body_io, i, t, backend, toolchain; type)
+        storage =
+            resource_model === nothing ? :auto : _resource_table_storage(t, resource_model)
+        _kernel_table(body_io, i, t, backend, toolchain; type, storage)
     end
     for i in sort!(collect(flow.constants))
         _kernel_emit_constant(body_io, p, i, types)
@@ -469,8 +482,9 @@ function emit_kernel(
     backend = :ac_fixed,
     toolchain = :generic,
     trace = false,
+    resource_model = nothing,
 )
-    text = sprint(io -> emit_kernel(io, p; name, backend, toolchain, trace))
+    text = sprint(io -> emit_kernel(io, p; name, backend, toolchain, trace, resource_model))
     write(path, text)
     return nothing
 end

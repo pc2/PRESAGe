@@ -1,0 +1,14 @@
+# Initial comparison tolerances; calibrate these with real synthesis evidence.
+# Allowed absolute difference = absolute + relative * measured.
+[luts]
+absolute = 5
+relative = "1/2"
+[ffs]
+absolute = 5
+relative = "1/2"
+[dsps]
+absolute = 0
+relative = 0
+[rams]
+absolute = 0
+relative = 0

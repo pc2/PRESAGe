@@ -49,8 +49,11 @@ See the [inverse trig example](examples/inverse_trig_search.jl).
 Local design sweeps evaluate all configured candidates with bounded concurrent
 workers, exact numerical caching and structural Pareto reports. A configurable
 memory model and block budget select a certified design per contract, with
-memory or arithmetic priority and exported plan/certificate pairs. Sweeps can
-also hold coefficients fixed while varying stage precision. See the
+memory or arithmetic priority and exported plan/certificate pairs. Editable
+LUT/ALUT, FF, DSP and RAM estimates support individual limits and resource
+priorities. Small synthesis examples and a normalized report checker support
+later CI calibration; see [resource models](docs/resources.md).
+Sweeps can also hold coefficients fixed while varying stage precision. See the
 [sweep workflow](docs/sweeps.md) and [guard example](examples/design_sweep.jl).
 Portable sampled verification uses Julia-generated reference bundles and one
 standalone C++ checker, shared by local runs and saved runner outputs. It reports

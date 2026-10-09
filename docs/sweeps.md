@@ -110,6 +110,13 @@ from numerical cache keys; new sweeps with the same numerical requests can reuse
 their cached proofs and recompute costs. Counts exceeding TOML's signed 64-bit
 integer range are stored as exact decimal strings.
 
+## Resource estimates
+
+For editable LUT/ALUT, FF, DSP and RAM estimates, individual limits and resource
+priorities, see [resource models](resources.md). Resource objectives require a
+profile; unknown required estimates exclude a candidate. Profiles also control
+block versus distributed ROM hints and export matching selected resource artifacts.
+
 ## Sampled observations
 
 Sampled observations can be added after the bounded sweep:
@@ -126,9 +133,9 @@ cases. The default runner is the exact interpreter; generated C++ and later devi
 outputs use the same bundle/checker. See [sampled verification](sampled-verification.md).
 Observations are separate from proof status and Pareto metrics. Their postprocessing
 does not consume the sweep's search deadline or enter its numerical cache.
-All current sweep reports use schema v3 and record the model, budget, ranking
-order, eligibility and selections. Observations are optional. The CLI's
-optional `--checker=EXEC` adds these observations and requires sampled passing
+Sweep reports use schema v3 without a resource profile and v4 with one. They
+record models, budgets, ranking order, eligibility and selections. Observations
+are optional. The CLI's optional `--checker=EXEC` adds these observations and requires sampled passing
 results for certified rows before returning success.
 
 ## Cache identity and integrity
