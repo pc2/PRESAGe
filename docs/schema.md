@@ -152,7 +152,7 @@ internal_formats = [{ format = "float(8,27)" }]
 ```
 
 Version 2 requires `segments`, an ordered list of distinct powers of two in
-1–64. An omitted `order` uses the version's default. Version 1 implies `[1]`
+1–512. An omitted `order` uses the version's default. Version 1 implies `[1]`
 and does not accept a `segments` field. Numerical settings and limits have
 the same encoding in both versions. A whole segmented candidate counts as one
 attempt and shares the same worker deadline across generation and proof of all

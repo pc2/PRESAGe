@@ -255,8 +255,10 @@ function _kernel_table(
     type = f -> _kernel_type(f, backend),
 )
     width = _kernel_width(t.format)
-    rows, chunks = cld(length(t.values), t.banks), cld(width, 64)
+    rows = cld(length(t.values), t.banks)
+    word_type = type(IR.UIntFormat(width))
     type = type(t.format)
+    load = source -> "copy_bits<$type, $width>($source)"
     println(io, "inline constexpr unsigned table$(number)_banks = $(t.banks);")
     println(io, "inline constexpr bool table$(number)_unroll = $(t.unroll);")
     println(
@@ -265,51 +267,51 @@ function _kernel_table(
     )
     println(
         io,
-        "        if (index >= $(length(t.values))) { status = Status::table_index_rejected; return $type(0); }",
+        "    if (index >= $(length(t.values))) { status = Status::table_index_rejected; return $type(0); }",
     )
     if toolchain == :oneapi
         println(io, "#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)")
         println(
             io,
-            "        [[intel::numbanks($(t.banks)), intel::max_replicates(1), intel::fpga_memory]]",
+            "    [[intel::numbanks($(t.banks)), intel::max_replicates(1), intel::fpga_memory]]",
         )
         println(io, "#endif")
     end
-    println(
-        io,
-        "        static const unsigned long long table[$(t.banks)][$rows][$chunks] = {",
-    )
+    println(io, "    static const $word_type table[$(t.banks)][$rows] = {")
     for bank = 1:(t.banks)
-        values = [
-            "{$(_kernel_chunks(index <= length(t.values) ? t.values[index] : 0,width))}"
-            for index = bank:(t.banks):(rows * t.banks)
-        ]
-        println(io, "            {")
-        for value in values
-            println(io, "                $value,")
+        values = map(bank:(t.banks):(rows * t.banks)) do index
+            bits = index <= length(t.values) ? t.values[index] : 0
+            literal = _kernel_chunks(bits, width)
+            return width <= 64 ? "$word_type($literal)" :
+                   "from_chunks<$word_type, $width>({$literal})"
         end
-        println(io, "            },")
+        println(io, "        {")
+        for value in values
+            println(io, "            $value,")
+        end
+        println(io, "        },")
     end
-    println(io, "        };")
+    println(io, "    };")
     if toolchain == :vitis
         println(io, "#if defined(__SYNTHESIS__)")
         println(io, "#pragma HLS array_partition variable=table complete dim=1")
-        println(io, "#pragma HLS array_partition variable=table complete dim=3")
         println(io, "#endif")
     end
-    println(io, "        unsigned row = index.to_uint() / $(t.banks);")
-    println(io, "        unsigned bank = index.to_uint() % $(t.banks);")
-    if t.unroll
-        println(io, "        $type result = $type(0);")
+    if t.banks == 1
+        println(io, "    unsigned row = index.to_uint();")
+        println(io, "    return $(load("table[0][row]"));")
+    elseif t.unroll
+        println(io, "    unsigned row = index.to_uint() / $(t.banks);")
+        println(io, "    unsigned bank = index.to_uint() % $(t.banks);")
+        println(io, "    $type result = $type(0);")
         for bank = 0:(t.banks - 1)
-            println(
-                io,
-                "        if (bank == $bank) result = from_chunks<$type,$width>(table[$bank][row]);",
-            )
+            println(io, "    if (bank == $bank) result = $(load("table[$bank][row]"));")
         end
-        println(io, "        return result;")
+        println(io, "    return result;")
     else
-        println(io, "        return from_chunks<$type,$width>(table[bank][row]);")
+        println(io, "    unsigned row = index.to_uint() / $(t.banks);")
+        println(io, "    unsigned bank = index.to_uint() % $(t.banks);")
+        println(io, "    return $(load("table[bank][row]"));")
     end
     println(io, "}\n")
 end
@@ -362,6 +364,10 @@ function emit_kernel(
     vendor_type = (args...) -> _cpp_vendor_alias!(types, args...)
     foreach(i -> type(p.types[i]), trace ? eachindex(p.types) : sort!(collect(reachable)))
     foreach(i -> type(p.tables[i].format), sort!(collect(tables)))
+    foreach(
+        i -> type(IR.UIntFormat(_kernel_width(p.tables[i].format))),
+        sort!(collect(tables)),
+    )
     expressions = [
         i in reachable ?
         _kernel_expr(

@@ -71,18 +71,13 @@ function _fixed_erf_layout(
     all(i -> decode_fixed(tables[1].values[i], inputformat) == -centers[i], 1:nsegments) ||
         throw(ArgumentError("coordinate precision cannot represent the segment centres"))
     nodes = IR.Node[IR.Input(interface)]
-    u32, ui = IR.UIntFormat(_width(interface)), IR.UIntFormat(8)
+    u32 = IR.UIntFormat(_width(interface))
     raw = _push!(nodes, IR.BitCast(1, u32))
     mask = _push!(nodes, IR.Const(u32, _wordmask(interface) ⊻ _sign(interface)))
     magnitude_bits = _push!(nodes, IR.BitOp(:bitand, raw, mask))
     magnitude = _push!(nodes, IR.BitCast(magnitude_bits, interface))
-    index = _push!(nodes, IR.Const(ui, 0))
-    for i = 2:nsegments
-        threshold = _push!(nodes, IR.constant((i - 1) * width, interface))
-        condition = _push!(nodes, IR.Compare(:ge, magnitude, threshold))
-        row = _push!(nodes, IR.Const(ui, i - 1))
-        index = _push!(nodes, IR.Select(condition, row, index))
-    end
+    thresholds = [round_ieee(i * width, interface) for i = 1:(nsegments - 1)]
+    index = _segment_index!(nodes, magnitude, interface, thresholds)
     ranges = [Dict{Int, _Interval}() for _ in ss]
     function record(node, values)
         for i in eachindex(ranges)
@@ -202,8 +197,7 @@ function erf_fixed_candidate(;
 )
     _check_fixed_erf_spec(spec)
     1 <= degree <= 32 || throw(ArgumentError("degree must be in 1:32"))
-    1 <= segments <= 64 && ispow2(segments) ||
-        throw(ArgumentError("segments must be a power of two up to 64"))
+    _validate_segment_count(segments)
     0 <= fraction_bits <= 256 && 0 <= coefficient_fraction_bits <= 256 ||
         throw(ArgumentError("fractional widths must be in 0:256"))
     evaluation in (:separate, :fma) || throw(ArgumentError("invalid evaluation mode"))

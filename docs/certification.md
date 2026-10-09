@@ -204,6 +204,12 @@ This API performs one synchronous attempt without a wall-time limit. Use
 
 ## Normalized segments and coverage
 
+Dispatch uses input-bit extraction when an aligned fixed grid exactly matches
+the stored thresholds, with an explicit inclusive-upper-endpoint check. Other
+layouts use a balanced comparison tree. At 512 rows, the index has nine bits.
+Certification reconstructs and audits the complete selected graph, row payloads
+and representable-domain coverage.
+
 ```julia
 spec = FunctionSpec("exp(x)"; input_format=FixedFormat(9,3),
     output_format=FixedFormat(24,4), domain=(-1,1), absolute_error=1//(1<<18))
@@ -212,7 +218,7 @@ result = certified_polynomial(spec; degree=5, segments=4,
 @assert result.status == :certified && length(result.paths) == 4
 ```
 
-`segments=1` keeps the original single polynomial. Counts 2, 4, …, 64 use equal
+`segments=1` keeps the original single polynomial. Counts 2, 4, …, 512 use equal
 subintervals of the representable contract interval. Nominal boundaries are
 exact dyadic rationals. Each emitted threshold rounds upward in the **input**
 format, with `input >= threshold` selecting the next row. Every proof path is a

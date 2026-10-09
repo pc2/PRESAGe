@@ -118,8 +118,11 @@ available plans, certificate contributions and failure reasons. See
 [search example](examples/bounded_search.jl).
 
 Add `segments=[1,4,8]` to search normalized segment counts before degrees and
-formats. Counts are powers of two up to 64; coefficient tables feed one shared
-Horner evaluator. `certified_polynomial(...; segments=4)`
+formats. Counts are powers of two up to 512; coefficient tables feed one shared
+Horner evaluator. Indices use the minimum required width (nine bits at 512),
+and aligned fixed inputs select the row directly from input bits. Other layouts
+use a balanced comparison tree with at most nine dispatch comparisons.
+`certified_polynomial(...; segments=4)`
 makes one segmented attempt. Every executed threshold and table payload is
 audited, with input conversion/subtraction/scaling and final output rounding
 included in the uniform bound. See [coverage proofs](docs/certification.md#normalized-segments-and-coverage)
@@ -416,7 +419,7 @@ tuning options. Stored plans retain their selected implementation when re-emitte
 spec = erf_spec(; format=IEEE16)
 lut = certified_erf(; spec, implementation=:lut)
 polynomial = certified_erf(; spec, implementation=:polynomial)
-implementation_cost(lut.plan) # Table bits, reads and static arithmetic counts.
+implementation_cost(lut.plan) # Table bits, assumed block allocation and IR counts.
 ```
 
 The LUT resolves every entry using adaptive reference enclosures and reproduces

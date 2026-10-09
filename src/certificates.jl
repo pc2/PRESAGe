@@ -50,7 +50,7 @@ function _erf_audit(plan)
     plan.program !== nothing || throw(ArgumentError("missing evaluator program"))
     ss = plan.segments
     n = length(ss)
-    1 <= n <= 64 && ispow2(n) || throw(ArgumentError("unsupported segmentation"))
+    _validate_segment_count(n)
     degree = length(first(ss).coefficients) - 1
     1 <= degree <= 32 && all(s -> length(s.coefficients) == degree + 1, ss) ||
         throw(ArgumentError("unsupported polynomial layout"))

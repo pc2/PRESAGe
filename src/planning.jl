@@ -117,7 +117,7 @@ succeeds, even if its bound exceeds the budget or certification fails. Numerical
 generation failures return `generation_failed` with a contract-only plan and reason.
 Invalid settings or empty representable domains throw `ArgumentError`.
 Singleton input domains use a constant from a certified point enclosure.
-With `segments=2,4,…,64`, generate normalized coefficient tables and certify
+With `segments=2,4,…,512`, generate normalized coefficient tables and certify
 every dispatch branch, including rounded coordinate formation. Internal fixed
 formats must then be signed. Empty representable branches are rejected.
 This is one synchronous attempt; it performs no search and sets no wall-time limit.

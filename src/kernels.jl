@@ -155,8 +155,7 @@ function erf_candidate(;
     precision::Integer = 256,
 )
     1 <= degree <= 32 || throw(ArgumentError("degree must be in 1:32"))
-    1 <= segments <= 64 && ispow2(segments) ||
-        throw(ArgumentError("segments must be a power of two up to 64"))
+    _validate_segment_count(segments)
     evaluation in (:separate, :fma) || throw(ArgumentError("invalid evaluation mode"))
     f = internal_format
     f in (IEEE32, IEEE64) ||
@@ -175,19 +174,14 @@ function erf_candidate(;
         push!(tables, IR.Table(f, [row[k] for row in rows]; unroll = true))
     end
     nodes = IR.Node[IR.Input(IEEE32)]
-    u32, uindex = IR.UIntFormat(32), IR.UIntFormat(8)
+    u32 = IR.UIntFormat(32)
     raw = _push!(nodes, IR.BitCast(1, u32))
     magnitude_mask = _push!(nodes, IR.Const(u32, 0x7fffffff))
     magnitude_bits = _push!(nodes, IR.BitOp(:bitand, raw, magnitude_mask))
     magnitude = _push!(nodes, IR.BitCast(magnitude_bits, IEEE32))
     coordinate_input = f == IEEE32 ? magnitude : _push!(nodes, IR.Convert(magnitude, f))
-    index = _push!(nodes, IR.Const(uindex, 0))
-    for i = 2:segments
-        threshold = _push!(nodes, IR.constant((i - 1) * width, IEEE32))
-        condition = _push!(nodes, IR.Compare(:ge, magnitude, threshold))
-        row = _push!(nodes, IR.Const(uindex, i - 1))
-        index = _push!(nodes, IR.Select(condition, row, index))
-    end
+    thresholds = [round_ieee(i * width, IEEE32) for i = 1:(segments - 1)]
+    index = _segment_index!(nodes, magnitude, IEEE32, thresholds)
     center = _push!(nodes, IR.TableLoad(1, index))
     coordinate = _push!(nodes, IR.Add(coordinate_input, center, f))
     coefficients = [_push!(nodes, IR.TableLoad(k + 1, index)) for k = 1:(degree + 1)]

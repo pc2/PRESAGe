@@ -217,10 +217,10 @@ end
     )
 
     defaults = (degrees = [1], internal_formats = [FixedFormat(24, 6)])
-    for segments in ([], [1, 1], [0], [3], [128], [true], [1.0], "4")
+    for segments in ([], [1, 1], [0], [3], [1024], [true], [1.0], "4")
         @test_throws ArgumentError PolynomialSearchConfig(; defaults..., segments)
     end
-    for segments in (0, 3, 128, true)
+    for segments in (0, 3, 1024, true)
         @test_throws ArgumentError certified_polynomial(spec; degree = 1, segments)
     end
     @test_throws ArgumentError certified_polynomial(spec; degree = 1, segments = 4)
@@ -296,7 +296,10 @@ end
         elseif n isa IR.ScalePow2
             push!(replacements, i => IR.ScalePow2(n.source, n.exponent + 1, n.format))
         elseif n isa IR.TableLoad
-            push!(replacements, i => IR.TableLoad(n.table, n.index - 4))
+            constant_index = findfirst(p.nodes) do node
+                node isa IR.Const && node.format == IR.format(p, n.index)
+            end
+            push!(replacements, i => IR.TableLoad(n.table, constant_index))
         elseif n isa IR.Add
             push!(replacements, i => IR.Add(n.b, n.a, n.format))
         elseif n isa IR.Guard

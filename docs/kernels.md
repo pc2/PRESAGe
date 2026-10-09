@@ -126,11 +126,62 @@ choose new formats or replace reduction identities.
   cyclic banks: entry `i` is in bank `i % banks`, row `i / banks`. Padding is
   inaccessible. `unroll=true` emits each bank selection explicitly. Horner
   stages are already expanded by the IR. Both metadata fields remain in the
-  header; toolchain hints may guide the physical implementation.
+  header; toolchain hints may guide the physical implementation. Each ROM entry
+  is an unsigned AP/AC word at the table format's exact width. Storage is
+  `[banks][rows]`; 64-bit chunks are used only to initialize words wider than
+  64 bits, and do not pad the ROM word.
 
 The old `generator/` inspired the table organization and compiler hints.
 Arithmetic follows the current IR and certificate, including explicit separate
 versus fused rounding.
+
+## Coefficient memory layout
+
+Normalized segmentation supports powers of two through 512. Each coefficient
+column has its own ROM, feeding one shared Horner evaluator; the negative
+centers occupy an additional ROM. Index widths are derived from the row count.
+Aligned fixed inputs select the row directly from encoded input bits. The
+segment width must be a power of two on the input grid; the lower endpoint
+must place the extracted field at phase zero or half the table depth. The
+half-depth case flips the top index bit. Construction checks that this mapping
+matches every stored threshold. One equality check assigns the inclusive upper
+endpoint to the last row instead of allowing its index to wrap.
+
+For the 12-bit signed fixed input with ten fractional bits and 512 segments
+on `[-1,1]`, the row is `((input_bits >> 2) & 511) ^ 256`, with `x == 1`
+selecting row 511. The generated evaluator then loads `table[row]`. There are
+no per-boundary or per-row dispatch constants on this path. The coefficient
+and center table initializers remain necessary to store their values.
+
+Other layouts, including floating inputs, retain a balanced tree over the exact
+stored thresholds. Equality selects the upper row. This takes at most nine
+dispatch comparisons at 512 segments.
+
+```julia
+memory = table_memory_cost(plan; model=BlockMemoryModel(depth=512, word_bits=32))
+memory.tables  # Entries, word width, cyclic banks, depth and width tiling.
+memory.blocks # Total assumed blocks, including centers.
+```
+
+The default model assumes 512 rows by 32 bits per block, following the old
+generator's coefficient layout. It is configurable and counts each table
+independently. For each table with `N` entries, word width `W` and `B` cyclic
+row banks, the assumed allocation is
+`B * ceil(ceil(N/B)/depth) * ceil(W/word_bits)` blocks. Partial banks and block
+rows consume space; unreachable tables are omitted. Different coefficient
+widths retain their individual width tiling. No packing between columns is
+assumed.
+
+A 512-row, degree-three polynomial with 32-bit coefficients therefore needs
+four modeled coefficient blocks, plus one if its center table is also 32 bits.
+A 64-bit column needs two modeled width blocks. These are layout estimates;
+local C++ checks establish payload and dispatch correctness. Actual memory
+inference, device resources and timing require vendor synthesis.
+
+`implementation_cost(plan)` exposes the default model's block count, allocated
+bits and assumed depth/word width alongside its existing static IR counts.
+Use `memory_model=BlockMemoryModel(...)` to change those assumptions. The sweep
+Pareto criteria continue to use logical table bits and arithmetic counts.
 
 ## Floating interfaces
 

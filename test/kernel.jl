@@ -510,7 +510,7 @@ end
         tables = [IR.Table(f, [0, 1, 2]; banks = 3, unroll = true)],
     )
     text = sprint(io -> emit_kernel(io, p))
-    @test occursin("table[3][1][1]", text)
+    @test occursin("static const UInt8 table[3][1]", text)
     @test occursin("table1_banks = 3", text)
     @test occursin("table1_unroll = true", text)
     @test_throws ArgumentError emit_kernel(IOBuffer(), p; toolchain = :oneapi)

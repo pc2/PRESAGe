@@ -1214,3 +1214,26 @@ correct-rounding guarantee; binary16 LUTs reproduce resolved nearest-even output
 Sollya and direct MPFR checks share MPFR algorithms, so their agreement is not
 fully independent evidence. Linux, installed vendor toolchains, synthesis and FPGA
 performance were not tested. These are separate later gates in the plan.
+
+## Exact-width coefficient ROMs and 512-row dispatch
+
+Local verification covers normalized and fixed-erf layouts through 512 rows,
+with nine-bit indices, direct fixed-bit indexing and balanced threshold dispatch.
+Official AP and AC C++17 runs compare all visited intermediate payloads, typed/raw results and
+rejection statuses against the Julia interpreter.
+
+| Check | Assertions | Coverage |
+| --- | ---: | --- |
+| Memory depth and width | 50 | Independent tiling, cyclic bank padding, configurable dimensions, unreachable tables and invalid models. |
+| Direct fixed segment indexing | 7,179 | Exhaustive signed/unsigned inputs, positive/negative intervals, phase-zero/top-bit-offset layouts, inclusive upper endpoints and comparison fallback for incompatible grids. |
+| 512-segment coefficients and certificates | 16,435 | Separate/FMA, every 12-bit fixed input, exact zero-error proof, 17/33/65/9-bit storage columns, center allocation, last-row mutation refusal, serialized replay and fresh Sollya generation. |
+| 512-row erf floating dispatch | 6,148 | Binary16/binary32, every threshold and its neighbors, both signs, row 511, zero/tail laziness and canonical graph audit. The synthetic zero coefficients exercise layout, without an erf accuracy claim. |
+| Exact-width table payloads | 52 | 1/17/32/33/64/129-bit words, fixed/floating/unsigned tables, partial cyclic banks, rejected padding reads and all 65,536 binary16 lookup encodings. |
+
+The new fixtures execute 94,210 records per vendor backend. Existing normalized
+segmentation, binary16 coverage, certificate audits, CLI replay, fixed-erf
+certificates, kernel conformance and selective helper checks also pass.
+CMake generates and certifies the 512-row evaluator with tracing disabled;
+AP and AC builds pass the standalone C++ checker through CTest.
+Memory counts assume the declared block dimensions; actual BRAM inference and
+resource/timing measurements remain for vendor synthesis.

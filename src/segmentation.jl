@@ -1,9 +1,65 @@
 function _validate_segment_count(segments)
     segments isa Integer &&
         !(segments isa Bool) &&
-        1 <= segments <= 64 &&
-        ispow2(segments) || throw(ArgumentError("segments must be a power of two in 1:64"))
+        1 <= segments <= 512 &&
+        ispow2(segments) || throw(ArgumentError("segments must be a power of two in 1:512"))
     return Int(segments)
+end
+
+_segment_index_format(count) = IR.UIntFormat(max(1, ndigits(count - 1; base = 2)))
+
+function _fixed_segment_index!(nodes, input, format::FixedFormat, thresholds, domain)
+    count = length(thresholds) + 1
+    ispow2(count) || return nothing
+    count == 1 && return _push!(nodes, IR.Const(IR.UIntFormat(1), 0))
+    lower, upper = domain
+    width = (upper - lower) / count
+    exponent = _polynomial_binade(width)
+    width == _pow2(exponent) || return nothing
+    offset = _fraction(format) + exponent
+    index_format = _segment_index_format(count)
+    0 <= offset && offset + index_format.width <= format.width || return nothing
+    base = lower / width
+    denominator(base) == 1 || return nothing
+    first_row = mod(numerator(base), count)
+    first_row in (0, count ÷ 2) || return nothing
+    # This proves that the selected bits implement the stored threshold partition.
+    all(
+        i -> thresholds[i] == round_fixed(lower + i * width, format),
+        eachindex(thresholds),
+    ) || return nothing
+    raw = _push!(nodes, IR.BitCast(input, IR.UIntFormat(format.width)))
+    row = _push!(nodes, IR.ExtractBits(raw, offset, index_format.width))
+    if first_row != 0
+        mask = _push!(nodes, IR.Const(index_format, first_row))
+        row = _push!(nodes, IR.BitOp(:bitxor, row, mask))
+    end
+    # The inclusive upper endpoint would wrap to row zero after extraction.
+    # Keep it in the last row, matching the certified representable partition.
+    endpoint = _push!(nodes, IR.constant(upper, format))
+    at_endpoint = _push!(nodes, IR.Compare(:eq, input, endpoint))
+    last_row = _push!(nodes, IR.Const(index_format, count - 1))
+    return _push!(nodes, IR.Select(at_endpoint, last_row, row))
+end
+
+# A lazy binary search over the stored thresholds. Equal inputs select the
+# upper row; the last row also contains the domain's inclusive upper endpoint.
+function _segment_index!(nodes, input, format, thresholds; domain = nothing)
+    if format isa FixedFormat && domain !== nothing
+        direct = _fixed_segment_index!(nodes, input, format, thresholds, domain)
+        direct === nothing || return direct
+    end
+    index_format = _segment_index_format(length(thresholds) + 1)
+    function branch(first, last)
+        first == last && return _push!(nodes, IR.Const(index_format, first))
+        middle = (first + last + 1) ÷ 2
+        threshold = _push!(nodes, IR.Const(format, thresholds[middle]))
+        condition = _push!(nodes, IR.Compare(:ge, input, threshold))
+        lower = branch(first, middle - 1)
+        upper = branch(middle, last)
+        return _push!(nodes, IR.Select(condition, upper, lower))
+    end
+    return branch(0, length(thresholds))
 end
 
 # Numerical predecessor, skipping the duplicate zero encoding. Both signed zeros
@@ -99,14 +155,13 @@ function _segmented_layout(spec, rows, format, evaluation)
         )
     end
     nodes = IR.Node[IR.Input(spec.input_format)]
-    index_format = IR.UIntFormat(6)
-    index = _push!(nodes, IR.Const(index_format, 0))
-    for (i, word) in enumerate(geometry.thresholds)
-        threshold = _push!(nodes, IR.Const(spec.input_format, word))
-        condition = _push!(nodes, IR.Compare(:ge, 1, threshold))
-        row = _push!(nodes, IR.Const(index_format, i))
-        index = _push!(nodes, IR.Select(condition, row, index))
-    end
+    index = _segment_index!(
+        nodes,
+        1,
+        spec.input_format,
+        geometry.thresholds;
+        domain = (first(geometry.boundaries), last(geometry.boundaries)),
+    )
     converted = format == spec.input_format ? 1 : _push!(nodes, IR.Convert(1, format))
     center = _push!(nodes, IR.TableLoad(1, index))
     shifted = _push!(nodes, IR.Add(converted, center, format))
@@ -155,7 +210,7 @@ end
     segmented_polynomial_plan(spec, coefficient_rows; internal_format=spec.output_format, precision=nothing,
                               evaluation=:separate)
 
-Build an uncertified normalized evaluator on an explicit interval, using 2–64
+Build an uncertified normalized evaluator on an explicit interval, using 2–512
 equal segments (a power of two). Rows contain ascending coefficients in the
 normalized coordinate, not in the original input. The coordinate is
 `t = (x - stored_center) * 2^exponent`; centres, scaling, coefficient tables and

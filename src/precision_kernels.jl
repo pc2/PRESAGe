@@ -83,14 +83,13 @@ function _precision_layout(spec, rows, precision, evaluation; segmented)
                 ),
             )
         end
-        index_format = IR.UIntFormat(6)
-        index = _push!(nodes, IR.Const(index_format, 0))
-        for (i, word) in enumerate(geometry.thresholds)
-            threshold = _push!(nodes, IR.Const(spec.input_format, word))
-            condition = _push!(nodes, IR.Compare(:ge, 1, threshold))
-            row = _push!(nodes, IR.Const(index_format, i))
-            index = _push!(nodes, IR.Select(condition, row, index))
-        end
+        index = _segment_index!(
+            nodes,
+            1,
+            spec.input_format,
+            geometry.thresholds;
+            domain = (first(geometry.boundaries), last(geometry.boundaries)),
+        )
         converted = _precision_convert!(nodes, 1, spec.input_format, coordinate_format)
         center = _push!(nodes, IR.TableLoad(1, index))
         shifted = _push!(nodes, IR.Add(converted, center, coordinate_format))
