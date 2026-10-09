@@ -120,8 +120,11 @@ available plans, certificate contributions and failure reasons. See
 Add `segments=[1,4,8]` to search normalized segment counts before degrees and
 formats. Counts are powers of two up to 512; coefficient tables feed one shared
 Horner evaluator. Indices use the minimum required width (nine bits at 512),
-and aligned fixed inputs select the row directly from input bits. Other layouts
-use a balanced comparison tree with at most nine dispatch comparisons.
+and aligned fixed inputs select the row from input bits and an exact modular
+lower-row offset. Aligned
+floating intervals use exact scaling, integer floor and an integer offset;
+on `[-1,1]` at 512 rows this is `min(floor((x+1)*256),511)`.
+Other layouts use a balanced comparison tree with at most nine dispatch comparisons.
 Binary16/binary32 `erf` kernels also use direct row selection from the exact
 floating magnitude; at 512 rows it is `min(floor(abs(x) * 128), 511)`.
 `certified_polynomial(...; segments=4)`

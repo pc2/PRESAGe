@@ -155,6 +155,7 @@ function _polynomial_ranges(
 )
     ranges, rho = Dict{Int, _Interval}(), Dict{Int, Rational{BigInt}}()
     grids = Dict{Int, Int}()
+    dispatch_ranges = get(layout, :dispatch_ranges, Dict())
     choices = get(layout, :range_choices, Dict{Int, Int}())
     needed = Set(get(layout, :range_roots, (p.output,)))
     for i in reverse(eachindex(p.nodes))
@@ -171,6 +172,18 @@ function _polynomial_ranges(
             source = get(layout, :output_source, layout.result)
             ranges[i] = ranges[source]
             grids[i] = grids[source]
+            continue
+        elseif haskey(dispatch_ranges, i)
+            # Canonical construction proves floor and offset ranges on the
+            # guarded domain, excluding the lazy inclusive-endpoint branch.
+            # These integer values choose a row and add no polynomial error.
+            range = dispatch_ranges[i]
+            f isa FixedFormat && f.integer_bits == f.width ||
+                throw(ArgumentError("invalid audited dispatch format"))
+            lower, upper = _fixed_limits(f)
+            lower <= range[1] <= range[2] <= upper ||
+                throw(OverflowError("node $i may overflow during row selection"))
+            ranges[i], grids[i], rho[i] = range, 0, _q(0)
             continue
         elseif haskey(get(layout, :exact_branches, Dict()), i)
             ranges[i] = layout.exact_branches[i]

@@ -198,6 +198,8 @@ function _interpret(p::IR.Program, bits::Integer, trace::Bool)
             f isa FloatFormat ? _float(source, f) : source.bits
         elseif n isa IR.ExtractBits
             (visit(n.source) >> n.offset) & IR.mask(f)
+        elseif n isa IR.UIntAdd
+            (visit(n.a) + visit(n.b)) & IR.mask(f)
         elseif n isa IR.BitOp
             a, b = visit(n.a), visit(n.b)
             result =

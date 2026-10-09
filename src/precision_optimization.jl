@@ -3,7 +3,7 @@
 
 Declared coefficient storage and Horner widths for an audited polynomial.
 Stage widths include the initial coefficient load. Arithmetic/operand sums count
-static IR operations, including coordinate formation; these are structural counts,
+static IR operations, including coordinate formation and integer dispatch; these are structural counts,
 not FPGA resource or timing estimates.
 """
 function precision_cost(plan::PlanArtifact)
@@ -17,8 +17,12 @@ function precision_cost(plan::PlanArtifact)
         get(plan.settings, "transformation", "none") in ("sinh", "cosh", "erfc") ? 3 :
         get(plan.settings, "transformation", "none") in ("sin", "cos", "asin", "acos") ? 2 :
         1
-    operations = [n for n in p.nodes if n isa Union{IR.Mul, IR.Add, IR.FMA}]
-    operand_widths = [[_width(IR.format(p, i)) for i in IR.refs(n)] for n in operations]
+    operations = [
+        i for
+        (i, n) in enumerate(p.nodes) if n isa Union{IR.Mul, IR.Add, IR.FMA, IR.UIntAdd}
+    ]
+    operand_widths =
+        [[_cost_width(IR.format(p, j)) for j in IR.refs(p.nodes[i])] for i in operations]
     return (;
         coefficient_bits = BigInt(rows) *
                            sum(BigInt(_width(f)) for f in precision.coefficient_formats),
@@ -27,7 +31,7 @@ function precision_cost(plan::PlanArtifact)
         stage_bits = BigInt(evaluations) *
                      sum(BigInt(_width(f)) for f in precision.stage_formats),
         arithmetic_result_bits = sum(
-            (BigInt(_width(n.format)) for n in operations);
+            (BigInt(_cost_width(IR.format(p, i))) for i in operations);
             init = BigInt(0),
         ),
         operand_bits = sum(

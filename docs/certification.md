@@ -204,11 +204,14 @@ This API performs one synchronous attempt without a wall-time limit. Use
 
 ## Normalized segments and coverage
 
-Dispatch uses input-bit extraction when an aligned fixed grid exactly matches
-the stored thresholds, with an explicit inclusive-upper-endpoint check. Other
-layouts use a balanced comparison tree. At 512 rows, the index has nine bits.
+Dispatch uses input-bit extraction and an exact modular lower-row offset when
+an aligned fixed grid matches the stored thresholds, with an explicit
+inclusive-upper-endpoint check. Any integral lower row is supported.
+Other layouts use a balanced comparison tree. At 512 rows, the index has nine bits.
 Certification reconstructs and audits the complete selected graph, row payloads
-and representable-domain coverage.
+and representable-domain coverage, including the integer offset. Modular row
+arithmetic is exact and contributes no numerical error; altering its constant
+or operation fails the graph audit.
 
 ```julia
 spec = FunctionSpec("exp(x)"; input_format=FixedFormat(9,3),
@@ -220,12 +223,30 @@ result = certified_polynomial(spec; degree=5, segments=4,
 
 `segments=1` keeps the original single polynomial. Counts 2, 4, …, 512 use equal
 subintervals of the representable contract interval. Nominal boundaries are
-exact dyadic rationals. Each emitted threshold rounds upward in the **input**
+exact dyadic rationals. Each partition threshold rounds upward in the **input**
 format, with `input >= threshold` selecting the next row. Every proof path is a
 closed interval between its first and last reachable input values; consecutive
 endpoints are numerical neighbours in the input format. This proves coverage
 without gaps or overlapping inputs. Both signed zeros select the same row.
 Empty representable branches are rejected before launching a search worker.
+
+Aligned floating intervals use direct integer dispatch automatically. When
+the segment width `w` is a power of two and `lower/w` is an integer, the builder
+computes `floor(x/w)-lower/w` with exact decoded scaling and integer offset
+arithmetic. It verifies every threshold against the upward-rounded boundary,
+so this mapping implements the same representable partition. The inclusive
+upper endpoint selects the last row through a lazy equality branch. The domain
+guard bypasses dispatch for invalid inputs. Unsupported alignments retain the
+balanced comparison tree.
+
+Canonical graph reconstruction audits the floor conversion, offset, exact
+integer addition/narrowing and endpoint branch. Every path's overflow report
+includes the converted integer range, offset constant and row range `[0,N-1]`
+whenever those nodes execute. Downward rounding is permitted only on the audited
+integer floor; polynomial arithmetic and interfaces retain their nearest-even
+policy. Integer row selection implements an exact function and contributes no
+polynomial error budget. Uniform and individual coefficient/stage formats use
+the same dispatch proof.
 
 Centres are rounded to the shared internal format, and the mathematical kernel
 uses these stored centres exactly. A common power-of-two scale makes every ideal

@@ -22,7 +22,6 @@ function _fixed_segment_index!(nodes, input, format::FixedFormat, thresholds, do
     base = lower / width
     denominator(base) == 1 || return nothing
     first_row = mod(numerator(base), count)
-    first_row in (0, count ÷ 2) || return nothing
     # This proves that the selected bits implement the stored threshold partition.
     all(
         i -> thresholds[i] == round_fixed(lower + i * width, format),
@@ -30,9 +29,14 @@ function _fixed_segment_index!(nodes, input, format::FixedFormat, thresholds, do
     ) || return nothing
     raw = _push!(nodes, IR.BitCast(input, IR.UIntFormat(format.width)))
     row = _push!(nodes, IR.ExtractBits(raw, offset, index_format.width))
-    if first_row != 0
+    if first_row == count ÷ 2
         mask = _push!(nodes, IR.Const(index_format, first_row))
         row = _push!(nodes, IR.BitOp(:bitxor, row, mask))
+    elseif first_row != 0
+        # Extraction yields floor(x/width) modulo count, including negative x.
+        # Subtract the lower row modulo count to start the interval at row zero.
+        offset_row = _push!(nodes, IR.Const(index_format, mod(-first_row, count)))
+        row = _push!(nodes, IR.UIntAdd(row, offset_row))
     end
     # The inclusive upper endpoint would wrap to row zero after extraction.
     # Keep it in the last row, matching the certified representable partition.
@@ -42,36 +46,64 @@ function _fixed_segment_index!(nodes, input, format::FixedFormat, thresholds, do
     return _push!(nodes, IR.Select(at_endpoint, last_row, row))
 end
 
-function _float_segment_index!(nodes, input, format::FloatFormat, thresholds, domain)
+function _float_segment_index!(
+    nodes,
+    input,
+    format::FloatFormat,
+    thresholds,
+    domain;
+    dispatch_ranges = nothing,
+)
     count = length(thresholds) + 1
     ispow2(count) || return nothing
     lower, upper = _q.(domain)
-    lower == 0 && upper > 0 || return nothing
+    lower < upper || return nothing
     endpoint_bits = round_ieee(upper, format)
     endpoint_value = decode_ieee(endpoint_bits, format)
-    endpoint_value.kind == :finite && endpoint_value.value == upper || return nothing
+    endpoint_value.kind in (:finite, :zero) && endpoint_value.value == upper ||
+        return nothing
     count == 1 && return _push!(nodes, IR.Const(IR.UIntFormat(1), 0))
-    width = upper / count
+    width = (upper - lower) / count
     exponent = -_polynomial_binade(width)
     width == _pow2(-exponent) || return nothing
     typemin(Cint) <= exponent <= typemax(Cint) || return nothing
-    # For representable x, x >= ceil_float(i*width) iff floor(x/width) >= i.
+    base = lower / width
+    denominator(base) == 1 || return nothing
+    # For representable x, x >= ceil_float(lower+i*width) iff
+    # floor(x/width)-base >= i. The offset is an exact integer.
     # This proves equivalence to the stored comparison partition before emitting
-    # any nodes. Callers must guard inputs outside the nonnegative domain.
+    # any nodes. Callers must guard inputs outside the declared domain.
     all(
-        i -> thresholds[i] == round_ieee(i * width, format; mode = :up),
+        i -> thresholds[i] == round_ieee(lower + i * width, format; mode = :up),
         eachindex(thresholds),
     ) || return nothing
     index_format = _segment_index_format(count)
+    index_range = (_q(0), _q(count - 1))
+    scaled_range = (base, base + count - 1)
+    row_format = FixedFormat(index_format.width, index_format.width; signed = false)
+    wide_format =
+        iszero(base) ? row_format :
+        _shared_fixed_format([scaled_range, _singleton(-base), index_range], 0)
     integer_format = FixedFormat(
-        index_format.width,
-        index_format.width;
-        signed = false,
+        wide_format.width,
+        wide_format.integer_bits;
+        signed = wide_format.signed,
         rounding = :down,
-        overflow = :reject,
     )
-    scaled = _push!(nodes, IR.ScalePow2(input, exponent, integer_format))
-    row = _push!(nodes, IR.BitCast(scaled, index_format))
+    function record(operation, range)
+        node = _push!(nodes, operation)
+        dispatch_ranges === nothing || (dispatch_ranges[node] = range)
+        return node
+    end
+    scaled = record(IR.ScalePow2(input, exponent, integer_format), scaled_range)
+    shifted = if iszero(base)
+        scaled
+    else
+        offset = record(IR.constant(-base, wide_format), _singleton(-base))
+        offset_row = record(IR.Add(scaled, offset, wide_format), index_range)
+        record(IR.Quantize(offset_row, row_format), index_range)
+    end
+    row = _push!(nodes, IR.BitCast(shifted, index_format))
     # Scaling and conversion operate on the exact float encoding, with no
     # intermediate floating rounding. The lazy endpoint branch avoids count
     # overflowing the row format at the inclusive upper endpoint.
@@ -81,22 +113,23 @@ function _float_segment_index!(nodes, input, format::FloatFormat, thresholds, do
     return _push!(nodes, IR.Select(at_endpoint, last_row, row))
 end
 
-# A lazy binary search over the stored thresholds. Equal inputs select the
-# upper row; the last row also contains the domain's inclusive upper endpoint.
+# Prefer an exact direct mapping where the stored partition permits it.
+# The lazy binary-search fallback selects the upper row at equal thresholds.
 function _segment_index!(
     nodes,
     input,
     format,
     thresholds;
     domain = nothing,
-    float_direct::Bool = false,
+    dispatch_ranges = nothing,
 )
     if format isa FixedFormat && domain !== nothing
         direct = _fixed_segment_index!(nodes, input, format, thresholds, domain)
         direct === nothing || return direct
     end
-    if float_direct && format isa FloatFormat && domain !== nothing
-        direct = _float_segment_index!(nodes, input, format, thresholds, domain)
+    if format isa FloatFormat && domain !== nothing
+        direct =
+            _float_segment_index!(nodes, input, format, thresholds, domain; dispatch_ranges)
         direct === nothing || return direct
     end
     index_format = _segment_index_format(length(thresholds) + 1)
@@ -110,6 +143,27 @@ function _segment_index!(
         return _push!(nodes, IR.Select(condition, upper, lower))
     end
     return branch(0, length(thresholds))
+end
+
+# Integer dispatch implements an audited floor, not an approximation operation.
+# Only its reconstructed nodes may use downward rounding; polynomial arithmetic
+# and interfaces retain the nearest-even/rejected-overflow contract.
+function _segment_arithmetic_policy(p, dispatch_ranges)
+    all(enumerate(p.types)) do (i, format)
+        format isa FixedFormat || return true
+        format.overflow == :reject || return false
+        format.rounding == :nearest_even && return true
+        node = p.nodes[i]
+        return haskey(dispatch_ranges, i) &&
+               node isa IR.ScalePow2 &&
+               IR.format(p, node.source) isa FloatFormat &&
+               format.integer_bits == format.width &&
+               format.rounding == :down
+    end || throw(
+        ArgumentError(
+            "polynomial arithmetic requires nearest-even rounding and rejected overflow outside audited integer dispatch",
+        ),
+    )
 end
 
 # Numerical predecessor, skipping the duplicate zero encoding. Both signed zeros
@@ -205,12 +259,14 @@ function _segmented_layout(spec, rows, format, evaluation)
         )
     end
     nodes = IR.Node[IR.Input(spec.input_format)]
+    dispatch_ranges = Dict{Int, _Interval}()
     index = _segment_index!(
         nodes,
         1,
         spec.input_format,
         geometry.thresholds;
         domain = (first(geometry.boundaries), last(geometry.boundaries)),
+        dispatch_ranges,
     )
     converted = format == spec.input_format ? 1 : _push!(nodes, IR.Convert(1, format))
     center = _push!(nodes, IR.TableLoad(1, index))
@@ -251,9 +307,10 @@ function _segmented_layout(spec, rows, format, evaluation)
             center = geometry.centers[i],
             domain = geometry.normalized_domains[i],
             input_domain = geometry.domains[i],
+            dispatch_ranges,
         ) for i = 1:count
     ]
-    return (; program, segments, paths, geometry)
+    return (; program, segments, paths, geometry, dispatch_ranges)
 end
 
 """
@@ -310,13 +367,6 @@ function _segmented_audit(plan)
     format = p.tables[1].format
     format isa Union{FloatFormat, FixedFormat} ||
         throw(ArgumentError("unsupported internal format"))
-    all(p.types) do f
-        !(f isa FixedFormat) || (f.rounding == :nearest_even && f.overflow == :reject)
-    end || throw(
-        ArgumentError(
-            "segmented proof requires nearest-even rounding and rejected fixed overflow",
-        ),
-    )
     layout = _segmented_layout(
         spec,
         [s.coefficients for s in plan.segments],
@@ -333,6 +383,7 @@ function _segmented_audit(plan)
             "executed graph or tables differ from the supported segmented evaluator",
         ),
     )
+    _segment_arithmetic_policy(p, layout.dispatch_ranges)
     return layout
 end
 

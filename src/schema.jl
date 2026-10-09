@@ -1,4 +1,4 @@
-const _SCHEMA_VERSION = 12
+const _SCHEMA_VERSION = 13
 _has_fixed_bitcast(p::IR.Program) =
     any(n -> n isa IR.BitCast && IR.format(p, n.source) isa FixedFormat, p.nodes)
 _has_cube_reduction(p::IR.Program) = any(
@@ -119,6 +119,7 @@ function _plan_data(p::PlanArtifact)
     fixedio = p.spec.input_format isa FixedFormat || p.spec.output_format isa FixedFormat
     guarded = p.program !== nothing && any(n -> n isa IR.Guard, p.program.nodes)
     version =
+        p.program !== nothing && any(n -> n isa IR.UIntAdd, p.program.nodes) ? 13 :
         p.program !== nothing && _has_fixed_bitcast(p.program) ? 12 :
         p.program !== nothing && any(n -> n isa IR.ScaleByExponent, p.program.nodes) ? 11 :
         p.program !== nothing && any(n -> n isa IR.FloatReciprocal, p.program.nodes) ? 10 :
@@ -218,6 +219,10 @@ function _read_plan(d)
         )
     end
     program = haskey(d, "program") ? _read_program(d["program"]) : nothing
+    program !== nothing &&
+        any(n -> n isa IR.UIntAdd, program.nodes) &&
+        d["schema_version"] < 13 &&
+        throw(ArgumentError("modular unsigned addition requires schema v13"))
     program !== nothing &&
         _has_fixed_bitcast(program) &&
         d["schema_version"] < 12 &&

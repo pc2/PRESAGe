@@ -122,6 +122,8 @@ choose new formats or replace reduction identities.
 - Fixed classification, all six comparison predicates, unsigned bit operations
   and extraction retain their IR semantics. Shifts at or above the operand
   width return zero, including wide shift counts.
+- `UIntAdd` adds equal-width unsigned words modulo `2^width`. The result is
+  explicitly narrowed to the declared AP/AC integer width.
 - Table indices are checked before conversion to a host index. Storage uses
   cyclic banks: entry `i` is in bank `i % banks`, row `i / banks`. Padding is
   inaccessible. `unroll=true` emits each bank selection explicitly. Horner
@@ -142,8 +144,10 @@ column has its own ROM, feeding one shared Horner evaluator; the negative
 centers occupy an additional ROM. Index widths are derived from the row count.
 Aligned fixed inputs select the row directly from encoded input bits. The
 segment width must be a power of two on the input grid; the lower endpoint
-must place the extracted field at phase zero or half the table depth. The
-half-depth case flips the top index bit. Construction checks that this mapping
+must be an integral number of segment widths. The extracted field is offset
+modulo the table depth: zero needs no operation, half-depth flips the top index
+bit, and other offsets use one modular integer addition.
+Construction checks that this mapping
 matches every stored threshold. One equality check assigns the inclusive upper
 endpoint to the last row instead of allowing its index to wrap.
 
@@ -152,6 +156,10 @@ on `[-1,1]`, the row is `((input_bits >> 2) & 511) ^ 256`, with `x == 1`
 selecting row 511. The generated evaluator then loads `table[row]`. There are
 no per-boundary or per-row dispatch constants on this path. The coefficient
 and center table initializers remain necessary to store their values.
+
+On the shifted interval `[-383/512,129/512]` with the same input and 512 rows,
+the row is `(((input_bits >> 1) & 511) + 383) & 511`, with the inclusive upper
+endpoint again selecting row 511. All coefficient columns use this one index.
 
 Binary16/binary32 `erf` inputs also select rows directly. On magnitude `[0,4]`,
 512 segments use `row = min(floor(abs(x) * 128), 511)`. The IR scales the exact
@@ -162,9 +170,22 @@ branches bypass row selection. Both fixed and floating internal `erf`
 evaluators use this dispatch, with the index width and scaling derived from
 the segment count. Construction verifies equivalence to every stored threshold.
 
-Other layouts, including general floating normalized segmentation, retain a
-balanced tree over the exact stored thresholds. Equality selects the upper row.
-This takes at most nine dispatch comparisons at 512 segments.
+General normalized segmentation uses the same floating selector automatically,
+with uniform or individual polynomial formats. For segment width `w=2^k` and
+integer `base=lower/w`, it computes `floor(x/w)-base`. Scaling decodes the exact
+float and rounds downward into a range-sized fixed integer; subtracting `base`
+and narrowing to the unsigned row format are exact integer operations. Signed
+and shifted intervals use this path, including intervals ending at zero.
+On `[-1,1]` at 512 rows the mapping is `min(floor((x+1)*256),511)`, without
+floating addition of one. The outer domain guard skips row selection for
+nonfinite or out-of-domain inputs, and the inclusive upper endpoint selects
+the last row before evaluating the integer conversion.
+
+Construction verifies every threshold against the upward-rounded nominal
+boundary. Non-power-of-two widths, fractional row offsets or incompatible
+endpoint/threshold encodings retain a balanced tree over stored thresholds.
+Equality selects the upper row; the fallback takes at most nine dispatch
+comparisons at 512 segments.
 
 ```julia
 memory = table_memory_cost(plan; model=BlockMemoryModel(depth=512, word_bits=32))

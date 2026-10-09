@@ -165,6 +165,8 @@ function _cpp_ac_expr(
                "$(type(f))(FloatBits<$(type(p.types[n.source]))>::bits($(call(n.source))))"
     elseif n isa IR.ExtractBits
         return "ac_word_cast<$(type(f))>(($(call(n.source)) >> $(n.offset)) & $(_cpp_ac_constant(IR.mask(f),f,backend;type)))"
+    elseif n isa IR.UIntAdd
+        return "$(type(f))(($(call(n.a)) + $(call(n.b))) & $(_cpp_ac_constant(IR.mask(f),f,backend;type)))"
     elseif n isa IR.BitOp
         op = Dict(
             :bitand => "&",

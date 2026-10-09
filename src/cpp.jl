@@ -164,6 +164,8 @@ function _cpp_expr(
         return "static_cast<std::uint64_t>(std::bit_cast<$(_cpp_storage(IR.format(p,n.source)))>($(call(n.source))))"
     elseif n isa IR.ExtractBits
         return "(($(call(n.source)) >> $(n.offset)) & $(_cpp_hex(IR.mask(f))))"
+    elseif n isa IR.UIntAdd
+        return "(($(call(n.a)) + $(call(n.b))) & $(_cpp_hex(IR.mask(f))))"
     elseif n isa IR.BitOp
         op = Dict(
             :bitand => "&",

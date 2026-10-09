@@ -229,6 +229,25 @@ They do not predict FPGA resources or timing. Reciprocal generation places an
 audited lazy domain guard before these operations; see
 [its complete error proof](certification.md#reciprocal-mantissa-kernels).
 
+## Direct segment indexing
+
+Aligned fixed inputs extract the row field from their encoded payload, then
+subtract the lower row modulo the power-of-two row count. Any integral lower
+row is supported. Zero offsets need no operation; half-depth offsets flip the
+top bit; other offsets use `UIntAdd` with a modular constant. `UIntAdd` adds
+equal-width unsigned words modulo `2^width`, with identical Julia, CPU and
+AP/AC kernel semantics. This integer dispatch adds no numerical rounding error.
+The inclusive upper endpoint selects the final row, and the outer domain guard
+rejects inputs before dispatch. Plans containing `UIntAdd` use schema 13.
+
+Aligned normalized polynomial intervals and erf share the direct floating
+row selector. It scales the exact decoded float, takes an integer floor and
+applies the lower-endpoint offset in integer arithmetic. At 512 rows on
+`[-1,1]`, `floor(x*256)+256` selects the row, with the inclusive endpoint clipped
+to row 511. There is no rounded floating subtraction of the lower endpoint.
+Dispatch conversion and integer ranges are certified separately from numerical
+coordinate and Horner rounding. Unsupported alignments use stored comparisons.
+
 ## Fresh erf candidate
 
 `erf_candidate()` approximates `erf(t+center)` with Sollya `fpminimax` in four

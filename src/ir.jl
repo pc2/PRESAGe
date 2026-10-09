@@ -28,6 +28,7 @@ export UIntFormat,
     BitCast,
     ExtractBits,
     BitOp,
+    UIntAdd,
     ScalePow2,
     FloatMantissa,
     FloatExponent,
@@ -178,6 +179,11 @@ struct BitOp <: Node
     a::Int
     b::Int
 end
+"""Add equal-width unsigned words modulo 2^width, without rounding or overflow rejection."""
+struct UIntAdd <: Node
+    a::Int
+    b::Int
+end
 struct ScalePow2 <: Node
     source::Int
     exponent::Int
@@ -279,7 +285,7 @@ _width(f::FloatFormat) = 1 + f.exponent_bits + f.fraction_bits
 _width(f::FixedFormat) = f.width
 _width(f::UIntFormat) = f.width
 refs(::Union{Input, Const}) = ()
-refs(n::Union{Mul, Add, Compare, BitOp}) = (n.a, n.b)
+refs(n::Union{Mul, Add, Compare, BitOp, UIntAdd}) = (n.a, n.b)
 refs(n::FMA) = (n.a, n.b, n.c)
 refs(n::Select) = (n.condition, n.yes, n.no)
 refs(n::Guard) = (n.condition, n.source)
@@ -356,6 +362,11 @@ function _type(n::Node, types, tables)
             1 <= n.width &&
             n.offset + n.width <= f.width || throw(ArgumentError("invalid bit extraction"))
         return UIntFormat(n.width)
+    elseif n isa UIntAdd
+        a, b = types[n.a], types[n.b]
+        a isa UIntFormat && a == b ||
+            throw(ArgumentError("unsigned addition needs equal-width unsigned operands"))
+        return a
     elseif n isa BitOp
         a, b = types[n.a], types[n.b]
         a isa UIntFormat && b isa UIntFormat ||

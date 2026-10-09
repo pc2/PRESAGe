@@ -46,6 +46,7 @@ const _IR_NODES = Dict(
         IR.BitCast,
         IR.ExtractBits,
         IR.BitOp,
+        IR.UIntAdd,
         IR.ScalePow2,
         IR.FloatMantissa,
         IR.FloatExponent,

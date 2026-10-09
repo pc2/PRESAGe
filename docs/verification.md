@@ -1225,7 +1225,7 @@ rejection statuses against the Julia interpreter.
 | Check | Assertions | Coverage |
 | --- | ---: | --- |
 | Memory depth and width | 50 | Independent tiling, cyclic bank padding, configurable dimensions, unreachable tables and invalid models. |
-| Direct fixed segment indexing | 7,179 | Exhaustive signed/unsigned inputs, positive/negative intervals, phase-zero/top-bit-offset layouts, inclusive upper endpoints and comparison fallback for incompatible grids. |
+| Direct fixed segment indexing | 7,179 | Exhaustive signed/unsigned inputs, positive/negative intervals, aligned offsets, inclusive upper endpoints and comparison fallback for incompatible grids. |
 | 512-segment coefficients and certificates | 16,435 | Separate/FMA, every 12-bit fixed input, exact zero-error proof, 17/33/65/9-bit storage columns, center allocation, last-row mutation refusal, serialized replay and fresh Sollya generation. |
 | 512-row erf floating dispatch | 6,148 | Binary16/binary32, every threshold and its neighbors, both signs, row 511, zero/tail laziness and canonical graph audit. The synthetic zero coefficients exercise layout, without an erf accuracy claim. |
 | Exact-width table payloads | 52 | 1/17/32/33/64/129-bit words, fixed/floating/unsigned tables, partial cyclic banks, rejected padding reads and all 65,536 binary16 lookup encodings. |
@@ -1244,8 +1244,8 @@ Binary16/binary32 erf layouts now select rows using exact power-of-two scaling
 and downward unsigned integer conversion. At 512 rows the mapping is
 `min(floor(abs(x) * 128), 511)`. The inclusive endpoint bypasses conversion;
 zero, NaN and tail branches bypass dispatch. Only the tail and endpoint
-comparisons are evaluated on the central erf path. General floating normalized
-segmentation retains comparison dispatch.
+comparisons are evaluated on the central erf path. General aligned floating
+normalized intervals also use direct dispatch, as verified below.
 
 | Check | Assertions | Coverage |
 | --- | ---: | --- |
@@ -1265,3 +1265,66 @@ C++ checker through CTest. Reviewable headers and the plan are generated under
 The complete package runner was not repeated; these checks use ordinary local
 C++ compilation with public vendor headers. Hardware inference and timing
 remain unmeasured.
+
+## General direct floating segmentation
+
+Aligned floating intervals now use the shared direct selector automatically
+in uniform and individual-precision polynomial layouts. It computes
+`floor(x/w)-lower/w` using exact decoded scaling, integer floor, offset addition
+and unsigned narrowing. An inclusive-upper-endpoint branch selects the last row;
+invalid inputs skip dispatch. Fractional row offsets and incompatible widths
+retain the balanced comparison tree. Canonical certificates audit the entire
+index graph and include its integer ranges without adding polynomial error.
+
+| Check | Assertions | Coverage |
+| --- | ---: | --- |
+| Aligned intervals and integer offsets | 240,267 | Signed, positive/negative shifted and zero-ending intervals; arbitrary integer offsets; binary16/binary32 threshold neighbors; all binary16 encodings on `[-1,1]`; 79-bit custom floating inputs; AP/AC kernel payloads, CPU APIs and explicit AC float conversions. |
+| General certificates and individual precision | 15,501 | Uniform and individual fixed/float formats, separate/FMA Horner evaluation, complete node ranges, exact serialization replay and refusal of changed scaling, offsets, integer arithmetic, narrowing, endpoint selection or polynomial rounding. AP kernels cover fixed polynomial arithmetic; AC kernels also cover floating arithmetic. |
+| 512-row polynomial, exhaustive binary16 | 161,804 | All 65,536 encodings, accepted rows and numerical errors, rejected-input laziness, certified node ranges, portable/AP/AC CPU APIs and AP/AC kernel intermediates. |
+| Fresh generation and precision rebuilding | 36 | Fresh Sollya coefficients on a negative shifted IEEE32 interval, individual formats, stored-coefficient stage reduction, recertification and CPU/kernel conformance. |
+
+These 417,608 new assertions pass. Existing normalized segmentation passes
+300,073 checks; the complete individual-precision suite passes 8,065 checks,
+including bounded optimization and CLI replay. The original floating selector,
+comparison fallback and fixed-erf certificate groups also pass. A stale precision
+test now expects schema 12 for direct fixed-payload indexing, while untabled
+precision graphs remain schema 5.
+
+The reviewable `build/general-dispatch-512/` example uses an IEEE32 interface,
+512 signed-domain rows and 17/33/65/9-bit coefficient columns. Its complete
+absolute-error bound is `5.960464477539063e-8`. AP/Vitis and AC/oneAPI CMake builds
+with tracing disabled both pass the standalone C++ checker through CTest.
+Julia formatting and whitespace checks pass. The full package runner was not
+repeated; vendor synthesis and hardware timing remain unmeasured.
+
+## General direct fixed segmentation
+
+Aligned fixed intervals now support every integral lower-row offset. Dispatch
+extracts the encoded row field and subtracts the lower row modulo the
+power-of-two depth. Zero offsets need no arithmetic, half-depth offsets flip
+the top bit, and other offsets use one `UIntAdd`. The inclusive upper endpoint
+selects the final row; invalid inputs are rejected before dispatch. Canonical
+certification checks the complete index graph and offset against the stored
+threshold partition. Unaligned intervals retain balanced comparisons.
+
+| Check | Assertions | Coverage |
+| --- | ---: | --- |
+| Modular unsigned arithmetic and artifacts | 1,171 | Exact wraparound at 1/5/9/64/65/129 bits, invalid operand types, schema 13 replay and refusal of earlier schemas, AP/AC kernel traces and portable/AP/AC CPU public APIs. |
+| All aligned lower-row offsets | 137,620 | Every 32-row offset with signed/unsigned and positive/negative intervals; every 10-bit input; counts through 512 with every 12-bit input; inclusive endpoints and domain rejection; AP/AC intermediate-value conformance. |
+| Wide inputs and comparison fallback | 2,460 | 65/129-bit fixed payloads, all threshold neighbors, both signs, unsigned inputs, fractional offsets, incompatible widths and altered thresholds; AP/AC kernels and all CPU backends. |
+| Certified polynomial evaluators | 17,624 | Uniform and individual coefficient/stage formats, separate/FMA, exact linear evaluation, canonical offset-mutation refusal, serialization replay, storage/arithmetic reports, fresh Sollya generation and CPU/kernel conformance. |
+
+These 158,875 new assertions pass. Existing normalized segmentation (300,073),
+fixed-erf certificates (2,354), fixed indexing (7,179), memory layout (50),
+precision arithmetic/artifacts/audits (1,834) and IR/contract artifacts (91)
+also pass. Formatting and whitespace checks pass.
+The full package runner was not repeated.
+
+The reviewable `build/fixed-offset-512/` example uses a 12-bit fixed input on
+`[-383/512,129/512]` and independent 17/33/65/9-bit coefficient columns. Its
+36-node graph selects rows using bit extraction and one nine-bit addition;
+all 4,096 input words were checked against exact row and output mathematics.
+The complete error bound is zero. Table allocation is eight assumed 512-by-32
+blocks, including the center table. AP/Vitis and AC/oneAPI CMake builds with
+tracing disabled both pass the standalone C++ checker through CTest.
+Actual BRAM inference and timing still require synthesis.

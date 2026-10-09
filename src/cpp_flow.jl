@@ -69,7 +69,7 @@ function _cpp_value_name(p, i)
     prefix =
         n isa IR.Const ? "constant" :
         n isa IR.Mul ? "product" :
-        n isa IR.Add ? "sum" :
+        n isa Union{IR.Add, IR.UIntAdd} ? "sum" :
         n isa IR.FMA ? "fma" :
         n isa Union{IR.Convert, IR.Quantize} ? "converted" :
         n isa IR.FloatMantissa ? "mantissa" :

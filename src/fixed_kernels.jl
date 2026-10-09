@@ -77,13 +77,14 @@ function _fixed_erf_layout(
     magnitude_bits = _push!(nodes, IR.BitOp(:bitand, raw, mask))
     magnitude = _push!(nodes, IR.BitCast(magnitude_bits, interface))
     thresholds = [round_ieee(i * width, interface) for i = 1:(nsegments - 1)]
+    dispatch_ranges = Dict{Int, _Interval}()
     index = _segment_index!(
         nodes,
         magnitude,
         interface,
         thresholds;
         domain = (_q(0), _q(4)),
-        float_direct = true,
+        dispatch_ranges,
     )
     ranges = [Dict{Int, _Interval}() for _ in ss]
     function record(node, values)
@@ -95,9 +96,8 @@ function _fixed_erf_layout(
     # The direct conversion is evaluated only for 0 <= magnitude < 4. Its
     # integer floor fits the row format; the endpoint selects a constant row.
     # Include this dispatch bound in every path's overflow proof and report.
-    for (node, operation) in enumerate(nodes)
-        operation isa IR.ScalePow2 || continue
-        record(node, fill((_q(0), _q(nsegments - 1)), nsegments))
+    for (node, range) in dispatch_ranges
+        record(node, fill(range, nsegments))
     end
     converted = record(
         _push!(nodes, IR.Convert(magnitude, inputformat)),

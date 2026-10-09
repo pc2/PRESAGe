@@ -212,6 +212,8 @@ function _kernel_expr(
         return "copy_bits<$(type(f)),$(_kernel_width(f))>($(call(n.source)))"
     elseif n isa IR.ExtractBits
         return "$(type(f))($(call(n.source)) >> $(n.offset))"
+    elseif n isa IR.UIntAdd
+        return "$(type(f))($(call(n.a)) + $(call(n.b)))"
     elseif n isa IR.BitOp
         op = Dict(
             :bitand => "&",

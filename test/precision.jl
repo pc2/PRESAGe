@@ -96,7 +96,9 @@ end
         io = IOBuffer()
         write_plan(io, plan)
         text = String(take!(io))
-        @test TOML.parse(text)["schema_version"] == 5
+        # Direct segmented indexing includes the fixed payload bitcast added
+        # in schema 12; the untabled precision graph remains schema 5.
+        @test TOML.parse(text)["schema_version"] == (isempty(plan.segments) ? 5 : 12)
         restored = read_plan(IOBuffer(text))
         @test restored.precision == p
         @test PRESAGe._plan_data(restored) == PRESAGe._plan_data(plan)

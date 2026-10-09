@@ -56,6 +56,7 @@ function _precision_layout(spec, rows, precision, evaluation; segmented)
     tables = IR.Table[]
     segments = Segment[]
     geometry = nothing
+    dispatch_ranges = Dict{Int, _Interval}()
     index = nothing
     converted = 1
     shifted = nothing
@@ -89,6 +90,7 @@ function _precision_layout(spec, rows, precision, evaluation; segmented)
             spec.input_format,
             geometry.thresholds;
             domain = (first(geometry.boundaries), last(geometry.boundaries)),
+            dispatch_ranges,
         )
         converted = _precision_convert!(nodes, 1, spec.input_format, coordinate_format)
         center = _push!(nodes, IR.TableLoad(1, index))
@@ -134,11 +136,20 @@ function _precision_layout(spec, rows, precision, evaluation; segmented)
                     center = geometry.centers[i],
                     exponent = geometry.exponent,
                     input_domain = geometry.domains[i],
+                    dispatch_ranges,
                 ),
             ) : path
         end for i in eachindex(rows)
     ]
-    return (; program, segments, paths, geometry, precision, coefficient_nodes = cs)
+    return (;
+        program,
+        segments,
+        paths,
+        geometry,
+        precision,
+        coefficient_nodes = cs,
+        dispatch_ranges,
+    )
 end
 
 function _precision_plan(spec, rows, precision, evaluation; segmented)
@@ -175,13 +186,6 @@ function _precision_audit(plan)
     p !== nothing && precision !== nothing ||
         throw(ArgumentError("missing precision evaluator"))
     plan.dispatch === nothing || throw(ArgumentError("unsupported external dispatch"))
-    all(p.types) do f
-        !(f isa FixedFormat) || (f.rounding == :nearest_even && f.overflow == :reject)
-    end || throw(
-        ArgumentError(
-            "precision proofs require nearest-even rounding and rejected fixed overflow",
-        ),
-    )
     segmented = !isempty(plan.segments)
     rows, words = if segmented
         [s.coefficients for s in plan.segments], nothing
@@ -230,6 +234,7 @@ function _precision_audit(plan)
             "executed graph or tables differ from the supported precision evaluator",
         ),
     )
+    _segment_arithmetic_policy(p, layout.dispatch_ranges)
     return layout
 end
 

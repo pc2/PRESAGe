@@ -59,7 +59,7 @@ end
         (FixedFormat(10, 4; signed = false), (0, 4), 64, true),
         (FixedFormat(10, 4), (-3, -1), 64, true),
         (FixedFormat(10, 4), (1 // 2, 3 // 2), 32, true),
-        (FixedFormat(10, 4), (1 // 4, 5 // 4), 32, false),
+        (FixedFormat(10, 4), (1 // 4, 5 // 4), 32, true),
         (FixedFormat(10, 4), (-1, 1 // 2), 32, false),
     )
         spec = FunctionSpec("x"; input_format = format, domain)

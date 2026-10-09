@@ -115,7 +115,7 @@ function implementation_cost(
         table_block_word_bits = memory_model.word_bits,
         table_reads = count(n -> n isa IR.TableLoad, p.nodes),
         multiplications = count(n -> n isa IR.Mul, p.nodes),
-        additions = count(n -> n isa IR.Add, p.nodes),
+        additions = count(n -> n isa Union{IR.Add, IR.UIntAdd}, p.nodes),
         fmas = count(n -> n isa IR.FMA, p.nodes),
         divisions = count(n -> n isa IR.FloatReciprocal, p.nodes),
         conversions = count(n -> n isa Union{IR.Convert, IR.Quantize}, p.nodes),
