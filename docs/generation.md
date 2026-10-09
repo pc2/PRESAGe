@@ -6,6 +6,10 @@ The contract uses the existing plan schema with status `contract`, an explicit
 finite domain and no candidate program, segments, dispatch or settings.
 Input/output formats and the error target belong to this contract.
 
+The generic planner approximates the complete Sollya expression. See
+[function expression coverage](expression-coverage.md) for supported scope,
+failure conditions and the distinction from specialized transformations.
+
 The separate search configuration declares ordered segment counts, degrees and internal
 formats, numerical settings and execution limits. Use the Julia writers:
 

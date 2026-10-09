@@ -74,6 +74,10 @@ The development plan is maintained at
 
 ## Bounded function generation
 
+The generic planner approximates complete Sollya expressions, including
+compositions. See [function expression coverage](docs/expression-coverage.md)
+for current limits, difficult domains and further planner development.
+
 Generate coefficients and certify the complete evaluator in one call:
 
 ```julia
