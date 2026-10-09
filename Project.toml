@@ -1,7 +1,7 @@
 name = "PRESAGe"
 uuid = "4a7309d7-17e9-4a23-9f22-49c37e5d4a8f"
 version = "0.1.0"
-authors = ["Gerrit Pape <gerrit.pape@uni-paderborn.de"]
+authors = ["Gerrit Pape <gerrit.pape@uni-paderborn.de>"]
 
 [deps]
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
@@ -11,7 +11,7 @@ Sollya = "4ba3657f-7d7c-4d39-81ac-6271ee86fac5"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [sources]
-Sollya = {path = "../Sollya.jl"}
+Sollya = {url = "git@github.com:pc2/Sollya.jl.git", rev = "750bc95613f2742e54eb12f3858b1c6dbbc73c6d"}
 
 [compat]
 Libdl = "1"

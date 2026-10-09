@@ -255,15 +255,16 @@ choice and remains unchanged by precision optimization.
 
 ## Local setup
 
-Requires Julia 1.13 or newer, a local [Sollya.jl](../Sollya.jl/README.md) checkout
-and installed Sollya/MPFR/GMP libraries. CPU tests also require a C++20 compiler
+Requires Julia 1.13 or newer and installed Sollya/MPFR/GMP libraries.
+[Sollya.jl](https://github.com/pc2/Sollya.jl) is an unregistered Git dependency
+pinned to a tested commit in `Project.toml`. CPU tests also require a C++20 compiler
 (Clang or GCC with native 128-bit integers), plus GMP C++ headers/libraries;
 set `CXX` and optionally `GMP_PREFIX` for the package tests. The expected workspace is:
 
 ```text
 workspace/
 ├── PRESAGe/          # Project.toml, src/, test/, scripts/, docs/
-├── Sollya.jl/        # Local numerical dependency
+├── Sollya.jl/        # Optional local numerical dependency for development
 ├── ac_types/        # Public Algorithmic C headers
 └── HLS_arbitrary_Precision_Types/ # Public Xilinx simulation headers
 ```
@@ -275,12 +276,24 @@ julia --startup-file=no scripts/dev.jl
 julia --startup-file=no --threads=4 scripts/check.jl
 ```
 
-`dev.jl` develops the sibling Sollya package and creates an ignored local
-manifest. Set `PRESAGE_SOLLYA_PATH` for another local checkout. Both scripts use
-offline package operations, including with an empty depot. They do not download
-dependencies or change your registries. Rerun `dev.jl` when switching Julia
-versions. For an isolated cache, prefix commands with
-`JULIA_DEPOT_PATH=/tmp/presage-depot:`.
+`dev.jl` instantiates the pinned Git dependency and creates an ignored local
+manifest. Initial setup needs access to the repository through GitHub SSH;
+package registration is not required. `JULIA_PKG_USE_CLI_GIT=true` makes Julia
+use the system Git and its existing SSH configuration. For cached setup,
+set `JULIA_PKG_OFFLINE=true`. The check script runs package tests offline after
+setup. Rerun `dev.jl` when switching Julia versions. For an isolated cache,
+prefix commands with `JULIA_DEPOT_PATH=/tmp/presage-depot:`.
+
+To develop Sollya locally, explicitly set `PRESAGE_SOLLYA_PATH`:
+
+```sh
+PRESAGE_SOLLYA_PATH=../Sollya.jl julia --startup-file=no scripts/dev.jl
+```
+
+This mode uses offline package operations. Julia's `Pkg.develop` changes the
+Sollya source in `Project.toml` and the local Manifest to that checkout; keep the
+committed Git URL and revision when publishing PRESAGe. Changing `Project.toml`
+back to its Git source and rerunning `dev.jl` restores the pinned dependency.
 
 Sollya.jl discovers the installed library. Set `SOLLYA_LIBRARY` to an explicit
 shared-library path before the first native call when necessary. Direct MPFR
