@@ -110,3 +110,31 @@ expression. PRESAGe therefore maps this primitive explicitly and rejects cbrt
 compositions instead of accepting parser recovery. Ordinary polynomial
 approximation supports a nonnegative cbrt interval; signed domains require the
 explicit `transformation=:cbrt` pipeline.
+
+## Reference CLI
+
+```sh
+julia --startup-file=no --project=. scripts/reference.jl \
+  'erf(x)' inputs.bin references.bin \
+  --format=single --byteorder=little --chunk-elements=4096
+
+julia --startup-file=no --project=. scripts/reference.jl \
+  exp inputs.bin exp.bin --backend=mpfr --max-precision=4096
+
+julia --startup-file=no --project=. scripts/reference.jl \
+  'erf(x)' fixed-inputs.bin fixed-references.bin \
+  '--input-format=fixed(9,3)' '--output-format=fixed(10,2)'
+```
+
+Formats are `half`, `single`, `double`, `quad`, `octuple`, `float(E,M)`,
+`fixed(W,I)` and `ufixed(W,I)`, where `M` is the fraction width.
+`--output-format` defaults to the input format; `--format` remains an input-format
+alias. Fixed output also accepts `--rounding=nearest_even|toward_zero|up|down`
+and `--overflow=reject|saturate|wrap`. Expressions use Sollya syntax;
+primitive names and `recip`, `rsqrt`, `asinpi`, `acospi`, `atanpi` aliases are
+also accepted. Compositions need `--backend=sollya` (the default).
+Outputs have completion metadata and per-input statuses. Unresolved references
+abort generation and preserve diagnostics without publishing partial binary
+results. See [binary stream semantics](#binary-streams).
+The former `analysis/eval/golden.jl` entry point forwards to this command and
+requires the same explicit input/output arguments.

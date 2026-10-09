@@ -111,7 +111,7 @@ julia --startup-file=no --project=. scripts/generate.jl \
 
 Replay saves a new certificate, with no new search report. Ordinary C++
 compilation and the exact interpreter can verify the saved program using the
-existing [local CPU workflow](../README.md#generate-and-run-a-cpu-evaluator).
+[local CPU workflow](#generate-and-run-a-cpu-evaluator).
 
 Exhausted searches exit unsuccessfully and save `search-failure.toml`, including
 `search_limit`, its stop reason and the available candidate/certificate data.
@@ -130,3 +130,75 @@ Ordinary file-operation errors restore the previous files; unrelated files in
 the directory remain in place. Successful generation removes stale failure
 reports. Successful stored-plan/erf generation removes an old search report,
 and unchecked stored-plan/erf generation also removes an old certificate.
+
+## Generate and run a CPU evaluator
+
+```sh
+cmake --preset cpu-macos
+cmake --build --preset cpu-macos
+ctest --preset cpu-macos
+build/cpu-macos/presage_cpu < inputs.bin > outputs.bin
+```
+
+CMake 3.24 or newer generates `plan.toml`, `certificate.toml`, `evaluator.hpp`
+and a binary harness in `build/cpu-macos/generated`. Defaults are four segments
+on `[0,4]`, degree nine, 31 fractional bits, automatic stage integer widths and
+separate multiply/add operations, `ac_fixed` arithmetic and IEEE32 input/output. Generation searches
+within explicit width limits and requires a successful certificate.
+
+### Interfaces and tracing
+
+The header exposes `presage_evaluator::evaluate(float)` and `evaluate_bits`.
+The harness reads and writes little-endian words. `verify_cpu.jl` checks output
+bits against the interpreter, including boundary neighbours and special values.
+Tracing is disabled by default. `PRESAGE_TRACE=ON` adds checks of the first table
+index and every visited fixed node's exact payload. The standalone generator uses
+`--trace=true`, and its verifier uses `--trace`.
+
+Each evaluator is one self-contained header containing only required helpers.
+CMake uses strict floating semantics. Manual compilation needs C++20, `-ffp-contract=off -fno-fast-math -frounding-math`,
+GMP include/library paths and `-lgmpxx -lgmp` for fixed evaluators.
+Vendor builds also need the selected library's include directory.
+
+### Arithmetic backends
+
+Build and validate both libraries with ordinary LLVM C++ compilation:
+
+```sh
+cmake --preset cpu-macos-ac
+cmake --build --preset cpu-macos-ac
+ctest --preset cpu-macos-ac
+
+cmake --preset cpu-macos-ap
+cmake --build --preset cpu-macos-ap
+ctest --preset cpu-macos-ap
+```
+
+Use `-DPRESAGE_BACKEND=portable|ap_fixed|ac_fixed` with any preset to select
+arithmetic. Existing CMake caches retain their earlier selection. See
+[backend semantics and CPU limits](arithmetic.md#fixed-backends).
+
+### Standalone generation
+
+Standalone generation and recertification are also available:
+
+```sh
+julia --startup-file=no --project=. scripts/generate.jl erf build/erf
+julia --startup-file=no --project=. scripts/certify.jl \
+  build/erf/plan.toml build/erf/certificate.toml
+```
+
+Use `cpu-linux` on Linux. `-DPRESAGE_PLAN=/path/to/plan.toml` selects an existing
+evaluator; `-DPRESAGE_EVALUATION=fma` selects FMA for fresh `erf` generation.
+Floating candidates use `-DPRESAGE_INTERNAL=double -DPRESAGE_CERTIFY=OFF`.
+
+### Fresh erf generation options
+
+The generation CLI accepts `--backend=portable|ap_fixed|ac_fixed` (default
+`ac_fixed`), `--internal=fixed|single|double`, `--evaluation=fma`,
+`--degree=N`, `--segments=N` (a power of two), `--fraction-bits=N`,
+`--coefficient-fraction-bits=N` and `--max-fraction-bits=N`. Generation precision,
+proof precision and norm tightness have separate controls. Fixed generation
+certifies by default; `--certify=false` emits an unchecked candidate. Pass an
+existing `plan.toml` instead of `erf` to emit its stored program again and rerun
+the supported certificate.
