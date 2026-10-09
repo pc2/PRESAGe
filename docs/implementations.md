@@ -47,7 +47,10 @@ Required unknown resource estimates cannot satisfy a budget or ranking objective
 An explicit backend override also obeys numerical and resource requirements.
 Exact ties use candidate order. Without a profile, selection defaults to modeled
 memory blocks. Profile priorities are estimates pending synthesis calibration;
-there is no latency or throughput prediction.
+selection targets minimum configured resource cost under a spatial Horner/LUT
+architecture with target II=1. The vendor synthesis gate must confirm II=1;
+latency and peak clock are secondary. See
+[the design objective](resources.md#design-objective-resources-at-ii1).
 
 ## CLI
 

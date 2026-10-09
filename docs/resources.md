@@ -3,6 +3,26 @@
 `ResourceModel` estimates LUT/ALUT, FF, DSP and block-memory counts from reachable
 IR nodes and ROMs. Numerical certificates remain independent of this model.
 
+## Design objective: resources at II=1
+
+PRESAGe targets evaluators that accept one input per cycle. Resource use is the
+selection objective; achieved initiation interval **II=1** is a synthesis
+acceptance requirement. Latency and peak clock frequency are secondary.
+
+Polynomial evaluation uses spatial Horner: the IR expands every multiply/add or
+FMA stage, with distinct stage formats and operations. A pipeline can therefore
+have different inputs in different stages concurrently. The resource model
+counts the stage instances; it assumes no arithmetic reuse across Horner stages.
+Coefficient columns have independent storage so stages can obtain their needed
+coefficients. A full LUT is an alternative under the same II=1 requirement.
+
+Calibration must use this architecture at a declared target clock. The vendor
+report must establish II=1 for the complete evaluator, including dispatch,
+coordinates, conversions, reconstruction and memory accesses. Any II greater
+than one fails the throughput requirement. Pipeline register and alignment costs
+remain provisional until those synthesis examples calibrate the FF rules.
+Local C++ conformance establishes arithmetic behavior; it cannot establish II.
+
 ```julia
 using PRESAGe
 model = read_resource_model("config/resources/vitis.toml")
@@ -68,8 +88,9 @@ Initial profiles leave unsupported transformations and mixed conversions unknown
 
 The model assumes one spatial instance per reachable IR node. Shared nodes
 count once, unreachable nodes are omitted and separate branch nodes are summed.
-It does not predict compiler sharing, scheduling, pipeline registers, placement
-or constant folding. Register coefficients are explicit assumptions. Complete
+The intended schedule is a spatial Horner pipeline at II=1. The model does not
+predict compiler sharing, actual pipeline registers, placement or constant
+folding. Register coefficients are explicit assumptions. Complete
 coverage means every count has a rule; it does not establish synthesis accuracy.
 
 ## Memory policy and generated hints
@@ -156,8 +177,10 @@ oneAPI defaults to AC. `--include-float=true` also generates single/double FMA
 examples with AC and generic/oneAPI emission. AP kernels currently support fixed
 arithmetic. Each example contains a certified plan, profile, estimate, header,
 host runner and `kernel.cpp` with callable top `presage_resource_kernel`.
-`examples.toml` lists their paths. Vitis tops request II=1; achieved II remains
-a synthesis result. oneAPI integration can call the top from its FPGA task.
+`examples.toml` lists their paths. Vitis tops request II=1; synthesis must confirm
+it for acceptance. oneAPI integration must request and check II=1 in the FPGA evaluation loop that calls
+the top. All accepted calibration counts must come from configurations meeting
+this requirement at their declared target clock.
 
 A later vendor CI job should generate examples, compile/simulate/synthesize each
 top with declared target/clock settings, then normalize resource reports:

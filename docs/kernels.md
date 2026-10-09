@@ -10,6 +10,22 @@ separate. Kernel code uses bounded arrays and scalar values without GMP/MPFR,
 streams or exceptions. Tracing is disabled by default; `trace=true` adds
 intermediate-value instrumentation for local tests.
 
+## Spatial Horner with target II=1
+
+The polynomial IR expands Horner into distinct stages; the emitted evaluator
+contains those stages directly. Pipelining can overlap different inputs across
+stages and accept one new input each cycle, even when an individual result takes
+many cycles. There is no loop that reuses one arithmetic unit for all Horner
+stages.
+
+The design objective is minimum configured resource cost subject to achieved
+II=1. A LUT alternative has the same throughput requirement. Dispatch, reduction,
+conversions, reconstruction and coefficient/table access must also sustain it.
+The header provides the arithmetic evaluator; the synthesis top or calling FPGA
+loop establishes its pipeline schedule. Vitis calibration tops already request
+II=1. Achieved II must be checked with the vendor tool. Public-header CPU tests
+verify the evaluator's numerical semantics.
+
 ## Generate and verify locally
 
 ```julia
