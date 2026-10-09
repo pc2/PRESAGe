@@ -217,7 +217,7 @@ end
                 @test count(
                     j -> plan.program.nodes[j] isa IR.Compare,
                     keys(trace.values),
-                ) == 10
+                ) == 2
                 push!(words, word, word | PRESAGe._sign(format))
             end
         end

@@ -233,10 +233,14 @@ audited lazy domain guard before these operations; see
 
 `erf_candidate()` approximates `erf(t+center)` with Sollya `fpminimax` in four
 dyadic segments covering magnitude `[0,4]`. Tables store the negative centres
-and coefficient columns. The program explicitly computes the segment row and
-rounded coordinate, evaluates Horner arithmetic, converts to IEEE32 and restores
-the input sign. Internal arithmetic is IEEE64 by default. Exact signed zeros,
-canonical NaNs and constant tails (including infinities) have lazy branches.
+and coefficient columns. Row selection scales the exact decoded magnitude by
+`segments/4` and rounds down into an unsigned integer. A lazy equality check
+keeps magnitude 4 in the final row. At 512 segments this is
+`min(floor(abs(x) * 128), 511)`, followed by indexed table loads. The program
+then computes the rounded coordinate, evaluates Horner arithmetic, converts to
+IEEE32 and restores the input sign. Internal arithmetic is IEEE64 by default.
+Exact signed zeros, canonical NaNs and constant tails (including infinities)
+have lazy branches.
 
 Segment metadata records input-domain endpoints and local-coordinate
 coefficients; the arithmetic program defines the coordinate and branch rules.

@@ -153,9 +153,18 @@ selecting row 511. The generated evaluator then loads `table[row]`. There are
 no per-boundary or per-row dispatch constants on this path. The coefficient
 and center table initializers remain necessary to store their values.
 
-Other layouts, including floating inputs, retain a balanced tree over the exact
-stored thresholds. Equality selects the upper row. This takes at most nine
-dispatch comparisons at 512 segments.
+Binary16/binary32 `erf` inputs also select rows directly. On magnitude `[0,4]`,
+512 segments use `row = min(floor(abs(x) * 128), 511)`. The IR scales the exact
+decoded float by a power of two and converts downward into an unsigned integer;
+there is no rounded floating multiplication. One lazy equality check places
+`abs(x) == 4` in row 511 before conversion can overflow. Zero, NaN and tail
+branches bypass row selection. Both fixed and floating internal `erf`
+evaluators use this dispatch, with the index width and scaling derived from
+the segment count. Construction verifies equivalence to every stored threshold.
+
+Other layouts, including general floating normalized segmentation, retain a
+balanced tree over the exact stored thresholds. Equality selects the upper row.
+This takes at most nine dispatch comparisons at 512 segments.
 
 ```julia
 memory = table_memory_cost(plan; model=BlockMemoryModel(depth=512, word_bits=32))

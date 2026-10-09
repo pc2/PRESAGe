@@ -1237,3 +1237,31 @@ CMake generates and certifies the 512-row evaluator with tracing disabled;
 AP and AC builds pass the standalone C++ checker through CTest.
 Memory counts assume the declared block dimensions; actual BRAM inference and
 resource/timing measurements remain for vendor synthesis.
+
+## Direct floating erf row selection
+
+Binary16/binary32 erf layouts now select rows using exact power-of-two scaling
+and downward unsigned integer conversion. At 512 rows the mapping is
+`min(floor(abs(x) * 128), 511)`. The inclusive endpoint bypasses conversion;
+zero, NaN and tail branches bypass dispatch. Only the tail and endpoint
+comparisons are evaluated on the central erf path. General floating normalized
+segmentation retains comparison dispatch.
+
+| Check | Assertions | Coverage |
+| --- | ---: | --- |
+| Exact floating row selection | 85,690 | Counts 1/2/4/16/512; all 34,818 binary16 encodings with magnitude at most 4; binary32 threshold neighbors, both signs and exponent coverage; coarse custom floats with upward-rounded thresholds; AP/AC kernel intermediates, portable/AP/AC CPU APIs and explicit AC float conversion. |
+| Comparison fallback | 21 | Incompatible domains, widths, endpoints, counts and threshold payloads; general floating segmentation remains on its existing path. |
+| 512-row erf layout | 6,148 | Every binary16/binary32 boundary and its neighbors, endpoint row, special-value laziness and canonical graph audit. |
+| Fixed erf certificates | 2,354 | Complete error bound, explicit dispatch overflow ranges, serialized CPU replay and refusal of altered scale, rounding or endpoint branches. |
+| Floating erf candidates | 2,125 | IEEE64 separate and IEEE32 fused internals, CPU conformance, signed zeros, NaNs, tails, boundary rows and sampled mathematical accuracy. |
+| Existing kernel regressions | 2,126 | Readability, scaling, exact arithmetic, branches, intermediate values, validation, standalone verification and CLI generation. |
+
+These 98,464 targeted assertions pass. A fresh binary32, degree-three, 512-row
+erf plan with 31 fractional bits has a complete absolute-error bound of
+`3.047668456215022e-8`. Its graph has 47 nodes and four floating constants.
+AP/Vitis and AC/oneAPI CMake builds with tracing disabled both pass the standalone
+C++ checker through CTest. Reviewable headers and the plan are generated under
+`build/float-dispatch-512/`. Julia formatting and whitespace checks pass.
+The complete package runner was not repeated; these checks use ordinary local
+C++ compilation with public vendor headers. Hardware inference and timing
+remain unmeasured.

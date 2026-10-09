@@ -73,20 +73,47 @@
         k -> occursin("hash", k) || occursin("version", k) && k != "schema_version",
         keys(data),
     )
-    # Changed arithmetic, coefficient tables, metadata or branch thresholds need
+    # Changed arithmetic, coefficient tables, metadata or row selection need
     # a new proof. None can inherit the supported graph's certificate.
-    nodes = collect(plan.program.nodes)
-    threshold =
-        findfirst(n -> n isa IR.Const && n.format == IEEE32 && n.bits == 0x3f800000, nodes)
-    nodes[threshold] = IR.Const(IEEE32, 0x3f800001)
-    changed = PlanArtifact(
-        plan.spec;
-        program = IR.Program(nodes; tables = plan.program.tables),
-        segments = plan.segments,
-        dispatch = plan.dispatch,
-        settings = plan.settings,
+    scaled = only(findall(n -> n isa IR.ScalePow2, plan.program.nodes))
+    scale = plan.program.nodes[scaled]
+    @test all(
+        path -> any(
+            bound ->
+                bound.node == scaled &&
+                    bound.range == (0, 3) &&
+                    bound.format.rounding == :down,
+            path.ranges,
+        ),
+        result.paths,
     )
-    @test certify_erf(changed).status == :unsupported_domain
+    endpoint = plan.program.nodes[index].condition
+    comparison = plan.program.nodes[endpoint]
+    mutations = [
+        (scaled, IR.ScalePow2(scale.source, scale.exponent + 1, scale.format)),
+        (
+            scaled,
+            IR.ScalePow2(
+                scale.source,
+                scale.exponent,
+                FixedFormat(scale.format.width, scale.format.integer_bits; signed = false),
+            ),
+        ),
+        (endpoint, IR.Compare(:lt, comparison.a, comparison.b)),
+        (index, IR.BitCast(scaled, IR.format(plan.program, index))),
+    ]
+    for (node, replacement) in mutations
+        nodes = collect(plan.program.nodes)
+        nodes[node] = replacement
+        changed = PlanArtifact(
+            plan.spec;
+            program = IR.Program(nodes; tables = plan.program.tables),
+            segments = plan.segments,
+            dispatch = plan.dispatch,
+            settings = plan.settings,
+        )
+        @test certify_erf(changed).status == :unsupported_domain
+    end
     ss = [Segment(s.lower, s.upper, copy(s.coefficients)) for s in plan.segments]
     ss[1].coefficients[1] += 1 // (1 << 31)
     changed = PlanArtifact(

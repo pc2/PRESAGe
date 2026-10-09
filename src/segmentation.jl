@@ -42,11 +42,61 @@ function _fixed_segment_index!(nodes, input, format::FixedFormat, thresholds, do
     return _push!(nodes, IR.Select(at_endpoint, last_row, row))
 end
 
+function _float_segment_index!(nodes, input, format::FloatFormat, thresholds, domain)
+    count = length(thresholds) + 1
+    ispow2(count) || return nothing
+    lower, upper = _q.(domain)
+    lower == 0 && upper > 0 || return nothing
+    endpoint_bits = round_ieee(upper, format)
+    endpoint_value = decode_ieee(endpoint_bits, format)
+    endpoint_value.kind == :finite && endpoint_value.value == upper || return nothing
+    count == 1 && return _push!(nodes, IR.Const(IR.UIntFormat(1), 0))
+    width = upper / count
+    exponent = -_polynomial_binade(width)
+    width == _pow2(-exponent) || return nothing
+    typemin(Cint) <= exponent <= typemax(Cint) || return nothing
+    # For representable x, x >= ceil_float(i*width) iff floor(x/width) >= i.
+    # This proves equivalence to the stored comparison partition before emitting
+    # any nodes. Callers must guard inputs outside the nonnegative domain.
+    all(
+        i -> thresholds[i] == round_ieee(i * width, format; mode = :up),
+        eachindex(thresholds),
+    ) || return nothing
+    index_format = _segment_index_format(count)
+    integer_format = FixedFormat(
+        index_format.width,
+        index_format.width;
+        signed = false,
+        rounding = :down,
+        overflow = :reject,
+    )
+    scaled = _push!(nodes, IR.ScalePow2(input, exponent, integer_format))
+    row = _push!(nodes, IR.BitCast(scaled, index_format))
+    # Scaling and conversion operate on the exact float encoding, with no
+    # intermediate floating rounding. The lazy endpoint branch avoids count
+    # overflowing the row format at the inclusive upper endpoint.
+    endpoint = _push!(nodes, IR.Const(format, endpoint_bits))
+    at_endpoint = _push!(nodes, IR.Compare(:eq, input, endpoint))
+    last_row = _push!(nodes, IR.Const(index_format, count - 1))
+    return _push!(nodes, IR.Select(at_endpoint, last_row, row))
+end
+
 # A lazy binary search over the stored thresholds. Equal inputs select the
 # upper row; the last row also contains the domain's inclusive upper endpoint.
-function _segment_index!(nodes, input, format, thresholds; domain = nothing)
+function _segment_index!(
+    nodes,
+    input,
+    format,
+    thresholds;
+    domain = nothing,
+    float_direct::Bool = false,
+)
     if format isa FixedFormat && domain !== nothing
         direct = _fixed_segment_index!(nodes, input, format, thresholds, domain)
+        direct === nothing || return direct
+    end
+    if float_direct && format isa FloatFormat && domain !== nothing
+        direct = _float_segment_index!(nodes, input, format, thresholds, domain)
         direct === nothing || return direct
     end
     index_format = _segment_index_format(length(thresholds) + 1)

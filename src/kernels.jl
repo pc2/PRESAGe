@@ -181,7 +181,14 @@ function erf_candidate(;
     magnitude = _push!(nodes, IR.BitCast(magnitude_bits, IEEE32))
     coordinate_input = f == IEEE32 ? magnitude : _push!(nodes, IR.Convert(magnitude, f))
     thresholds = [round_ieee(i * width, IEEE32) for i = 1:(segments - 1)]
-    index = _segment_index!(nodes, magnitude, IEEE32, thresholds)
+    index = _segment_index!(
+        nodes,
+        magnitude,
+        IEEE32,
+        thresholds;
+        domain = (_q(0), _q(4)),
+        float_direct = true,
+    )
     center = _push!(nodes, IR.TableLoad(1, index))
     coordinate = _push!(nodes, IR.Add(coordinate_input, center, f))
     coefficients = [_push!(nodes, IR.TableLoad(k + 1, index)) for k = 1:(degree + 1)]

@@ -336,20 +336,33 @@ write_certificate("certificate.toml", result)
 certify_erf(read_plan("plan.toml"))
 ```
 
-`certify_erf` supports the canonical fixed binary16 or IEEE32 `erf` graph with nearest-even
-rounding and rejected overflow. Other graphs return an explicit unsupported
-result. The segmented floating `erf_candidate()` and general reductions do not
-have uniform evaluator certificates yet; bounded float/fixed polynomial kernels
-use the proof above.
+`certify_erf` supports the canonical fixed binary16 or IEEE32 `erf` graph with
+nearest-even numerical arithmetic and rejected overflow. Row selection uses an
+exact power-of-two scale followed by downward integer conversion. Other graphs
+return an explicit unsupported result. The segmented floating `erf_candidate()`
+and general reductions do not have uniform evaluator certificates yet; bounded
+float/fixed polynomial kernels use the proof above.
 
 ### What is proved
 
 The certifier reconstructs the evaluator from its stored coefficients and
 numerical choices, then compares every node and table with the executed graph.
-This checks thresholds, coefficient bits, coordinate construction, rounding
+This checks row selection, coefficient bits, coordinate construction, rounding
 order, conversions, sign restoration and exceptional branches. Segment metadata
 must cover `[0,4]` without gaps. Each segment proof includes both endpoints;
-the emitted predicates select the next row at internal boundaries.
+the emitted index selects the next row at internal boundaries.
+
+For `N` power-of-two magnitude segments, row selection computes
+`floor(abs(x) * N/4)` on `[0,4)`, using the exact decoded float and an unsigned
+integer format of `log2(N)` bits. Construction checks that every stored
+threshold equals the upward-rounded boundary `4i/N`; the integer floor then
+implements the same representable partition. Its range is `[0,N-1]`.
+A lazy equality branch selects `N-1` at the inclusive upper endpoint, avoiding
+integer overflow; `N=1` uses row zero directly. Zero, NaN and tail branches skip
+dispatch. This exact mapping adds no numerical error budget. Canonical graph
+reconstruction audits the scale, rounding mode and endpoint branch as well as
+the approximation arithmetic. Each path's overflow report includes the integer
+dispatch range `[0,N-1]` whenever conversion is evaluated.
 
 For each segment centre `c`, Sollya `supnorm` bounds the stored polynomial's
 absolute error against `erf(t+c)` on the exact closed coordinate interval.
