@@ -558,7 +558,7 @@ function certify_plan(
     accuracy = 1 // 1024,
     max_refinements::Integer = 2,
 )
-    if get(plan.settings, "kernel", "") == "binary16_lut"
+    if get(plan.settings, "kernel", "") == "full_lut"
         precision >= 64 || throw(ArgumentError("proof precision must be at least 64"))
         0 < accuracy < 1 ||
             throw(ArgumentError("norm accuracy must be between zero and one"))
@@ -567,7 +567,12 @@ function certify_plan(
             initial_precision = precision,
             max_precision = max(4096, precision),
         )
-        return certify_lut(plan; config)
+        # A stored table already declares its allocation. Recertification audits
+        # its actual size rather than imposing the fresh-generation default.
+        limit =
+            plan.program !== nothing && length(plan.program.tables) == 1 ?
+            length(only(plan.program.tables).values) : 65536
+        return certify_lut(plan; config, max_entries = max(1, limit))
     end
     return get(plan.settings, "kernel", "") == "erf_fixed_horner" ?
            certify_erf(plan; precision, accuracy, max_refinements) :
@@ -582,7 +587,7 @@ function _has_supported_certificate(plan)
         "floating_polynomial_horner",
         "normalized_segmented_horner",
         "precision_polynomial_horner",
-        "binary16_lut",
+        "full_lut",
     ) && return true
     try
         _polynomial_audit(plan)

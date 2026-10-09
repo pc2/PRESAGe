@@ -3,12 +3,13 @@ using PRESAGe
 
 function sweep_main(args)
     length(args) >= 3 || error(
-        "Usage: scripts/sweep.jl CONTRACT_OR_PLAN.toml SEARCH.toml OUTPUT_DIR [--cache=DIR] [--max-parallel=N] [--checker=EXEC] [--memory-depth=N] [--memory-word-bits=N] [--max-table-blocks=N] [--resource-model=MODEL.toml] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams]",
+        "Usage: scripts/sweep.jl CONTRACT_OR_PLAN.toml SEARCH.toml OUTPUT_DIR [--implementation=auto|lut|polynomial] [--lut-max-entries=65536] [--cache=DIR] [--max-parallel=N] [--checker=EXEC] [--memory-depth=N] [--memory-word-bits=N] [--max-table-blocks=N] [--resource-model=MODEL.toml] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams]",
     )
     input, settings, destination = args[1:3]
     cache, parallel, checker = nothing, 1, nothing
     depth, word_bits, budget, objective = nothing, nothing, nothing, :memory
     resource_model = nothing
+    implementation, lut_max_entries = nothing, 65536
     limits = Dict{Symbol, BigInt}()
     seen = Set{String}()
     for argument in args[4:end]
@@ -27,6 +28,8 @@ function sweep_main(args)
                 "--max-ffs",
                 "--max-dsps",
                 "--max-rams",
+                "--implementation",
+                "--lut-max-entries",
             ) &&
             !(parts[1] in seen) || error("Invalid or duplicate option: $argument")
         push!(seen, parts[1])
@@ -46,6 +49,12 @@ function sweep_main(args)
             budget = parse(BigInt, parts[2])
         elseif parts[1] == "--resource-model"
             resource_model = read_resource_model(parts[2])
+        elseif parts[1] == "--implementation"
+            implementation = Symbol(parts[2])
+            implementation in (:auto, :lut, :polynomial) ||
+                error("implementation must be auto, lut or polynomial")
+        elseif parts[1] == "--lut-max-entries"
+            lut_max_entries = PRESAGe._lut_entry_limit(parse(BigInt, parts[2]))
         elseif startswith(parts[1], "--max-")
             limits[Symbol(parts[1][7:end])] = parse(BigInt, parts[2])
         else
@@ -55,7 +64,21 @@ function sweep_main(args)
     plan = read_plan(input)
     config = read_search_config(settings)
     memory = resource_model === nothing ? BlockMemoryModel() : resource_model.memory
-    result = sweep_polynomial(
+    implementation === nothing &&
+        "--lut-max-entries" in seen &&
+        error("lut-max-entries requires implementation selection")
+    if !("--objective" in seen) && resource_model !== nothing && implementation !== nothing
+        objective = :resources
+    end
+    sweep = implementation === nothing ? sweep_polynomial : sweep_implementations
+    extra =
+        implementation === nothing ? (;) :
+        (;
+            implementations = implementation == :auto ? (:lut, :polynomial) :
+                              (implementation,),
+            lut_max_entries,
+        )
+    result = sweep(
         plan.program === nothing ? plan.spec : plan,
         config;
         cache,
@@ -68,6 +91,7 @@ function sweep_main(args)
         resource_budget = ResourceBudget(; limits...),
         max_table_blocks = budget,
         objective,
+        extra...,
     )
     observations = checker === nothing ? Dict() : verify_sweep(result; checker)
     write_sweep_artifacts(destination, result; observations)

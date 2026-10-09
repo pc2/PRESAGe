@@ -6,7 +6,7 @@ include(joinpath(@__DIR__, "generation_artifacts.jl"))
 
 function generate_main(args)
     length(args) >= 2 || error(
-        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--resource-model=MODEL.toml] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false] [--trace=true|false]",
+        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--resource-model=MODEL.toml] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--lut-max-entries=65536] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams] [--max-table-blocks=N] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--max-parallel=N] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false] [--trace=true|false]",
     )
     source, directory = args[1:2]
     options = Dict{String, String}()
@@ -39,6 +39,14 @@ function generate_main(args)
             "toolchain",
             "trace",
             "resource-model",
+            "lut-max-entries",
+            "objective",
+            "max-table-blocks",
+            "max-luts",
+            "max-ffs",
+            "max-dsps",
+            "max-rams",
+            "max-parallel",
         ) || error("unknown option $key")
         haskey(options, key) && error("duplicate option $key")
         options[key] = value
@@ -66,6 +74,38 @@ function generate_main(args)
     resource_model =
         haskey(options, "resource-model") ? read_resource_model(options["resource-model"]) :
         nothing
+    implementation = Symbol(get(options, "implementation", "auto"))
+    implementation in (:auto, :lut, :polynomial) ||
+        error("implementation must be auto, lut or polynomial")
+    lut_max_entries =
+        PRESAGe._lut_entry_limit(parse(BigInt, get(options, "lut-max-entries", "65536")))
+    limits = Dict{Symbol, BigInt}(
+        name => parse(BigInt, options["max-$name"]) for
+        name in PRESAGe._RESOURCE_NAMES if haskey(options, "max-$name")
+    )
+    resource_budget = ResourceBudget(; limits...)
+    max_table_blocks =
+        haskey(options, "max-table-blocks") ? parse(BigInt, options["max-table-blocks"]) :
+        nothing
+    objective = Symbol(
+        get(options, "objective", resource_model === nothing ? "memory" : "resources"),
+    )
+    PRESAGe._validate_sweep_selection(
+        max_table_blocks,
+        objective,
+        resource_model,
+        resource_budget,
+    )
+    selection_options =
+        ("objective", "max-table-blocks", "max-luts", "max-ffs", "max-dsps", "max-rams")
+    compare_implementations =
+        resource_model !== nothing || any(k -> haskey(options, k), selection_options)
+    compare_implementations &&
+        haskey(options, "lut-max-bits") &&
+        error(
+            "resource/memory selection uses budgets; lut-max-bits is the standalone storage policy",
+        )
+    implementation_report = nothing
     flag = get(
         options,
         "certify",
@@ -75,6 +115,14 @@ function generate_main(args)
     certify = flag == "true"
     proof_precision = parse(Int, get(options, "proof-precision", "256"))
     accuracy = PRESAGe._parse_rational(get(options, "norm-accuracy", "1/1024"))
+    compare_implementations &&
+        source == "erf" &&
+        !certify &&
+        any(k -> haskey(options, k), selection_options) &&
+        error("implementation selection requires certification")
+    haskey(options, "max-parallel") &&
+        !haskey(options, "search-config") &&
+        error("max-parallel requires search-config")
     result = nothing
     search = nothing
     plan = if haskey(options, "search-config")
@@ -90,6 +138,15 @@ function generate_main(args)
                 "toolchain",
                 "trace",
                 "resource-model",
+                "implementation",
+                "lut-max-entries",
+                "objective",
+                "max-table-blocks",
+                "max-luts",
+                "max-ffs",
+                "max-dsps",
+                "max-rams",
+                "max-parallel",
             ),
             keys(options),
         ) || error("search settings belong in the search configuration file")
@@ -103,17 +160,47 @@ function generate_main(args)
             "bounded search requires a contract without candidate data or settings",
         )
         config = read_search_config(options["search-config"])
-        search = search_polynomial(contract.spec, config)
-        if search.status != :certified
-            _generation_search_failure(directory, search)
-            detail =
-                isempty(search.attempts) ? "no attempts started" :
-                last(search.attempts).reason
-            error(
-                "search_limit ($(search.stop_reason)), $(length(search.attempts)) attempts: $detail",
+        haskey(options, "lut-max-entries") &&
+            !compare_implementations &&
+            !haskey(options, "implementation") &&
+            error("lut-max-entries requires implementation selection")
+        if compare_implementations || haskey(options, "implementation")
+            choices = implementation == :auto ? (:lut, :polynomial) : (implementation,)
+            implementation_report = sweep_implementations(
+                contract.spec,
+                config;
+                implementations = choices,
+                lut_max_entries,
+                resource_model,
+                resource_budget,
+                max_table_blocks,
+                objective,
+                max_parallel = parse(Int, get(options, "max-parallel", "1")),
             )
+            selection = only(implementation_report.selections)
+            if selection.status != :selected
+                _generation_implementation_failure(directory, implementation_report)
+                error("$(selection.status): $(selection.reason)")
+            end
+            result =
+                only(
+                    r for r in implementation_report.rows if r.index == selection.row_index
+                ).attempt.certificate
+        else
+            haskey(options, "max-parallel") &&
+                error("max-parallel requires implementation selection")
+            search = search_polynomial(contract.spec, config)
+            if search.status != :certified
+                _generation_search_failure(directory, search)
+                detail =
+                    isempty(search.attempts) ? "no attempts started" :
+                    last(search.attempts).reason
+                error(
+                    "search_limit ($(search.stop_reason)), $(length(search.attempts)) attempts: $detail",
+                )
+            end
+            result = search.selected
         end
-        result = search.selected
         result.plan
     elseif source == "erf"
         internal = get(options, "internal", "fixed")
@@ -143,12 +230,13 @@ function generate_main(args)
                     ),
                 ),
             )
-            implementation = Symbol(get(options, "implementation", "auto"))
             model = ImplementationModel(;
                 lut_max_bits = parse(BigInt, get(options, "lut-max-bits", string(1 << 20))),
             )
-            selected = select_implementation(spec; implementation, model)
-            if selected == :lut
+            selected =
+                compare_implementations ? :deferred :
+                select_implementation(spec; implementation, model, lut_max_entries)
+            if selected == :lut || implementation == :lut
                 certify || error("LUT generation requires certification")
                 any(
                     k -> k in (
@@ -176,10 +264,10 @@ function generate_main(args)
                 haskey(options, "coefficient-fraction-bits") ?
                 parse(Int, options["coefficient-fraction-bits"]) : nothing
             if certify
-                result = certified_erf(;
+                numerical = (;
                     spec,
-                    implementation,
                     model,
+                    lut_max_entries,
                     degree,
                     segments,
                     initial_fraction_bits = fraction,
@@ -197,6 +285,46 @@ function generate_main(args)
                     proof_precision,
                     accuracy,
                 )
+                if compare_implementations
+                    candidates = CertificationResult[]
+                    if implementation != :polynomial && (
+                        implementation == :lut ||
+                        PRESAGe._lut_availability(spec, lut_max_entries).available
+                    )
+                        push!(
+                            candidates,
+                            certified_lut(
+                                spec;
+                                config = OracleConfig(
+                                    initial_precision = proof_precision,
+                                    max_precision = max(4096, proof_precision),
+                                ),
+                                max_entries = lut_max_entries,
+                            ),
+                        )
+                    end
+                    implementation == :lut || push!(
+                        candidates,
+                        certified_erf(; numerical..., implementation = :polynomial),
+                    )
+                    implementation_report = select_implementation(
+                        candidates;
+                        resource_model,
+                        resource_budget,
+                        max_table_blocks,
+                        objective,
+                        implementation,
+                    )
+                    if implementation_report.selected === nothing
+                        _generation_implementation_failure(directory, implementation_report)
+                        error(
+                            "$(implementation_report.status): $(implementation_report.reason)",
+                        )
+                    end
+                    result = implementation_report.selected
+                else
+                    result = certified_erf(; numerical..., implementation)
+                end
                 result.plan
             else
                 haskey(options, "max-fraction-bits") &&
@@ -249,10 +377,55 @@ function generate_main(args)
                 "toolchain",
                 "trace",
                 "resource-model",
+                "implementation",
+                "lut-max-entries",
+                "objective",
+                "max-table-blocks",
+                "max-luts",
+                "max-ffs",
+                "max-dsps",
+                "max-rams",
             ),
             keys(options),
         ) || error("generation options require the erf source")
-        read_plan(source)
+        artifact = read_plan(source)
+        if artifact.program === nothing
+            implementation == :lut || error(
+                "contract generation requires search-config or implementation=lut",
+            )
+            certify || error("LUT generation requires certification")
+            result = certified_lut(
+                artifact.spec;
+                max_entries = lut_max_entries,
+                config = OracleConfig(
+                    initial_precision = proof_precision,
+                    max_precision = max(4096, proof_precision),
+                ),
+            )
+            if compare_implementations
+                implementation_report = select_implementation(
+                    (result,);
+                    resource_model,
+                    resource_budget,
+                    objective,
+                    max_table_blocks,
+                    implementation = :lut,
+                )
+                if implementation_report.selected === nothing
+                    _generation_implementation_failure(directory, implementation_report)
+                    error(
+                        "$(implementation_report.status): $(implementation_report.reason)",
+                    )
+                end
+            end
+            result.plan
+        else
+            any(
+                k -> haskey(options, k),
+                ("implementation", "lut-max-entries", selection_options...),
+            ) && error("implementation options require a function contract")
+            artifact
+        end
     end
     if !haskey(options, "certify") && source != "erf"
         certify = PRESAGe._has_supported_certificate(plan)
@@ -301,8 +474,18 @@ function generate_main(args)
             (artifacts["certificate.toml"] = _generation_text(write_certificate, result))
         search === nothing ||
             (artifacts["search.toml"] = _generation_text(write_search_report, search))
+        implementation_report === nothing || (
+            artifacts["implementations.toml"] =
+                _generation_text(write_implementation_report, implementation_report)
+        )
     catch err
         err isa InterruptException && rethrow()
+        implementation_report === nothing || _generation_implementation_failure(
+            directory,
+            implementation_report;
+            stage = "emission",
+            reason = sprint(showerror, err),
+        )
         search === nothing || _generation_search_failure(
             directory,
             search;
@@ -315,6 +498,12 @@ function generate_main(args)
         _publish_generation(directory, artifacts)
     catch err
         err isa InterruptException && rethrow()
+        implementation_report === nothing || _generation_implementation_failure(
+            directory,
+            implementation_report;
+            stage = "publication",
+            reason = sprint(showerror, err),
+        )
         search === nothing || _generation_search_failure(
             directory,
             search;

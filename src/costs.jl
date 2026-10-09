@@ -80,18 +80,14 @@ function select_implementation(
     spec::FunctionSpec;
     implementation::Symbol = :auto,
     model::ImplementationModel = ImplementationModel(),
+    lut_max_entries::Integer = 65536,
 )
     implementation in (:auto, :lut, :polynomial) ||
         throw(ArgumentError("implementation must be auto, lut or polynomial"))
-    lut_available =
-        spec.input_format == spec.output_format == IEEE16 && spec.domain === nothing
+    lut_available = _lut_availability(spec, lut_max_entries).available
     implementation == :lut &&
         !lut_available &&
-        throw(
-            ArgumentError(
-                "LUT generation requires matching binary16 interfaces and an all-finite domain",
-            ),
-        )
+        throw(ArgumentError(_lut_availability(spec, lut_max_entries).reason))
     implementation != :auto && return implementation
     return lut_available && _lut_bits(spec) <= model.lut_max_bits ? :lut : :polynomial
 end

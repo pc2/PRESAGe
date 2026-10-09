@@ -595,29 +595,30 @@ magnitude in proposal estimates and freshly certifies every candidate.
 candidate from supplied ascending coefficients of q. Stored plans replay through
 the existing certification and C++ commands. See the [example](../examples/odd_search.jl).
 
-## Exhaustive binary16 lookup tables
+## Exhaustive lookup tables
 
-`certified_lut(spec)` builds a full 65,536-entry table for matching binary16
-interfaces on all finite inputs. The default reference backend is direct MPFR.
-Adaptive enclosures must resolve a unique nearest-even output; every finite
-input must have a finite result. Exact primitive zero/unit cases use their
-established identities. Nonfinite inputs use the shared primitive policy.
-Domain errors at finite inputs, nonfinite finite-input results and unresolved
-references stop generation with explicit failure status.
+`certified_lut(spec)` builds a full raw-index table for small fixed or floating
+inputs, with an independently declared output format. A configurable entry limit
+(default 65,536) is checked before allocation. Adaptive references use MPFR for
+primitives and Sollya for compositions; exact rational polynomials and primitive
+identities supply exact values where applicable.
 
-For each finite input, the stored output's absolute error is bounded against
-both directed enclosure endpoints. The maximum across the complete finite
-format is a uniform error bound, rather than a sampled maximum. For erf, this
-bound is about `2.4401e-4`, below `2^-10`. Every finite output also matches the
-resolved nearest-even reference, including subnormal results and signed zeros.
+Every finite input inside the contract must resolve to a finite output. Domain
+errors, poles and unresolved references prevent certification. Bounded domain
+guards match polynomial evaluators: canonical NaN for floating outputs and
+rejection for fixed outputs. Fixed rounding, saturation and wrapping contribute
+to the exhaustive error bound. Nonfinite inputs follow the audited guard or
+established primitive policy.
 
-`certify_lut(plan)` audits the canonical input-bitcast-table-load graph, table
-format and complete entry count, then resolves all references afresh. Changed
-entries cannot retain a certificate. Reports use method
-`binary16_exhaustive_lut` and explicitly record exhaustive coverage.
-Generation through `certified_erf` selects a LUT or fixed polynomial by the
-configurable table-bit threshold; explicit selection bypasses that threshold.
-This selection policy contains no measured FPGA performance assumptions.
+The maximum stored-output error across every covered input is a uniform bound,
+not a sampled maximum. For binary16 erf it remains about `2.4401e-4`, below
+`2^-10`. `certify_lut` audits the canonical graph, guards, output format, complete
+entry count and every stored entry, including inactive placeholders. Reports use
+method `exhaustive_lut` and record the actual input count and table bits.
+
+See [backend selection](implementations.md) for common resource-aware comparison
+of LUTs and certified polynomials. Cost assumptions remain separate from the
+numerical proof and require vendor synthesis calibration.
 
 ## Sqrt and rsqrt exponent splitting
 

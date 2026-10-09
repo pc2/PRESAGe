@@ -207,3 +207,13 @@ julia --startup-file=no --project=. scripts/generate.jl \
 ```
 
 Generation freshly recertifies the stored plan before emitting C++.
+
+## LUT and polynomial candidates
+
+Use `sweep_implementations` or `scripts/sweep.jl --implementation=auto` to compare
+full LUT and polynomial candidates under the same resource/memory selection.
+The shared result, `select_sweep`, artifact export and verification APIs work for
+both backends. General sweeps use schema version 5; rows identify their
+implementation, and reports explain per-contract LUT availability and entry
+limits. See [backend selection](implementations.md) for formats, guards and CLI
+examples. Existing polynomial-only sweeps retain versions 3/4.

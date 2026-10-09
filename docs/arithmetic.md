@@ -97,7 +97,7 @@ library's fixed types. In the portable backend, fixed values are scaled integer
 units in native integers or GMP. A typed portable input must fit its declared
 format. Binary16 raw interfaces use `std::uint16_t`, and typed interfaces use
 `Half`. Pure lookup/bit graphs and pure fixed programs are independent of host
-floating rounding. LUTs store sixteen-bit entries for binary16.
+floating rounding. Full LUTs store the declared output format, independently of the small input format.
 
 Fixed fields use native 64/128-bit integers where their widths fit. Products,
 aligned sums and FMA use widened native temporaries when their complete ranges

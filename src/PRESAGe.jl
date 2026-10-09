@@ -71,6 +71,7 @@ export FloatFormat,
     PolynomialSweepSelection,
     PolynomialSweepResult,
     sweep_polynomial,
+    sweep_implementations,
     select_sweep,
     write_sweep_report,
     write_sweep_artifacts,
@@ -106,6 +107,8 @@ export FloatFormat,
     write_resource_report,
     table_memory_cost,
     select_implementation,
+    ImplementationSelection,
+    write_implementation_report,
     implementation_cost,
     precision_cost,
     optimize_precision,
@@ -158,6 +161,7 @@ include("search_schema.jl")
 include("precision_optimization.jl")
 include("numerical_cache.jl")
 include("sweeps.jl")
+include("implementation_selection.jl")
 include("sweep_artifacts.jl")
 include("verification.jl")
 

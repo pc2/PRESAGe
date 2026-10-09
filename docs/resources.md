@@ -194,3 +194,12 @@ are rejected.
 Local tests use explicitly synthetic counts to check the protocol, and public
 AP/AC headers to check numerical conformance. Actual resource accuracy remains
 pending vendor synthesis and CI calibration.
+
+## Select between evaluator backends
+
+[General backend selection](implementations.md) applies this same model to full
+LUTs and polynomial candidates. `sweep_implementations` generates both; the
+certificate-list overload of `select_implementation` compares existing proof
+results. ROM policies, limits, unknown estimates and priorities are shared with
+polynomial sweep selection. Ordinary compilation verifies numerical semantics;
+actual backend performance remains a synthesis calibration task.

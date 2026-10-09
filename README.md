@@ -400,6 +400,14 @@ certifies by default; `--certify=false` emits an unchecked candidate. Pass an
 existing `plan.toml` instead of `erf` to emit its stored program again and rerun
 the supported certificate.
 
+## Backend selection
+
+[General LUT and polynomial selection](docs/implementations.md) supports small
+fixed/custom floating inputs, arbitrary output formats and bounded expressions.
+Compare certified candidates using the same configurable resource profiles,
+budgets and priorities; generate the selected C++ evaluator and its decision
+report. Wide inputs retain polynomial planning.
+
 ## Binary16 implementations
 
 Binary16 `erf` supports a lookup table or fixed polynomial, both with half input
@@ -436,8 +444,8 @@ The LUT resolves every entry using adaptive reference enclosures and reproduces
 nearest-even rounding for every finite input. Signed zeros and nonfinite inputs
 follow the shared primitive policy. `certify_lut(plan)` rechecks every stored
 entry and the complete lookup graph. `certified_lut(spec)` is also available for
-other matching binary16 contracts with established references and finite results
-at every finite input. Failed or unresolved references stop generation.
+small fixed/custom floating contracts, mixed output formats and bounded
+expressions with established references and finite results in the contract. Failed or unresolved references stop generation.
 
 The polynomial has a uniform total-error certificate; it does not promise
 correct rounding. Both implementations are checked on all 65,536 input patterns

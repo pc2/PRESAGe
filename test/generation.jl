@@ -132,7 +132,7 @@ end
         generate_main(["erf", lut, "--input-format=half"])
         plan = read_plan(joinpath(lut, "plan.toml"))
         @test plan.spec.input_format == plan.spec.output_format == IEEE16
-        @test plan.settings["kernel"] == "binary16_lut"
+        @test plan.settings["kernel"] == "full_lut"
         @test implementation_cost(plan).table_bits == 1 << 20
         @test TOML.parsefile(joinpath(lut, "certificate.toml"))["status"] == "certified"
         repeated = joinpath(directory, "repeated")

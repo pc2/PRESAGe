@@ -132,7 +132,7 @@ end
     @test_throws ArgumentError select_implementation(spec; implementation = :unknown)
     lut = certified_erf(; spec)
     @test lut.status == :certified
-    @test lut.settings["method"] == "binary16_exhaustive_lut"
+    @test lut.settings["method"] == "exhaustive_lut"
     @test lut.total_bound <= spec.absolute_error
     @test length(only(lut.plan.program.tables).values) == 65536
     cost = implementation_cost(lut.plan)
@@ -181,7 +181,7 @@ end
     write_certificate(io, lut)
     report = TOML.parse(String(take!(io)))
     @test report["coverage"]["table_bits"] == 1 << 20
-    @test report["coverage"]["inputs"] == "all 65536 binary16 encodings"
+    @test report["coverage"]["inputs"] == "all 65536 input encodings"
     words = UInt64.(0:65535)
     polynomials = CertificationResult[]
     for evaluation in (:separate, :fma)

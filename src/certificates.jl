@@ -267,6 +267,7 @@ function certified_erf(;
     spec::FunctionSpec = erf_spec(),
     implementation::Symbol = :auto,
     model::ImplementationModel = ImplementationModel(),
+    lut_max_entries::Integer = 65536,
     degree::Integer = 9,
     segments::Integer = 4,
     initial_fraction_bits::Integer = spec.output_format.fraction_bits +
@@ -279,13 +280,13 @@ function certified_erf(;
     accuracy::Union{Integer, Rational} = 1 // 1024,
 )
     _check_fixed_erf_spec(spec)
-    selected = select_implementation(spec; implementation, model)
+    selected = select_implementation(spec; implementation, model, lut_max_entries)
     if selected == :lut
         config = OracleConfig(;
             initial_precision = proof_precision,
             max_precision = max(4096, proof_precision),
         )
-        return certified_lut(spec; config)
+        return certified_lut(spec; config, max_entries = lut_max_entries)
     end
     1 <= degree <= 32 || throw(ArgumentError("degree must be in 1:32"))
     0 <= initial_fraction_bits <= max_fraction_bits <= 256 ||
@@ -383,12 +384,15 @@ function _certificate_data(result::CertificationResult)
                 report["coordinate"] = coordinate
             end
         end
-        d["coverage"] = if get(result.settings, "method", "") == "binary16_exhaustive_lut"
+        d["coverage"] = if get(result.settings, "method", "") == "exhaustive_lut"
+            entries = parse(BigInt, result.settings["entries"])
             Dict(
-                "inputs" => "all 65536 binary16 encodings",
-                "finite_inputs" => "resolved nearest-even output for every finite input",
-                "nonfinite_inputs" => "shared primitive special-value policy",
-                "table_bits" => 65536 * 16,
+                "inputs" => "all $entries input encodings",
+                "finite_inputs" => "resolved format rounding for every finite input in the contract",
+                "nonfinite_inputs" => "audited domain guards or primitive special-value policy",
+                "table_bits" => _sweep_integer_data(
+                    entries * _width(result.plan.spec.output_format),
+                ),
             )
         elseif get(result.settings, "method", "") in (
             "fixed_polynomial_horner",

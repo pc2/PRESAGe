@@ -225,7 +225,22 @@ function _polynomial_worker_main(args)
             proof_started = time_ns()
         end
         stored = get(request, :stored_plan, nothing)
-        result = if stored === nothing
+        result = if get(request, :unsupported_reason, nothing) !== nothing
+            _certificate_failure(
+                PlanArtifact(request.spec),
+                :unsupported_domain,
+                request.unsupported_reason,
+            )
+        elseif get(request, :implementation, :polynomial) == :lut
+            certified_lut(
+                request.spec;
+                config = OracleConfig(
+                    initial_precision = config.proof_precision,
+                    max_precision = max(4096, config.proof_precision),
+                ),
+                max_entries = request.lut_max_entries,
+            )
+        elseif stored === nothing
             _certified_polynomial(
                 request.spec,
                 request.domain,

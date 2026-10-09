@@ -1403,3 +1403,30 @@ assumptions. Actual vendor compilation, simulation, inference and resource
 accuracy are later CI gates. See [resource models](resources.md).
 Julia formatting and whitespace checks pass. The full package runner was not
 repeated, and Sollya.jl was not changed.
+
+## General LUT and polynomial resource selection
+
+The general backend path passes 752 new checks:
+
+- 673 exhaustive LUT contract and graph checks across small signed/unsigned
+  fixed and custom floating inputs, mixed interfaces, binary128 output,
+  primitive/composed expressions, domain guards, nearest/directed fixed
+  rounding, saturation/wrapping, exact identities, midpoint ties and entry limits.
+- 25 shared selection checks covering RAM/resource priorities, budgets,
+  explicit overrides, unknown costs, deterministic ties, exact contract matching
+  and selection reports.
+- 50 supervised sweep, CLI and publication checks across sine/cosine contracts,
+  multiple polynomial degrees, resource re-selection, selected artifact replay,
+  preserved evaluator bundles on failed selection, direct contract LUTs, the
+  canonical binary16 erf shortcut, wider inputs and unsupported polynomial policies.
+- Four AP/AC kernel conformance assertions compare all 400 input encodings per
+  backend across six general LUT fixtures. Compiled generated kernels use the
+  official headers and agree with Julia on output bits, rejection status,
+  intermediate values, lazy branches and typed/raw interfaces.
+
+The binary16 erf regression also passes all 196,653 assertions, including all
+65,536 encodings against MPFR and ordinary portable/AP/AC C++ execution of LUT
+and separate/FMA polynomial implementations. Existing selection checks (391)
+and resource-profile checks (230), plus all 121 worker/cache checks, pass. Julia formatting and diff checks are clean.
+These are local numerical and software-compilation results; resource calibration
+still requires vendor synthesis. See [backend selection](implementations.md).

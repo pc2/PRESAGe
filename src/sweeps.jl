@@ -6,7 +6,18 @@ struct PolynomialSweepRow
     cache_status::Symbol
     cache_key::Union{Nothing, String}
     compute_seconds::Float64
+    implementation::Symbol
 end
+PolynomialSweepRow(index, spec_index, attempt, cache_status, cache_key, compute_seconds) =
+    PolynomialSweepRow(
+        index,
+        spec_index,
+        attempt,
+        cache_status,
+        cache_key,
+        compute_seconds,
+        :polynomial,
+    )
 
 """One contract's selected row, or an explicit reason no certified design was eligible."""
 struct PolynomialSweepSelection
@@ -33,7 +44,11 @@ struct PolynomialSweepResult
     selections::Tuple{Vararg{PolynomialSweepSelection}}
     resource_model::Union{Nothing, ResourceModel}
     resource_budget::ResourceBudget
+    implementations::Tuple{Vararg{Symbol}}
+    lut_max_entries::Int
 end
+PolynomialSweepResult(args::Vararg{Any, 15}) =
+    PolynomialSweepResult(args..., (:polynomial,), 65536)
 
 const _SWEEP_PARETO_METRICS = (
     :total_bound,
@@ -90,9 +105,52 @@ function _validate_sweep_selection(
     return max_table_blocks === nothing ? nothing : BigInt(max_table_blocks)
 end
 
+function _candidate_precision_cost(plan, implementation = :polynomial)
+    kernel = get(plan.settings, "kernel", "")
+    (kernel == "full_lut" || implementation == :lut) && return (
+        arithmetic_result_bits = BigInt(0),
+        operand_bits = BigInt(0),
+        stage_bits = BigInt(0),
+        table_bits = implementation_cost(plan).table_bits,
+        coefficient_bits = BigInt(0),
+    )
+    kernel == "erf_fixed_horner" || return precision_cost(plan)
+    layout = _erf_audit(plan)
+    p = plan.program
+    operations = [
+        i for
+        (i, n) in enumerate(p.nodes) if n isa Union{IR.Mul, IR.Add, IR.FMA, IR.UIntAdd}
+    ]
+    return (;
+        arithmetic_result_bits = sum(
+            (BigInt(_cost_width(IR.format(p, i))) for i in operations);
+            init = BigInt(0),
+        ),
+        operand_bits = sum(
+            (
+                BigInt(_cost_width(IR.format(p, j))) for i in operations for
+                j in IR.refs(p.nodes[i])
+            );
+            init = BigInt(0),
+        ),
+        stage_bits = sum(
+            (
+                BigInt(_cost_width(IR.format(p, i))) for
+                i in (layout.initial, (s.result for s in layout.stages)...)
+            );
+            init = BigInt(0),
+        ),
+        table_bits = implementation_cost(plan).table_bits,
+        coefficient_bits = sum(
+            (BigInt(length(t.values)) * _cost_width(t.format) for t in p.tables[2:end]);
+            init = BigInt(0),
+        ),
+    )
+end
+
 function _sweep_metrics(row, memory_model, resource_model = nothing)
     result = row.attempt.certificate
-    cost = precision_cost(result.plan)
+    cost = _candidate_precision_cost(result.plan, row.implementation)
     implementation = implementation_cost(result.plan; memory_model)
     metrics = (;
         total_bound = result.total_bound,
@@ -291,10 +349,18 @@ function select_sweep(
         selections,
         resource_model,
         resource_budget,
+        result.implementations,
+        result.lut_max_entries,
     )
 end
 
-function _sweep_requests(inputs, config)
+function _sweep_requests(
+    inputs,
+    config;
+    implementations = (:polynomial,),
+    lut_max_entries = 65536,
+    allow_unsupported = false,
+)
     inputs isa Union{FunctionSpec, PlanArtifact} && (inputs = (inputs,))
     inputs isa Union{Tuple, AbstractVector} &&
             !isempty(inputs) && all(x -> x isa FunctionSpec, inputs) ||
@@ -306,7 +372,19 @@ function _sweep_requests(inputs, config)
         )
     stored = first(inputs) isa PlanArtifact ? _read_plan(_plan_data(only(inputs))) : nothing
     specs = stored === nothing ? Tuple(inputs) : (stored.spec,)
-    domains = [_validate_search_request(spec, config) for spec in specs]
+    :polynomial in implementations ||
+        stored === nothing ||
+        throw(ArgumentError("stored stage sweeps require the polynomial implementation"))
+    preflight = map(specs) do spec
+        :polynomial in implementations || return (; domain = nothing, reason = nothing)
+        try
+            return (; domain = _validate_search_request(spec, config), reason = nothing)
+        catch err
+            allow_unsupported && err isa ArgumentError || rethrow()
+            return (; domain = nothing, reason = sprint(showerror, err))
+        end
+    end
+    domains = [item.domain for item in preflight]
     if stored !== nothing
         base = _stored_precision(stored)
         degree =
@@ -332,30 +410,56 @@ function _sweep_requests(inputs, config)
         end
     end
     # Cap allocation before materializing a possibly huge Cartesian product.
-    count =
-        BigInt(length(specs)) *
+    polynomial_count =
         length(config.segments) *
-        length(config.degrees) *
+        BigInt(length(config.degrees)) *
         length(config.internal_formats)
+    count = sum(
+        (
+            implementation == :polynomial ? polynomial_count :
+            Int(_lut_availability(spec, lut_max_entries).available) for spec in specs
+            for implementation in implementations
+        );
+        init = BigInt(0),
+    )
     requests = NamedTuple[]
-    for (i, spec) in enumerate(specs),
-        segments in config.segments,
-        degree in config.degrees,
-        (format, precision) in zip(config.internal_formats, config.precisions)
-
+    for (i, spec) in enumerate(specs), implementation in implementations
         length(requests) >= config.max_attempts && break
-        request = (;
-            spec,
-            config,
-            domain = domains[i],
-            degree,
-            internal_format = format,
-            segments,
-            precision,
-        )
-        stored === nothing ||
-            (request = merge(request, (; stored_plan = _plan_data(stored))))
-        push!(requests, (; spec_index = i, request))
+        if implementation == :lut
+            _lut_availability(spec, lut_max_entries).available || continue
+            request = (;
+                spec,
+                config,
+                implementation,
+                lut_max_entries,
+                degree = 0,
+                internal_format = spec.output_format,
+                segments = 1,
+                precision = nothing,
+            )
+            push!(requests, (; spec_index = i, request))
+            continue
+        end
+        for segments in config.segments,
+            degree in config.degrees,
+            (format, precision) in zip(config.internal_formats, config.precisions)
+
+            length(requests) >= config.max_attempts && break
+            request = (;
+                spec,
+                config,
+                domain = domains[i],
+                degree,
+                internal_format = format,
+                segments,
+                precision,
+            )
+            preflight[i].reason === nothing ||
+                (request = merge(request, (; unsupported_reason = preflight[i].reason)))
+            stored === nothing ||
+                (request = merge(request, (; stored_plan = _plan_data(stored))))
+            push!(requests, (; spec_index = i, request))
+        end
     end
     return specs, requests, count, stored === nothing ? :regenerate : :stored
 end
@@ -371,8 +475,12 @@ function _sweep_job(
     cancelled,
 )
     request = item.request
+    implementation = get(request, :implementation, :polynomial)
+    # LUT proofs do not use the polynomial cache audit. Keep cache semantics
+    # unchanged until table regeneration is an observed bottleneck.
+    implementation == :lut && (cache = nothing)
     job_started = time_ns()
-    request_data = _numerical_request(request)
+    request_data = cache === nothing ? nothing : _numerical_request(request)
     key =
         cache === nothing ? nothing :
         _numerical_digest(Dict("request" => request_data, "identity" => identity))
@@ -441,7 +549,15 @@ function _sweep_job(
         attempt.generation_seconds,
         attempt.proof_seconds,
     )
-    PolynomialSweepRow(index, item.spec_index, attempt, cache_status, key, compute_seconds)
+    PolynomialSweepRow(
+        index,
+        item.spec_index,
+        attempt,
+        cache_status,
+        key,
+        compute_seconds,
+        implementation,
+    )
 end
 
 """
@@ -489,6 +605,48 @@ sweep_polynomial(
     objective,
 )
 
+"""
+    sweep_implementations(spec_or_specs, config; implementations=(:lut, :polynomial),
+        lut_max_entries=65536, resource_model=nothing, objective=:resources, kwargs...)
+
+Compare full LUTs and every configured polynomial candidate using the same
+certification, resource budgets, Pareto metrics and deterministic selection.
+Accept small fixed/custom floating inputs and arbitrary supported outputs.
+LUT availability is checked before allocation and recorded in the report;
+wide inputs retain polynomial planning. Both kinds share worker deadlines and
+attempt limits. Stored stage sweeps remain available through `sweep_polynomial`.
+Without a resource profile the default objective is modeled memory blocks.
+Returns the shared `PolynomialSweepResult` report/artifact interface.
+"""
+function sweep_implementations(
+    inputs,
+    config::PolynomialSearchConfig;
+    implementations = (:lut, :polynomial),
+    lut_max_entries::Integer = 65536,
+    resource_model::Union{Nothing, ResourceModel} = nothing,
+    objective::Symbol = resource_model === nothing ? :memory : :resources,
+    kwargs...,
+)
+    inputs isa PlanArtifact &&
+        throw(ArgumentError("implementation sweeps require function contracts"))
+    choices = Tuple(implementations)
+    !isempty(choices) &&
+        length(unique(choices)) == length(choices) &&
+        all(x -> x in (:lut, :polynomial), choices) ||
+        throw(ArgumentError("implementations must contain distinct lut/polynomial choices"))
+    limit = _lut_entry_limit(lut_max_entries)
+    return _sweep_polynomial(
+        inputs,
+        config;
+        implementations = choices,
+        lut_max_entries = limit,
+        implementation_sweep = true,
+        resource_model,
+        objective,
+        kwargs...,
+    )
+end
+
 function _sweep_polynomial(
     inputs,
     config;
@@ -503,6 +661,9 @@ function _sweep_polynomial(
     worker_command = _polynomial_worker_command,
     process_started = (process, directory) -> nothing,
     cache_identity = _numerical_identity,
+    implementations = (:polynomial,),
+    lut_max_entries = 65536,
+    implementation_sweep = false,
 )
     !(max_parallel isa Bool) && 1 <= max_parallel <= 64 ||
         throw(ArgumentError("max_parallel must be an integer in 1:64"))
@@ -512,7 +673,14 @@ function _sweep_polynomial(
         resource_model,
         resource_budget,
     )
-    specs, requests, count, mode = _sweep_requests(inputs, config)
+    specs, requests, count, mode = _sweep_requests(
+        inputs,
+        config;
+        implementations,
+        lut_max_entries,
+        allow_unsupported = implementation_sweep,
+    )
+    implementation_sweep && (mode = :implementations)
     started = time_ns()
     identity = cache === nothing ? nothing : cache_identity()
     # Pin the resolved library so workers and the cache identity agree even if
@@ -592,6 +760,8 @@ function _sweep_polynomial(
         selections,
         resource_model,
         resource_budget,
+        Tuple(implementations),
+        Int(lut_max_entries),
     )
 end
 
@@ -609,7 +779,8 @@ function _sweep_data(result; observations = Dict())
         throw(ArgumentError("observation index is not a sweep row"))
     data = Dict{String, Any}(
         "schema" => "presage-polynomial-sweep",
-        "schema_version" => result.resource_model === nothing ? 3 : 4,
+        "schema_version" =>
+            result.mode == :implementations ? 5 : result.resource_model === nothing ? 3 : 4,
         "status" => string(result.status),
         "stop_reason" => string(result.stop_reason),
         "mode" => string(result.mode),
@@ -632,6 +803,18 @@ function _sweep_data(result; observations = Dict())
             ],
         ),
     )
+    if result.mode == :implementations
+        data["implementations"] = string.(collect(result.implementations))
+        data["lut_max_entries"] = result.lut_max_entries
+        data["lut_availability"] = [
+            Dict(
+                "spec_index" => i,
+                "available" => availability.available,
+                "reason" => availability.reason,
+            ) for (i, spec) in enumerate(result.specs) for
+            availability in (_lut_availability(spec, result.lut_max_entries),)
+        ]
+    end
     if result.resource_model !== nothing
         data["resource_model"] = _resource_model_data(result.resource_model)
         data["selection_policy"]["resource_budget"] =
@@ -659,6 +842,7 @@ function _sweep_data(result; observations = Dict())
         d = Dict{String, Any}(
             "index" => row.index,
             "spec_index" => row.spec_index,
+            "implementation" => string(row.implementation),
             "degree" => a.degree,
             "segments" => a.segments,
             "internal_format" => _format_data(a.internal_format),
@@ -693,7 +877,8 @@ function _sweep_data(result; observations = Dict())
                 )
                 # Interrupted/malformed candidates may not have auditable widths.
                 try
-                    d["precision_cost"] = _precision_cost_data(a.plan)
+                    row.implementation == :lut ||
+                        (d["precision_cost"] = _precision_cost_data(a.plan))
                 catch err
                     err isa Union{ArgumentError, KeyError, OverflowError} || rethrow()
                 end

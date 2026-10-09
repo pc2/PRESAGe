@@ -8,6 +8,8 @@ const _GENERATION_OUTPUTS = (
     "search-failure.toml",
     "resources.toml",
     "resource-model.toml",
+    "implementations.toml",
+    "implementation-failure.toml",
 )
 # Remove a previously generated companion header when publishing a new bundle.
 const _GENERATION_MANAGED = (_GENERATION_OUTPUTS..., "evaluator_support.hpp")
@@ -66,6 +68,21 @@ function _publish_generation(directory, artifacts; install = mv)
             foreach(name -> mv(joinpath(backup, name), joinpath(directory, name)), saved)
             rethrow()
         end
+    end
+    return nothing
+end
+
+function _generation_implementation_failure(directory, result; stage = nothing, reason = "")
+    mkpath(directory)
+    mktempdir(directory; prefix = ".presage-report-") do temporary
+        report = joinpath(temporary, "implementations.toml")
+        data =
+            result isa ImplementationSelection ?
+            PRESAGe._implementation_selection_data(result) : PRESAGe._sweep_data(result)
+        stage === nothing ||
+            (data["generation_failure"] = Dict("stage" => stage, "reason" => reason))
+        open(io -> TOML.print(io, data; sorted = true), report, "w")
+        mv(report, joinpath(directory, "implementation-failure.toml"); force = true)
     end
     return nothing
 end
