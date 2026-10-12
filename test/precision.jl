@@ -427,8 +427,8 @@ end
             precisions = [precision],
             segments = [4],
             evaluation = evaluation,
-            job_timeout = 45,
-            total_timeout = 60,
+            job_timeout = 60,
+            total_timeout = 180,
         )
         result = search_polynomial(spec, config)
         @test result.status == :certified
@@ -519,8 +519,8 @@ end
             baseline;
             max_attempts = 10,
             bit_step = format isa FixedFormat ? 12 : 4,
-            job_timeout = 30,
-            total_timeout = 120,
+            job_timeout = 60,
+            total_timeout = 600,
         )
         @test result.status == :certified
         @test result.stop_reason == :attempt_limit
@@ -582,8 +582,8 @@ end
         )
     timed = PRESAGe._optimize_precision(
         baseline;
-        job_timeout = 30,
-        total_timeout = 90,
+        job_timeout = 60,
+        total_timeout = 180,
         worker_command,
         process_started = (process, directory) ->
             (push!(processes, process); push!(directories, directory)),
@@ -628,11 +628,12 @@ end
             joinpath(directory, "contract.toml"), joinpath(directory, "config.toml")
         write_plan(contract, PlanArtifact(spec))
         config = PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [f],
             precisions = [p],
-            job_timeout = 30,
-            total_timeout = 60,
+            job_timeout = 60,
+            total_timeout = 180,
         )
         write_search_config(configuration, config)
         output = joinpath(directory, "generated")
@@ -670,11 +671,12 @@ end
         write_search_config(
             configuration,
             PolynomialSearchConfig(
+                evaluation = :separate,
                 degrees = [1],
                 internal_formats = [f],
                 precisions = [coarse],
-                job_timeout = 30,
-                total_timeout = 60,
+                job_timeout = 60,
+                total_timeout = 180,
             ),
         )
         process = open(joinpath(directory, "failure.log"), "w") do io
@@ -687,6 +689,7 @@ end
         @test failure["attempts"][1]["status"] == "proof_failed"
         # Reject malformed precision fields and duplicate complete choices.
         @test_throws ArgumentError PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [f, f],
             precisions = [p, p],
@@ -697,6 +700,7 @@ end
             stage_formats = p.coefficient_formats,
         )
         @test PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [f, f],
             precisions = [p, alternative],

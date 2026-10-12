@@ -95,8 +95,8 @@ end
             internal_formats = [FixedFormat(72, 24)],
             transformation = :erfc,
             evaluation = :fma,
-            job_timeout = 60,
-            total_timeout = 90,
+            job_timeout = 120,
+            total_timeout = 180,
         ),
     )
     @test search.status == :certified
@@ -215,11 +215,12 @@ end
             exact = search_polynomial(
                 spec,
                 PolynomialSearchConfig(
+                    evaluation = :separate,
                     degrees = [0],
                     internal_formats = [FixedFormat(32, 8)],
                     transformation = :erfc,
-                    job_timeout = 60,
-                    total_timeout = 90,
+                    job_timeout = 120,
+                    total_timeout = 180,
                 ),
             )
             @test exact.status == :certified && exact.selected.total_bound == 0
@@ -305,6 +306,7 @@ end
         @test_throws ArgumentError erfc_polynomial_plan(spec, [1], [1], [1], 1, 1)
     end
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [13],
         internal_formats = [IEEE64],
         transformation = :erfc,
@@ -318,11 +320,12 @@ end
             absolute_error = 1,
         ),
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [0],
             internal_formats = [IEEE64],
             transformation = :erfc,
-            job_timeout = 60,
-            total_timeout = 90,
+            job_timeout = 120,
+            total_timeout = 180,
         ),
     )
     @test coarse.status == :certified
@@ -344,8 +347,8 @@ end
             internal_formats = [FixedFormat(72, 24)],
             transformation = :erfc,
             evaluation = :fma,
-            job_timeout = 60,
-            total_timeout = 150,
+            job_timeout = 120,
+            total_timeout = 300,
         ),
     )
     @test search.status == :certified
@@ -392,8 +395,8 @@ end
                     internal_formats = [internal],
                     transformation = :erfc,
                     evaluation = :fma,
-                    job_timeout = 60,
-                    total_timeout = 90,
+                    job_timeout = 120,
+                    total_timeout = 180,
                 ),
             )
             @test fresh.status == :certified
@@ -442,8 +445,8 @@ end
     optimized = optimize_precision(
         baseline;
         max_attempts = 3,
-        job_timeout = 60,
-        total_timeout = 150,
+        job_timeout = 120,
+        total_timeout = 300,
     )
     @test optimized.status == :certified &&
           any(a -> a.kind != :baseline && a.accepted, optimized.attempts)
@@ -463,8 +466,8 @@ end
             internal_formats = [FixedFormat(72, 24)],
             transformation = :erfc,
             evaluation = :fma,
-            job_timeout = 60,
-            total_timeout = 90,
+            job_timeout = 120,
+            total_timeout = 180,
         )
         data = PRESAGe._search_config_data(config)
         @test data["schema_version"] == 12

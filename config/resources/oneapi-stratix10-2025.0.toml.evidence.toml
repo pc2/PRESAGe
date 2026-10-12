@@ -1,0 +1,980 @@
+profile_sha256 = "5409e131d6f9f70420493e7484b7f71d21fd2ccad14f4cf16944d8eea5354656"
+schema = "presage-resource-calibration"
+schema_version = 1
+validation = "primitive_only"
+
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "fixed-16-add"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 19.66441583633423
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "ef3a5e317c0eb0bf3844e1acc00fff9be1f9142ee1debf6cb79ea7490d1b61ea"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "58d156b014562fc50ac222b7087b20632248af1d6d9cd14da466d8b9798ea082"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 72
+    kind = "pipeline"
+    luts = 51
+    mlabs = 0
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "fixed-16-add/synthesis-run.toml" = "b8d910b6a95468fb85bd57973c84514e2249dd3281d43b9cab7e72ffc47ffb7e"
+    "fixed-16-add/synthesis.prj/reports/resources/json/area.ndjson" = "8b7fedb3ba0ee248834037a6877291d4ddc1e3f677e6fae0a7b8c99223b53da8"
+    "fixed-16-add/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "54542f2b6b84b11e4a94a516fa118d53ebb1b8302ea90531701a4e7231c9f13f"
+    "fixed-16-add/synthesis.prj/reports/resources/json/mav.ndjson" = "372deef99c4d86bc8e634427bd07a6a38202c0d9b03a94ca6753ee9832a4229c"
+
+    [probes.sources]
+    "fixed-16-add/evaluator.hpp" = "39a1579828c39d3ddb8b7cc6d6d30b7b10b56d8cc74cd658e5af0f23cb059eaa"
+    "fixed-16-add/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-16-add/plan.toml" = "45094fbf279d6570129f553e79d3d3d2c4654de617c74839f240d942d2a5375a"
+    "fixed-16-add/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "fixed-16-add/resources.toml" = "3e78e153b9862b261dc072fe4526c412f28d024622e5e82620f9082c1ddcb608"
+    "fixed-16-add/synthesis.cpp" = "cda9e8fb0598bec0d65f66b68cbe779f4f49803808fd556bbbcc99bf943cc171"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "fixed-16-mul"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 19.875212907791138
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "a58f32ba42e5adcf637a0311da6b5842afab7d7ee8fe2cfeed21d27183567856"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "4d142a1d04e13763eac537b3e06cc6690457fe7c462f00665879184642c28581"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 203
+    kind = "pipeline"
+    luts = 56
+    mlabs = 0
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "fixed-16-mul/synthesis-run.toml" = "04c0f035f0f3084ff4388c9af727bac6542e2d7f7b323bc04c0bb7d24b7736a3"
+    "fixed-16-mul/synthesis.prj/reports/resources/json/area.ndjson" = "19d9dfd9a8b2735ac1d40fbde89f1abb7d137e4e268b0eb932758ba518916a24"
+    "fixed-16-mul/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "d54e9affe4aa6ec7c432022ee369327a3e37024a92a2225b7663a5d4e064ee75"
+    "fixed-16-mul/synthesis.prj/reports/resources/json/mav.ndjson" = "76a667b7ce2068f835722010d01954ad915ca845b7ef170793e0e15f2345fb6e"
+
+    [probes.sources]
+    "fixed-16-mul/evaluator.hpp" = "963ed8a518e3155575b8562e18f38b4816e75715b7cd0c2c943d14ffad98adf4"
+    "fixed-16-mul/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-16-mul/plan.toml" = "85cbf44047af3ac7504d9030e4566ec92d47cdeec29a26e1ca408235eb130e19"
+    "fixed-16-mul/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "fixed-16-mul/resources.toml" = "e24185364ba1a03d92b868e5c15cc0d1e13e961bcb42dc24279822ee9ba56680"
+    "fixed-16-mul/synthesis.cpp" = "cda9e8fb0598bec0d65f66b68cbe779f4f49803808fd556bbbcc99bf943cc171"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "fixed-16-fma"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 19.75543999671936
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "c1403ec3ef6426f4135ff2f81f0d3be8f233deeb7e1eba21e7f5e59984550d2e"
+    success = true
+    tested_inputs = 379
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "7531ff607c7d69aef818e1aaa406f92ec0e2707f2f715e71b277ced62831677f"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 158
+    kind = "pipeline"
+    luts = 62
+    mlabs = 1
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "fixed-16-fma/synthesis-run.toml" = "b981781ac200f346c7c6da25d840af7e8b52bf3d3b2d45aabc85741a37fc3429"
+    "fixed-16-fma/synthesis.prj/reports/resources/json/area.ndjson" = "5a7cd7f522bac26738e51234c46e67152ae19a6f3d4c9620f5a681f44c449131"
+    "fixed-16-fma/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "127823158564ca75d5caf082d60bf4545695af31f63bc9fcc0a0c1dbb1d3f9b7"
+    "fixed-16-fma/synthesis.prj/reports/resources/json/mav.ndjson" = "16077e2747f7efee4829cce2adbf333727e460428ce762cb6663973410b2c2ff"
+
+    [probes.sources]
+    "fixed-16-fma/evaluator.hpp" = "1dfe9e0ba308c600d9f5656ffa61a6712032b018df971af6a4108c3c7e7b7e4e"
+    "fixed-16-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-16-fma/plan.toml" = "2d6de33ded139b01ff4ba7bd17eaf0f5cdc44afd25a3a9183f8257b7af126722"
+    "fixed-16-fma/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "fixed-16-fma/resources.toml" = "460053db9f8fd3e224346a17b9059f4d407e3ddb1ba23158bd429f47cd1a9855"
+    "fixed-16-fma/synthesis.cpp" = "896dff573d7d0611ac5746a2a58a4a6ccd9d4901ee6be8c94e40cfd8d8016e96"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "fixed-32-add"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 19.69594407081604
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "5802978656c68de9d221fef4411896a7224ead90a67d5b93682ef0fc30a79d18"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "1bcee6273f8c7ca1df482ae7907bb91f7901238569e3514cd490c0c5378ae207"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 88
+    kind = "pipeline"
+    luts = 51
+    mlabs = 0
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "fixed-32-add/synthesis-run.toml" = "00daa4317227876d2ca2ca4762af0105c8b387140ffda20499dd0c86ce83a99a"
+    "fixed-32-add/synthesis.prj/reports/resources/json/area.ndjson" = "37de6213ded0e1706737da708eb4360e1f7dc54fd2f64686f62ec09e42ab8353"
+    "fixed-32-add/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "05ac4f1cf5b360e8cf8993e833b39b8a6f04b231968f0030e764c2df3c770ea1"
+    "fixed-32-add/synthesis.prj/reports/resources/json/mav.ndjson" = "efd2559005af32d54d28df1a545256608f2c4c10500afdd9716fd9cb5fde38e2"
+
+    [probes.sources]
+    "fixed-32-add/evaluator.hpp" = "0e80a563ebf5ae71ae38010b9c82fee2ba5c5157c2181f7b0ec19af7ae61216e"
+    "fixed-32-add/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-32-add/plan.toml" = "a735dc31eb543cbbe994ecb6ea896c767f8d14d63b1ff469f685b85e5effd82c"
+    "fixed-32-add/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "fixed-32-add/resources.toml" = "44dc70003a430fb5c1293fa0f978db6543cdc4e6508a1919a596ae7d3a77f184"
+    "fixed-32-add/synthesis.cpp" = "f94a8790d275a0fd8e98e576992fc05b7ec13daf1e8ba976daab91b4f45787af"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "fixed-32-mul"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 19.999931812286377
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "7dbcd09366dd4bee33261a22b31f4f3a2c5b26158608c78e824495e75567a59e"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "31540488b33295ccbef1e88787678e3db7d85eb166ac53234ebe31727fb01c20"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 351
+    kind = "pipeline"
+    luts = 32
+    mlabs = 0
+    name = "State"
+    rams = 1
+
+    [probes.reports]
+    "fixed-32-mul/synthesis-run.toml" = "0a6f2505b2804404fba5d67a8e2b74cbe6f2d2508198aad94e3e895c0e20b70c"
+    "fixed-32-mul/synthesis.prj/reports/resources/json/area.ndjson" = "f45bcc8e7746ffbd1caf78dd6d55d53cc03ae1c2f06d71005306daecb06581b6"
+    "fixed-32-mul/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "cde793a2c1fc60b463df5df009f239aadd455f62e63fdc1c8925ab9ce5ffdb2f"
+    "fixed-32-mul/synthesis.prj/reports/resources/json/mav.ndjson" = "3c57f0f02d5271de9324f2d700adabca9dd14f1195099964ae9c2baed74d94cf"
+
+    [probes.sources]
+    "fixed-32-mul/evaluator.hpp" = "8f8c35b0503078d465c9c6e37c9931f7b336a66d672de8401433330534e1ae05"
+    "fixed-32-mul/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-32-mul/plan.toml" = "4aac229c91f01a5e2994ce63bbf8208151fcd810c840944a4f3d6803ce8fe1d3"
+    "fixed-32-mul/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "fixed-32-mul/resources.toml" = "d26bda67e827f66ccde08eaeb1071386d7025b47fac23db9927e122ef7ea255b"
+    "fixed-32-mul/synthesis.cpp" = "f94a8790d275a0fd8e98e576992fc05b7ec13daf1e8ba976daab91b4f45787af"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "fixed-32-fma"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 19.964606046676636
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "e505ec4ac5ef4bedad86c3a5282883bad52c50cb1d478195d48e0d242ae2be4f"
+    success = true
+    tested_inputs = 379
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "b90ea2145e0e1f7ecfbe45844a88fa723aa51ef635c674259765da84c3e7ec63"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 379
+    kind = "pipeline"
+    luts = 66
+    mlabs = 2
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "fixed-32-fma/synthesis-run.toml" = "d8894f4b84ee984b28c9a863375e4411f4f9cd42488aec26ec5dc707f29ab5e7"
+    "fixed-32-fma/synthesis.prj/reports/resources/json/area.ndjson" = "7d5fda82826f190496054cb08cda8e695a3e057f184db1d14868529279522619"
+    "fixed-32-fma/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "f3d1edbabc73236c7649c50a10703ddc14b7930cb905bd9cbd19af804cc7d520"
+    "fixed-32-fma/synthesis.prj/reports/resources/json/mav.ndjson" = "427833719284adbd56d4c6d5e39f2aba51249917c061a0206c290a96d2ef4fd5"
+
+    [probes.sources]
+    "fixed-32-fma/evaluator.hpp" = "3695f83c075bc78beb7a94825dcc26ae125813dfcc3d1810ef5a0d5fb03b218d"
+    "fixed-32-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-32-fma/plan.toml" = "805e495201147096869ec1a5394d7494263796af9fc374d2092f632c67bd1de6"
+    "fixed-32-fma/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "fixed-32-fma/resources.toml" = "b46404f37cf061c06914c10ba97190d7223ba960bb8d747613442bcc1e0c14cc"
+    "fixed-32-fma/synthesis.cpp" = "d19dce7e1ddea7608e709d01f8f0690587da1c759df13b14fe4c5b5c4ae25d7b"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "fixed-64-add"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.270013093948364
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "33726b3c4dd3f36aae8ceab444a5f82d7a5cb73b1ce14c02ece967060eade70f"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "58d21590fbf81ee3df046036d4c178f5b88169187cc9b7d277958cdad4efeaff"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 187
+    kind = "pipeline"
+    luts = 51
+    mlabs = 0
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "fixed-64-add/synthesis-run.toml" = "2d2b8e0b0f351e1be92a34147133e9628e7dc38c89c1f1e126ec53fb747917ee"
+    "fixed-64-add/synthesis.prj/reports/resources/json/area.ndjson" = "447d2a7a0c79d4355d0ae84cbc442d3f61b47d7cd1b7dac8950630263c23c4b0"
+    "fixed-64-add/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "18c30f7984595656a35c7f379f59de01f43b8e50ca79fff85cafd017b1852653"
+    "fixed-64-add/synthesis.prj/reports/resources/json/mav.ndjson" = "233f37ce8e74b4989f6eb57dba8d742ece3e5873f07eaa362c5acc0019b727a3"
+
+    [probes.sources]
+    "fixed-64-add/evaluator.hpp" = "21132486cb0e9e4622e3ba7d0464cff5207e1bf40449f23c4e8d5c48e2fa664a"
+    "fixed-64-add/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-64-add/plan.toml" = "29d526334c88afa0a51914b56e096c62e7de3d605ae7bf65805f6262d7bfca62"
+    "fixed-64-add/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "fixed-64-add/resources.toml" = "63fbabc8d8c3c517f3a2c23542ce749ca8eec3ca31abdc5851fea16bbe6f1be9"
+    "fixed-64-add/synthesis.cpp" = "f678d6a3723dca2671b0ef69f32d9d4bad4796a018e175664a532d4c5d7990c1"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "fixed-64-mul"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.25505495071411
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "4f38fe109145146700995a0c7fc5cbd766a16c4656eff3f9204e54f9ab2a242b"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "ad339dede19624d243cf4cb189f4d6118d5ce1622ec5be4551d8fb48f405aa05"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 1460
+    kind = "pipeline"
+    luts = 92
+    mlabs = 0
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "fixed-64-mul/synthesis-run.toml" = "80be725064e9acd6788ab051de6287c8fdb286271f8881b5c8bc1ba349a7daa3"
+    "fixed-64-mul/synthesis.prj/reports/resources/json/area.ndjson" = "5c1ef85f7cc53af71acd6b161f49e685b7c7f8e8cb2e8f21ded008b2ec212c62"
+    "fixed-64-mul/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "81df3da82001c3f6d4e5812256988a45abb11511c988fe39534b9f6d631236a0"
+    "fixed-64-mul/synthesis.prj/reports/resources/json/mav.ndjson" = "7dd7bbe522fddc87fb4142fd97a817fc13f146eeb379555ae5696c85bf11b8ac"
+
+    [probes.sources]
+    "fixed-64-mul/evaluator.hpp" = "b4458e00622197fa1342026f2138abb881a7e21a837f97d89b66039c8a5e11be"
+    "fixed-64-mul/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-64-mul/plan.toml" = "216c37665df413fb62564cacf64a5986da6593231f2941ad303fbeaf9fe166d2"
+    "fixed-64-mul/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "fixed-64-mul/resources.toml" = "0c7a52c1036bc99dc2cd3c36c8fbc4e167b184768311422f402b3e0c0a2b48bf"
+    "fixed-64-mul/synthesis.cpp" = "f678d6a3723dca2671b0ef69f32d9d4bad4796a018e175664a532d4c5d7990c1"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "fixed-64-fma"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 23.686763048171997
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "1ed9a770009aa15b2646d657c476ec5e6f519f9e668f5b57cbfdb91029b18481"
+    success = true
+    tested_inputs = 379
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "8f6ab8084a77a41b4b43ed125e15654bec9b338ea7750f7be9a777b2e72cf67a"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 969
+    kind = "pipeline"
+    luts = 105
+    mlabs = 4
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "fixed-64-fma/synthesis-run.toml" = "b46b6a7a83a53f53df1f037dc8d26abe108ce0b6da090b8830a9c9f6633a48e4"
+    "fixed-64-fma/synthesis.prj/reports/resources/json/area.ndjson" = "f9c8a416dc2d7435d0a77422bb6712613e08b0290ba04df080e0b3f1b325c58d"
+    "fixed-64-fma/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "3fb27c9265b6b204365969a9746843232fe4b1ca5afc9c7eae43ebd710e1ca8c"
+    "fixed-64-fma/synthesis.prj/reports/resources/json/mav.ndjson" = "27374c392a3794a0fcc9c991ee4f00aea866cf81ae881360d568fd4f85f5b6f1"
+
+    [probes.sources]
+    "fixed-64-fma/evaluator.hpp" = "557af62d685a86cdbd72e52ea7d162313d384fe4d214a1d67e79f5ffaddd3599"
+    "fixed-64-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-64-fma/plan.toml" = "1c47c0e264a3c9f46c9d2371991d7c062f660af160b46846b691bb4c4d4d80c0"
+    "fixed-64-fma/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "fixed-64-fma/resources.toml" = "22a9392c0e22cd7e80edf3f5dd918290d94885bda50e2b9dc64bee5a6571ee27"
+    "fixed-64-fma/synthesis.cpp" = "1773005b2d592469d201fe5d4523764d9f07b30b77a59d2c6676f8c6484f9548"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-8-23-add"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.552626848220825
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "2cc045c0d964d8246a7160d03a3436e620602fc8e6bbe5bf3666ae797fb8f4da"
+    success = true
+    tested_inputs = 337
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "561959b6cc37b76a49925d90a5af142ec25fb648d99da312f1651cddd97fbc3e"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 995
+    kind = "pipeline"
+    luts = 319
+    mlabs = 0
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-8-23-add/synthesis-run.toml" = "28c449063291643b82f9c30a42ead97227075c4a1570ba3af98ab4cb4b429bd0"
+    "float-8-23-add/synthesis.prj/reports/resources/json/area.ndjson" = "d79cd08d477d40c67e55f35d4a3ade524131d88ace4a91c6a83988d3ff08f15b"
+    "float-8-23-add/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "391211bb29e0da26d7d92e025282db2b6c8ea3f99e1c077ed8eff66c3bbba4df"
+    "float-8-23-add/synthesis.prj/reports/resources/json/mav.ndjson" = "61ad1f53e52dd0bc57faab9abe86dbf08895e6a69629a79285b74ceb1359723a"
+
+    [probes.sources]
+    "float-8-23-add/evaluator.hpp" = "1768afbc975b626308dadb51d599c12ff77dd6dbfdef5157aedd3df1fa85df93"
+    "float-8-23-add/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-8-23-add/plan.toml" = "b580317199e7351dfb8ba94e9e7547cac8a40db401ba2b7f5c17c85a8f66b9dc"
+    "float-8-23-add/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-8-23-add/resources.toml" = "09e8d182c691a0e475d88a35ffffda7e7afef037cf000f1060075f7e58082301"
+    "float-8-23-add/synthesis.cpp" = "f94a8790d275a0fd8e98e576992fc05b7ec13daf1e8ba976daab91b4f45787af"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-8-23-mul"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.753496170043945
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "97fa191b047c081f251cd8a07bc64bee91e19c0425a8745878d1a85fa3b036f8"
+    success = true
+    tested_inputs = 337
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "d817aa3b811f66fcc36cee85a904d8e1d80ea6b23a056dcaba9073f174bbed6f"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 1139
+    kind = "pipeline"
+    luts = 352
+    mlabs = 1
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-8-23-mul/synthesis-run.toml" = "fcb7b529ba0abae1bd0488e8908cb2cea9c810292824381520c871a5e4b38b3e"
+    "float-8-23-mul/synthesis.prj/reports/resources/json/area.ndjson" = "2772538690f62d0d7ee6da14807e352d20c693f00ed4015abde55b44ad87249c"
+    "float-8-23-mul/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "eaad0b6111de7e5252103818108f6a70a99a5bd684c916a95cd0d030a5b6e6a2"
+    "float-8-23-mul/synthesis.prj/reports/resources/json/mav.ndjson" = "db202d7ff45d3c955c6d26f14d7f2408385ab11975e7a1e6b240c9cbe32a1244"
+
+    [probes.sources]
+    "float-8-23-mul/evaluator.hpp" = "03dd8bea998a0afc1719e7d5932feef1e1030e96f4347f802f35ebb742f876d5"
+    "float-8-23-mul/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-8-23-mul/plan.toml" = "19f544247b1f9e34dbb42e9d6f643eb737eb32380417354fdadd7e07a6cc3e68"
+    "float-8-23-mul/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-8-23-mul/resources.toml" = "12036204f6c0d5b19428339dd652c50277fd165d9da40f3a23c40984ecbcad03"
+    "float-8-23-mul/synthesis.cpp" = "f94a8790d275a0fd8e98e576992fc05b7ec13daf1e8ba976daab91b4f45787af"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-8-23-fma"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.128589153289795
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "0c92c76eb3191cedd2e21ea2777ae204035cb89a09b2c1495b559a8b4e531679"
+    success = true
+    tested_inputs = 985
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "96516bd58001ddaffbcf158422b398b0477e9ebc507e267c7067c57fd29e0251"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 2384
+    kind = "pipeline"
+    luts = 501
+    mlabs = 28
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-8-23-fma/synthesis-run.toml" = "ff101055f3ccf741c98ad64a5f9eac0fc96786d983e4039b8369a15a7c191df2"
+    "float-8-23-fma/synthesis.prj/reports/resources/json/area.ndjson" = "355b74874f1cf5ade5776a7f08e8633b976a01039dbe84ef2fa1472cd9dd9c7f"
+    "float-8-23-fma/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "f2a7225aeee2e8a4382122ea962520fb27f080a0aff2d91cb6569501dfb363a3"
+    "float-8-23-fma/synthesis.prj/reports/resources/json/mav.ndjson" = "cb680922b7ec441797daa6a116e321c19145068ebd47d33b5286a80604b16aad"
+
+    [probes.sources]
+    "float-8-23-fma/evaluator.hpp" = "f378751c3b22b328a57f203d4fc251b02eed6d08df7283cac332261a6c15f8d7"
+    "float-8-23-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-8-23-fma/plan.toml" = "2e22ab1b829306436b8ab57807d6f0c0d3cab5b53e034c273280c1e877b65dff"
+    "float-8-23-fma/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-8-23-fma/resources.toml" = "19718a6c077a45cf4f249878e8f2d764effc6fa5efc061659b4d087eef163903"
+    "float-8-23-fma/synthesis.cpp" = "d19dce7e1ddea7608e709d01f8f0690587da1c759df13b14fe4c5b5c4ae25d7b"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-11-52-add"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 21.341161012649536
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "c5bf55b0eecf4f0969b798566f8d0d78622243bff506f12a2fd9b6417a596aa7"
+    success = true
+    tested_inputs = 337
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "112e5b4bfe5d983f8b980b4bec6f5ec4fc126acc07b6f1dc597d685341bafc8f"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 2043
+    kind = "pipeline"
+    luts = 404
+    mlabs = 6
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-11-52-add/synthesis-run.toml" = "64da431f146ff8d73c2b1767e07be18fd70fa866acccb4d623dd47e35a21b849"
+    "float-11-52-add/synthesis.prj/reports/resources/json/area.ndjson" = "37542d9092ee26fe0a4c841eadc6e49abd54778d08592269b40e7d52a01e0c71"
+    "float-11-52-add/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "1da254f0a21d483b15b8cf50f28a41f0f7be9efcfcfe8a35bbb9088f68a6cb08"
+    "float-11-52-add/synthesis.prj/reports/resources/json/mav.ndjson" = "6235e3e02dc6c8675022a58a6c268bcc44a2984067a9a2e155ddf62af02f0812"
+
+    [probes.sources]
+    "float-11-52-add/evaluator.hpp" = "01484b656995011806add41cfddd94ffd9c29d1e6d4e1485a8f95c91d76e6b02"
+    "float-11-52-add/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-11-52-add/plan.toml" = "02395c8e5ab6f6b300159413b543b84bbcf52902424d22515095c4f479527e17"
+    "float-11-52-add/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-11-52-add/resources.toml" = "afd8f3396222c0ef46a8489b1e35fac7ff80b1a6111bfd1acb46ffe7346a01f7"
+    "float-11-52-add/synthesis.cpp" = "f678d6a3723dca2671b0ef69f32d9d4bad4796a018e175664a532d4c5d7990c1"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-11-52-mul"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 21.580252170562744
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "aa173e9c94d78cb5e539c029f4ab13d03a4962663c5840835f5a7d8fb1eb697c"
+    success = true
+    tested_inputs = 337
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "df642950a35f2977de6ddf7c5220f93218e4608f96aca2e26f62b3fccc433c63"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 2046
+    kind = "pipeline"
+    luts = 467
+    mlabs = 14
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-11-52-mul/synthesis-run.toml" = "83056094aff13415ff46dd1ff1eab31fd9ba3609fef9fa5d0a0224fd5d40c7c7"
+    "float-11-52-mul/synthesis.prj/reports/resources/json/area.ndjson" = "144d23568e39a1a88504cc9f4cb9bdfbc0c610952b73041fae0184d74423eb97"
+    "float-11-52-mul/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "974cbc89f22b2f97ae89e597e930cab359e69a9c782f6fcc6e0d1b02c44af867"
+    "float-11-52-mul/synthesis.prj/reports/resources/json/mav.ndjson" = "1d5800811c5d32e42b8c10663127393467f9c6997fe81af32b720c22b71adbe2"
+
+    [probes.sources]
+    "float-11-52-mul/evaluator.hpp" = "0db491b4745e120432c4824ad0fdefd30168f1664c5b0bdf928a3cb67a0ca3ac"
+    "float-11-52-mul/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-11-52-mul/plan.toml" = "262a830a6c65d7ac6bbe8c1a612010ea02fe6a3c31c5bbea1ae13ad63b8c97d2"
+    "float-11-52-mul/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-11-52-mul/resources.toml" = "0514c4771910d90db0cf54bc5153f1e1240f6819f49fab23c436b13690e8b9ef"
+    "float-11-52-mul/synthesis.cpp" = "f678d6a3723dca2671b0ef69f32d9d4bad4796a018e175664a532d4c5d7990c1"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-11-52-fma"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 23.554664134979248
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "4d728518923a52d2f17dddda1306ab501fd2f3d38003c2ac2483fc6ddacbd49e"
+    success = true
+    tested_inputs = 985
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "f63bbad2e3af4c5fe5738472da181cfcabc732b35336ebea4d42f8334f04840b"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 4667
+    kind = "pipeline"
+    luts = 894
+    mlabs = 18
+    name = "State"
+    rams = 6
+
+    [probes.reports]
+    "float-11-52-fma/synthesis-run.toml" = "3753d4ccbc1a2df99eb9a5a9e9f2019fdf344500d74e6872259a2bdfa0685dfc"
+    "float-11-52-fma/synthesis.prj/reports/resources/json/area.ndjson" = "e38a27ba43ed75a5878755915f4b004407612efbe533a1eae37332db4d527acd"
+    "float-11-52-fma/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "f5e2edd67ed06a597da6a84241d6e533581807ef337d64e00991275d6034b264"
+    "float-11-52-fma/synthesis.prj/reports/resources/json/mav.ndjson" = "1abc8da23d266348c21cae4f056db0e9ab134ca0ff037f12e98f6ba65c61389f"
+
+    [probes.sources]
+    "float-11-52-fma/evaluator.hpp" = "481dc9cf6d1dea4861bec45cc1ec10dcd88ed04b721636ec6a183480a526d775"
+    "float-11-52-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-11-52-fma/plan.toml" = "aff31543aaf803546bd7af819be2484f0caa07a01e49b0463576dcf129da75fa"
+    "float-11-52-fma/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-11-52-fma/resources.toml" = "9dfc388ef8130d97de2a517298412bfb0abef2568a6df04fb4d2db3fe07cba3f"
+    "float-11-52-fma/synthesis.cpp" = "1773005b2d592469d201fe5d4523764d9f07b30b77a59d2c6676f8c6484f9548"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-8-23-mul-c720509ec690"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.80193305015564
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "14ed0ad220174c28a8e73e956d717d94aecee64f869e86e82a6244736acad0f6"
+    success = true
+    tested_inputs = 265
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "94be15048290e0153dfcdb52fd27b2fc77469866661a0132a7628afad807499f"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 1050
+    kind = "pipeline"
+    luts = 289
+    mlabs = 1
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-8-23-mul-c720509ec690/synthesis-run.toml" = "3b46e0ef4f106c713e3bccfa90197a741ef016f35d9df6c46f0c112fbb8329a9"
+    "float-8-23-mul-c720509ec690/synthesis.prj/reports/resources/json/area.ndjson" = "c6c01c06b3223c12ff6856bdde645a9947fdd278f83b55c21bb068a016056246"
+    "float-8-23-mul-c720509ec690/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "734e84a4d617f5ad32be1d0da1986ea10c24d72dac401f80a1778e7887851f83"
+    "float-8-23-mul-c720509ec690/synthesis.prj/reports/resources/json/mav.ndjson" = "5db379ec1c1a71b2d843d6d375bf83cbfc344ae4ff8313edb62473583e3d3e00"
+
+    [probes.sources]
+    "float-8-23-mul-c720509ec690/evaluator.hpp" = "22a35cd3b45112acda7ac13ec6f94334a08831e70b40815aa46352b686a0f550"
+    "float-8-23-mul-c720509ec690/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-8-23-mul-c720509ec690/plan.toml" = "ee431575f5465cc5d5635facff540f052989389f0b79b30151ac55a8a4294c9a"
+    "float-8-23-mul-c720509ec690/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-8-23-mul-c720509ec690/resources.toml" = "c1d33ebcb9c49414eeaba86c74f38025d4c83d292cb9b8ddf9687f8fef101e19"
+    "float-8-23-mul-c720509ec690/synthesis.cpp" = "a31b3e8224386f8249a5479d962021d8c13342d8dfec1ab1f9af43c4b98dfa13"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-11-52-mul-c720509ec690"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.674503087997437
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "9d81059444f75df4659a48f5271b042a84bdaa941f2ed2a925cb30ec59873106"
+    success = true
+    tested_inputs = 265
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "755c2f525eb993a1b77d7d97f7a63eb4722854c19945aa5dc7a9b4de38cb3d93"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 1996
+    kind = "pipeline"
+    luts = 378
+    mlabs = 14
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-11-52-mul-c720509ec690/synthesis-run.toml" = "9faf4ab663f738eb5fd6491fc992440ba2bb2a2fa0aa714392e3e2e25f3775e3"
+    "float-11-52-mul-c720509ec690/synthesis.prj/reports/resources/json/area.ndjson" = "77b2d0ccf2de7a8164a8abd2ecd7e79349ece0167b6b3b0e6e261bb246748d7a"
+    "float-11-52-mul-c720509ec690/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "4889363e3f900da5423e12102a9648d01d0fe17eb68ffbff97f0c3f640d75eec"
+    "float-11-52-mul-c720509ec690/synthesis.prj/reports/resources/json/mav.ndjson" = "b66a248255d33d869026f818d11de33870606f6e68063c6cb259cfa643af8451"
+
+    [probes.sources]
+    "float-11-52-mul-c720509ec690/evaluator.hpp" = "bcf230c296a32761a51f3de0bcd666422c7afa46ee61861a4f7fb165d24a4d5a"
+    "float-11-52-mul-c720509ec690/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-11-52-mul-c720509ec690/plan.toml" = "4b2f0cbbc99c84412ca8039f6056eea581f5c67bfa4f1eaa000326ae33c5c4f8"
+    "float-11-52-mul-c720509ec690/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-11-52-mul-c720509ec690/resources.toml" = "a8c09d19fb9ad2b1eb6b34e9fcb783a319c09c54b2c465e5b4c5ae2cd4bab9c5"
+    "float-11-52-mul-c720509ec690/synthesis.cpp" = "f7bf470f15bb75c4bab7084164320637588ace3b6ea6d2ab1866bb449f98f434"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-8-23-add-539f6a4a10c4"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.388849020004272
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "93c7d51c81cbe4ced26d71eb6e74361579197302a58ffe468102196bcb9ca5b7"
+    success = true
+    tested_inputs = 265
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "4a4b23901caab4bafbbbc4774e7f9d150e0743bcf5169c4b73c5f3339e5c4367"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 951
+    kind = "pipeline"
+    luts = 299
+    mlabs = 0
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-8-23-add-539f6a4a10c4/synthesis-run.toml" = "c0353f4b3bbf12adba412518e8d2af21dc92c34112b2ab6fcf8cd8c180b94b8c"
+    "float-8-23-add-539f6a4a10c4/synthesis.prj/reports/resources/json/area.ndjson" = "b2b12165bda9d0dcbf47e9797610273838e61bb9e100f17a2976ab9160d1abf1"
+    "float-8-23-add-539f6a4a10c4/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "cc6ac59fb124df43d67db398b385d65f11443ac047c5f7ae7c0f10d518354aae"
+    "float-8-23-add-539f6a4a10c4/synthesis.prj/reports/resources/json/mav.ndjson" = "7fd5ec4b6c0be809cbcf85a3d4406293785406403503a29d113ae72794e3c8b4"
+
+    [probes.sources]
+    "float-8-23-add-539f6a4a10c4/evaluator.hpp" = "0edc5016b2fb74625181c797bd547cb68650c37f010761f6191148cce0790118"
+    "float-8-23-add-539f6a4a10c4/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-8-23-add-539f6a4a10c4/plan.toml" = "1b280a39c87e893081b5fe83324d44ff9246abb382ef87e5ca5581048450a329"
+    "float-8-23-add-539f6a4a10c4/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-8-23-add-539f6a4a10c4/resources.toml" = "106a2e32eb50c802d4f4534092e6d77ed7c9a376ed07ffa215e375da222c53ff"
+    "float-8-23-add-539f6a4a10c4/synthesis.cpp" = "a31b3e8224386f8249a5479d962021d8c13342d8dfec1ab1f9af43c4b98dfa13"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-11-52-add-539f6a4a10c4"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.53323197364807
+    mode = "fpga_emulator"
+    project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+    record_sha256 = "54b6b197f965c96370b0fa74157975e9e79d7d9737d3eb0e320b232e8111d3e4"
+    success = true
+    tested_inputs = 265
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "2d6c727c7e2911eb5af703fecc6d20ed4d0e6e472a436f1180ea8b71b9088629"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 1790
+    kind = "pipeline"
+    luts = 385
+    mlabs = 6
+    name = "State"
+    rams = 1
+
+    [probes.reports]
+    "float-11-52-add-539f6a4a10c4/synthesis-run.toml" = "56380ee159ed16bb95f7cf953e787ffaf4cfa84cf0b7ffbc54528e1161b116b5"
+    "float-11-52-add-539f6a4a10c4/synthesis.prj/reports/resources/json/area.ndjson" = "a01217fc27e5b44ddae1df05ab926cdc2fab4fb6d576343a530819bf73d1451b"
+    "float-11-52-add-539f6a4a10c4/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "2d2ae8c2fc26c63a82df78ce7330e5dca9ef1fab4bf2538d0953e3a5e58b8541"
+    "float-11-52-add-539f6a4a10c4/synthesis.prj/reports/resources/json/mav.ndjson" = "bb06f77c847ecec36ba6909103ca3257bd362ebbb953e2689c7eb88e6adaf29c"
+
+    [probes.sources]
+    "float-11-52-add-539f6a4a10c4/evaluator.hpp" = "c034e2bc9facf76d21c8da1e864187237fb27878c85557257bab221be700ed2e"
+    "float-11-52-add-539f6a4a10c4/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-11-52-add-539f6a4a10c4/plan.toml" = "02459fbce17a15de6dee50877b42a7202cb9e15bc2c8915f9fb809a83d6751f0"
+    "float-11-52-add-539f6a4a10c4/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-11-52-add-539f6a4a10c4/resources.toml" = "de0d3756c6bf335973c15f82ff7665b0a7700d36b8973e7d3309f42afd486079"
+    "float-11-52-add-539f6a4a10c4/synthesis.cpp" = "f7bf470f15bb75c4bab7084164320637588ace3b6ea6d2ab1866bb449f98f434"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-8-23-fma-ae2454240037"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.306252002716064
+    mode = "fpga_emulator"
+    project_sha256 = "425a498fc9aed874df7fe24c511fb9fe5a56aff31f1f7deba22758c22bc797c2"
+    record_sha256 = "60fb08839480426d6d1fb6d16f19e1f163bbf1a501eeffee449016e3e31ae278"
+    success = true
+    tested_inputs = 265
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "09777b27cffc511bf9888f4dbfde70de8b5f5b42df6d6cbc2d49db3a3ef94440"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 1593
+    kind = "pipeline"
+    luts = 305
+    mlabs = 19
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-8-23-fma-ae2454240037/synthesis-run.toml" = "8ff5dae1828b6d80161978f15e29ead66e4ca5d3af88e8c60eddfd60e7dfad0f"
+    "float-8-23-fma-ae2454240037/synthesis.prj/reports/resources/json/area.ndjson" = "f83c14cdea0985a257ac43854aab86df5244eaf9133a667ee49daeb234e9041c"
+    "float-8-23-fma-ae2454240037/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "c94bef077e83363ca31f61ec28220c2038ed330607ee7feef0227909bec96771"
+    "float-8-23-fma-ae2454240037/synthesis.prj/reports/resources/json/mav.ndjson" = "439bfc3f17dca7533ad0e935d8b3df7a9916f8680d9937b5a19bcdd421ec1b16"
+
+    [probes.sources]
+    "float-8-23-fma-ae2454240037/evaluator.hpp" = "77fd32f34f845648760f842f26a6bb8b3ff372fe798b16c7c9bca78174b79d9c"
+    "float-8-23-fma-ae2454240037/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-8-23-fma-ae2454240037/plan.toml" = "4bcf0b148d15156ed5fec9776d52fa082f65c1ef1d6f0375c2f658e715d08550"
+    "float-8-23-fma-ae2454240037/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-8-23-fma-ae2454240037/resources.toml" = "44db8befee60966c581bef1e30f55e62f7bd85798b1f078ef03b539799d727e0"
+    "float-8-23-fma-ae2454240037/synthesis.cpp" = "a31b3e8224386f8249a5479d962021d8c13342d8dfec1ab1f9af43c4b98dfa13"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-11-52-fma-ae2454240037"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.42652988433838
+    mode = "fpga_emulator"
+    project_sha256 = "425a498fc9aed874df7fe24c511fb9fe5a56aff31f1f7deba22758c22bc797c2"
+    record_sha256 = "7c6d2459b26a8eb81e49c3d749791acb95c3a8714fdd774662faf8606df85878"
+    success = true
+    tested_inputs = 265
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "9b4be6fb4c8751ac60fc16a0e56f424e5f3e3afc7d8e98edae15e544e1b1dd04"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 3105
+    kind = "pipeline"
+    luts = 644
+    mlabs = 16
+    name = "State"
+    rams = 1
+
+    [probes.reports]
+    "float-11-52-fma-ae2454240037/synthesis-run.toml" = "17f637f8cb7d63e0aade3061425146e20e0b9343f2490a0d036109c8826e5b0d"
+    "float-11-52-fma-ae2454240037/synthesis.prj/reports/resources/json/area.ndjson" = "357b75f45b038f732300cf23364274a5a858c503828f2c133a2464c3805a8c9f"
+    "float-11-52-fma-ae2454240037/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "7965de327b094fdde644fa38c0c798590d1d544086ff7cdf27d659931152ee07"
+    "float-11-52-fma-ae2454240037/synthesis.prj/reports/resources/json/mav.ndjson" = "d14c59a60f9a27e4ad282ae862072e72b4acc1538eda4fad56e71d4a685f4c1b"
+
+    [probes.sources]
+    "float-11-52-fma-ae2454240037/evaluator.hpp" = "259b46c796aaec20d26aab084626da9fbee32e2a90487c9320eb1fc72cd22e61"
+    "float-11-52-fma-ae2454240037/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-11-52-fma-ae2454240037/plan.toml" = "e3a61583fa5215a9e4b08412339bb21d099c882da547e893f665377a5daf2655"
+    "float-11-52-fma-ae2454240037/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-11-52-fma-ae2454240037/resources.toml" = "912580914587426784f519b6bfbfa68c4d2cd4384ad167d8bc86c438cd89927c"
+    "float-11-52-fma-ae2454240037/synthesis.cpp" = "f7bf470f15bb75c4bab7084164320637588ace3b6ea6d2ab1866bb449f98f434"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-8-23-fma-b7e19f8fec53"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.284997940063477
+    mode = "fpga_emulator"
+    project_sha256 = "425a498fc9aed874df7fe24c511fb9fe5a56aff31f1f7deba22758c22bc797c2"
+    record_sha256 = "e3fab4b73e2077cfe892978c8b5e7905905cd1158a2ea82903ba6f8347e0c004"
+    success = true
+    tested_inputs = 337
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "1a106c1f4dd0afb9d557c3c17649e9d4a0f2a6c463bee3e1d2ecedfe53bdd8e2"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 2115
+    kind = "pipeline"
+    luts = 469
+    mlabs = 18
+    name = "State"
+    rams = 2
+
+    [probes.reports]
+    "float-8-23-fma-b7e19f8fec53/synthesis-run.toml" = "0cfb0515a768895515baad7fedbfd0182ca78324f2e09f5ecf77981ee395413f"
+    "float-8-23-fma-b7e19f8fec53/synthesis.prj/reports/resources/json/area.ndjson" = "85bd8b221397c4d0f1371d4260641145cbe9ead5b833de72d2dc9fa701aae2db"
+    "float-8-23-fma-b7e19f8fec53/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "77df9368caafbdffba9f073299a241143fd443f8cda1379a1a3b50786a2b7756"
+    "float-8-23-fma-b7e19f8fec53/synthesis.prj/reports/resources/json/mav.ndjson" = "9d5dd25afa8aa36375dd9bd89a0bd33a7b3582e2b7fb3c539db58f15d9d2df76"
+
+    [probes.sources]
+    "float-8-23-fma-b7e19f8fec53/evaluator.hpp" = "0cef1cc82180d8fa751362e387afc3d07732e3698ff26f082a80dc04e11fb13a"
+    "float-8-23-fma-b7e19f8fec53/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-8-23-fma-b7e19f8fec53/plan.toml" = "09b9db5cdf6fb1481e730f77277514d94c393177e1a1cf3f29a64e2630fda462"
+    "float-8-23-fma-b7e19f8fec53/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-8-23-fma-b7e19f8fec53/resources.toml" = "967580fe45fcb479d66b870b724cd09963446fc36174dc09540654774b82b842"
+    "float-8-23-fma-b7e19f8fec53/synthesis.cpp" = "f94a8790d275a0fd8e98e576992fc05b7ec13daf1e8ba976daab91b4f45787af"
+[[probes]]
+device = "p520_hpc_sg280l"
+example = "float-11-52-fma-b7e19f8fec53"
+resource_units = ["ALUT", "FF", "DSP_equivalent", "M20K", "MLAB"]
+scope = "evaluator"
+tool_version = """Intel(R) oneAPI DPC++/C++ Compiler 2025.0.0 (2025.0.0.20241008)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler\nConfiguration file: /opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/bin/compiler/../icpx.cfg\n"""
+
+    [probes.emulation]
+    commands = [["icpx", "-std=c++17", "-fsycl", "-fintelfpga", "-qactypes", "-fp-model=strict", "-no-ftz", "-D__EMULATION_FLOW__", "-L/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-Wl,-rpath,/opt/software/FPGA/IntelFPGA/oneapi/25.0.0/compiler/2025.0/opt/oclfpga/host/linux64/lib", "-lac_types_vpfp_library", "emulation.cpp", "-o", "emulate"], ["./emulate"]]
+    elapsed_seconds = 20.646656036376953
+    mode = "fpga_emulator"
+    project_sha256 = "425a498fc9aed874df7fe24c511fb9fe5a56aff31f1f7deba22758c22bc797c2"
+    record_sha256 = "6a24fa907ac4bafdb754b9d8ce0a39d30359c496e279c0ea459ccd1e919b8f12"
+    success = true
+    tested_inputs = 337
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "d4dee9ec846ace53abaa12b69ea0bd7fc86bcc91b5b868526f4dbde02eac11d8"
+        "emulation.cpp" = "44521a253bafe0cbe807da4dc264db1abd73ade8afde2efc14500c9b4de445b8"
+
+    [[probes.pipeline]]
+    dsps = 0
+    ffs = 3185
+    kind = "pipeline"
+    luts = 633
+    mlabs = 10
+    name = "State"
+    rams = 6
+
+    [probes.reports]
+    "float-11-52-fma-b7e19f8fec53/synthesis-run.toml" = "65c931e151a76e13436b94e49b5d6dbd20a8101c4201e6ae56645b4bed4363a5"
+    "float-11-52-fma-b7e19f8fec53/synthesis.prj/reports/resources/json/area.ndjson" = "e2cd8c47503e97cba4087cc64b2004b1851032637cf6a8834999f65391623d02"
+    "float-11-52-fma-b7e19f8fec53/synthesis.prj/reports/resources/json/loop_attr.ndjson" = "9abfadec03d26891072871696bbf14a4092c9b94ec5f55e7ae5b5c533306ac3b"
+    "float-11-52-fma-b7e19f8fec53/synthesis.prj/reports/resources/json/mav.ndjson" = "e48d9a26e4947f66722ff2382a73de4dcdb6058c2e0c2e6bb26a6681ca3be6d9"
+
+    [probes.sources]
+    "float-11-52-fma-b7e19f8fec53/evaluator.hpp" = "e507f0a57ea42e4d6a6f68a8e8c7abcbc43c968afe38f421e321432864b6a303"
+    "float-11-52-fma-b7e19f8fec53/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-11-52-fma-b7e19f8fec53/plan.toml" = "59d1e23116c016ef1165f1b3c9ad53bc28ea70753c76143c0dabb2e9db4736be"
+    "float-11-52-fma-b7e19f8fec53/resource-model.toml" = "755b22922320539f0add8ab032c47d21ad10ef8c8e610ad69e3713d7ad6813dc"
+    "float-11-52-fma-b7e19f8fec53/resources.toml" = "cf973bcf2e0156b6ec773376394a4171466343813219e015bff55392728db49e"
+    "float-11-52-fma-b7e19f8fec53/synthesis.cpp" = "f678d6a3723dca2671b0ef69f32d9d4bad4796a018e175664a532d4c5d7990c1"
+
+[[projects]]
+measurements_sha256 = "a44fce5e3202d51cb0f4db7411b1b6aa000068854f6885baefa47e26e773f342"
+path = "../../build/automatic-arithmetic/probes/synthesis.toml"
+project_sha256 = "ae5be1d100ccc266ed1fa95e651bf852a39e162b990fc7b989aa98cbd4b6fbe9"
+[[projects]]
+measurements_sha256 = "f4277c1c4531642a080e4c059b78e5b7db4486ec44885809de9230840bed008c"
+path = "../../build/automatic-arithmetic/constant-probes/synthesis.toml"
+project_sha256 = "425a498fc9aed874df7fe24c511fb9fe5a56aff31f1f7deba22758c22bc797c2"

@@ -28,6 +28,11 @@ template <class Word, int E, int M> struct EncodedFloat {
 // presage:helper highest_bit
 template <int Width> inline int highest_bit(const UInt<Width> &value) {
     int highest = -1;
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
     for (int bit = 0; bit < Width; ++bit)
         if (value[bit])
             highest = bit;
@@ -57,6 +62,11 @@ inline ShiftResult<UInt<Work>> rounded_shift(const UInt<SourceWidth> &source,
     long long distance = -shift;
     result = distance >= SourceWidth ? UInt<Work>(0) : UInt<Work>(result >> int(distance));
     bool guard = false, sticky = false;
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
     for (int bit = 0; bit < SourceWidth; ++bit) {
         if (bit == distance - 1)
             guard = bool(source[bit]);
@@ -74,6 +84,11 @@ inline ShiftResult<UInt<Work>> rounded_shift(const UInt<SourceWidth> &source,
 // presage:helper float_special
 template <class Out> inline Out float_special(bool negative, bool nan) {
     Out result(0);
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
     for (int bit = 0; bit < Out::exponent_bits; ++bit)
         result.bits[Out::fraction_bits + bit] = true;
     result.bits[Out::width - 1] = negative && !nan;
@@ -117,10 +132,20 @@ inline Out dyadic_to_float(const UInt<SourceWidth> &magnitude, long long power,
     long long exponent = quantum + M;
     if (exponent > Out::bias)
         return float_overflow<Out, Mode>(negative);
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
     for (int bit = 0; bit < M; ++bit)
         result.bits[bit] = bool(rounded.value[bit]);
     if (rounded.value[M]) {
         UInt<Out::exponent_bits> field = exponent + Out::bias;
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
         for (int bit = 0; bit < Out::exponent_bits; ++bit)
             result.bits[M + bit] = bool(field[bit]);
     }
@@ -141,6 +166,11 @@ inline Out float_to_fixed(const In &value, Status &status) {
     auto rounded = rounded_shift<Work, SourceWidth, Mode>(
         value.significand(), value.power() + Scale + Width - IntegerBits, negative);
     UInt<Work> bound = 0;
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
     for (int bit = 0; bit < Width; ++bit) {
         if (negative)
             bound[bit] = Signed && bit == Width - 1;

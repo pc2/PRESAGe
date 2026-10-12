@@ -167,7 +167,7 @@ struct Guard <: Node
 end
 struct BitCast <: Node
     source::Int
-    format::Union{FloatFormat, UIntFormat}
+    format::Union{ArithmeticFormat, UIntFormat}
 end
 struct ExtractBits <: Node
     source::Int
@@ -352,7 +352,7 @@ function _type(n::Node, types, tables)
             throw(ArgumentError("bitcast widths differ"))
         (
             (source isa ArithmeticFormat && n.format isa UIntFormat) ||
-            (source isa UIntFormat && n.format isa FloatFormat)
+            (source isa UIntFormat && n.format isa ArithmeticFormat)
         ) || throw(ArgumentError("bitcast needs arithmetic/unsigned types"))
         return n.format
     elseif n isa ExtractBits

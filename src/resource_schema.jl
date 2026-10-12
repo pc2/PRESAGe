@@ -16,11 +16,26 @@ function _resource_model_data(model)
             "operation" => string(rule.operation),
             "format" => string(rule.format),
         )
-        for name in (:exponent_bits, :fraction_bits, :max_width, :rounding)
+        for name in (
+            :exponent_bits,
+            :fraction_bits,
+            :max_width,
+            :rounding,
+            :result_width,
+            :integer_bits,
+            :overflow,
+        )
             value = getfield(rule, name)
             value === nothing ||
                 (data[string(name)] = value isa Symbol ? string(value) : value)
         end
+        isempty(rule.operand_widths) ||
+            (data["operand_widths"] = collect(rule.operand_widths))
+        isempty(rule.operand_constants) ||
+            (data["operand_constants"] = collect(rule.operand_constants))
+        isempty(rule.formats) || (
+            data["formats"] = [Dict("format" => _format_data(f)) for f in rule.formats]
+        )
         for name in _RESOURCE_NAMES
             formula = getfield(rule, name)
             formula === nothing ||
@@ -33,6 +48,17 @@ function _resource_model_data(model)
         "schema_version" => 1,
         "name" => model.name,
         "toolchain" => string(model.toolchain),
+        "target" => Dict(
+            name => value for
+            (name, value) in ("device" => model.device, "compiler" => model.compiler) if
+            value !== nothing
+        ),
+        "pipeline" => Dict{String, Any}(
+            string(name) =>
+                getfield(model.pipeline, name) === nothing ? "unknown" :
+                _resource_number_data(getfield(model.pipeline, name)) for
+            name in _RESOURCE_NAMES
+        ),
         "priority" => string.(collect(model.priority)),
         "rules" => rules,
         "memory" => Dict(
@@ -52,7 +78,7 @@ function _resource_keys(data, allowed, label)
     data isa AbstractDict || throw(ArgumentError("$label must be a table"))
     all(key -> key in allowed, keys(data)) || throw(ArgumentError("unknown $label field"))
 end
-function _resource_exact(x::String)
+function _resource_exact(x::AbstractString)
     occursin('/', x) && return _parse_rational(x)
     value = tryparse(BigInt, strip(x))
     value === nothing &&
@@ -81,6 +107,8 @@ function _read_resource_model(data)
             "schema_version",
             "name",
             "toolchain",
+            "target",
+            "pipeline",
             "priority",
             "memory",
             "dsp",
@@ -94,6 +122,10 @@ function _read_resource_model(data)
         data["schema_version"] == 1 ||
         throw(ArgumentError("unsupported resource model schema"))
     memory, dsp = get(data, "memory", Dict()), get(data, "dsp", Dict())
+    target = get(data, "target", Dict())
+    pipeline = get(data, "pipeline", Dict())
+    _resource_keys(target, ("device", "compiler"), "target")
+    _resource_keys(pipeline, string.(_RESOURCE_NAMES), "pipeline")
     _resource_keys(
         memory,
         (
@@ -118,6 +150,12 @@ function _read_resource_model(data)
                 "fraction_bits",
                 "max_width",
                 "rounding",
+                "result_width",
+                "operand_widths",
+                "operand_constants",
+                "formats",
+                "integer_bits",
+                "overflow",
                 string.(_RESOURCE_NAMES)...,
             ),
             "rule",
@@ -130,17 +168,33 @@ function _read_resource_model(data)
             fraction_bits = get(rule, "fraction_bits", nothing),
             max_width = get(rule, "max_width", nothing),
             rounding = haskey(rule, "rounding") ? Symbol(rule["rounding"]) : nothing,
+            result_width = get(rule, "result_width", nothing),
+            operand_widths = get(rule, "operand_widths", ()),
+            operand_constants = get(rule, "operand_constants", ()),
+            formats = [_read_format(item["format"]) for item in get(rule, "formats", [])],
+            integer_bits = get(rule, "integer_bits", nothing),
+            overflow = haskey(rule, "overflow") ? Symbol(rule["overflow"]) : nothing,
             (
                 name =>
                     haskey(rule, string(name)) ?
-                    _read_resource_formula(rule[string(name)]) : nothing for
-                name in _RESOURCE_NAMES
+                    _read_resource_formula(rule[string(name)]) :
+                    name == :mlabs ? 0 : nothing for name in _RESOURCE_NAMES
             )...,
         )
     end
     ResourceModel(;
         name = get(data, "name", "custom"),
         toolchain = Symbol(get(data, "toolchain", "generic")),
+        device = get(target, "device", nothing),
+        compiler = get(target, "compiler", nothing),
+        pipeline = ResourceBudget(;
+            (
+                name =>
+                    get(pipeline, string(name), 0) == "unknown" ? nothing :
+                    _resource_exact(get(pipeline, string(name), 0)) for
+                name in _RESOURCE_NAMES
+            )...,
+        ),
         memory = BlockMemoryModel(
             depth = get(memory, "depth", 512),
             word_bits = get(memory, "word_bits", 32),
@@ -206,13 +260,19 @@ function _resource_estimate_data(estimate)
     end
     Dict(
         "model" => estimate.model,
+        "scope" => "evaluator",
+        "resource_units" => ["LUT_or_ALUT", "FF", "DSP_equivalent", "block_RAM", "MLAB"],
         "status" => string(estimate.status),
+        "supported" => estimate.support.supported,
+        "support_reasons" => collect(estimate.support.reasons),
         "memory_model" => Dict(
             "depth" => estimate.memory_model.depth,
             "word_bits" => estimate.memory_model.word_bits,
         ),
         "totals" => _resource_counts_data(estimate.totals),
         "known" => _resource_counts_data(estimate.known),
+        "datapath" => _resource_counts_data(estimate.datapath),
+        "pipeline" => _resource_counts_data(estimate.pipeline),
         "nodes" => nodes,
         "tables" => tables,
     )

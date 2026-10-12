@@ -296,6 +296,7 @@ end
         ) for expression in ("sin(x)", "cos(x)")
     ]
     config = PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = (3, 5),
         internal_formats = (FixedFormat(24, 4),),
         max_attempts = 12,
@@ -341,6 +342,7 @@ end
         joinpath(directory, "profile.toml")
         write_plan(contract, PlanArtifact(first(specs)))
         short = PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = (3,),
             internal_formats = (FixedFormat(24, 4),),
             max_attempts = 4,
@@ -431,6 +433,7 @@ end
         domain = (0, 1),
     )
     linear = PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = (1,),
         internal_formats = (FixedFormat(32, 4),),
         max_attempts = 1,
@@ -451,6 +454,7 @@ end
     @test only(result.rows).implementation == :lut # max_attempts=1 still applies
     @test only(result.selections).status == :selected
     both = PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = (1,),
         internal_formats = (FixedFormat(32, 4),),
         max_attempts = 2,

@@ -133,9 +133,9 @@ bits, with additional headroom needed for scaling. Existing native fixed width
 and scale limits still apply. Unsupported mappings fail before header output.
 
 These checks exercise official header simulation using ordinary C++ compilation.
-Binary32 (`ac_std_float<32,8>`) is the initial oneAPI candidate. Toolchain support
-for other combinations requires separate validation. Floating evaluator
-certification remains separate from CPU arithmetic conformance.
+Intel kernel emission uses separate vendor arithmetic with its own [format restrictions](resources.md#configurable-resource-estimates).
+Public AC header support does not imply Intel hardware support or matching resource use.
+Floating evaluator certification remains separate from CPU arithmetic conformance.
 
 ### Fixed backends
 

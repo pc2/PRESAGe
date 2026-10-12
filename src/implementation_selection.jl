@@ -150,7 +150,7 @@ function _implementation_selection_data(result::ImplementationSelection)
                 string(k) =>
                     v === nothing ? "unknown" :
                     k == :total_bound ? _rational_text(v) : _sweep_integer_data(v)
-                for (k, v) in pairs(costs)
+                for (k, v) in pairs(costs) if k != :target_reasons
             )
             reasons = _sweep_eligibility(
                 costs,

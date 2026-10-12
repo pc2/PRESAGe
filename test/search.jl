@@ -7,7 +7,11 @@
         absolute_error = 1 // (1 << 18),
     )
     format = FixedFormat(32, 6)
-    config = PolynomialSearchConfig(degrees = [1, 9], internal_formats = [format])
+    config = PolynomialSearchConfig(
+        evaluation = :separate,
+        degrees = [1, 9],
+        internal_formats = [format],
+    )
     result = search_polynomial(spec, config)
     @test result.status == :certified
     @test result.stop_reason == :certified
@@ -45,7 +49,11 @@
     end
 
     coarse = FixedFormat(16, 6)
-    config = PolynomialSearchConfig(degrees = [9], internal_formats = [coarse, format])
+    config = PolynomialSearchConfig(
+        evaluation = :separate,
+        degrees = [9],
+        internal_formats = [coarse, format],
+    )
     result = search_polynomial(spec, config)
     @test result.status == :certified
     @test [a.internal_format for a in result.attempts] == [coarse, format]
@@ -71,7 +79,11 @@
     # Degree order is caller order, not ascending degree or estimated cost.
     result = search_polynomial(
         spec,
-        PolynomialSearchConfig(degrees = [9, 1], internal_formats = [format, coarse]),
+        PolynomialSearchConfig(
+            evaluation = :separate,
+            degrees = [9, 1],
+            internal_formats = [format, coarse],
+        ),
     )
     @test result.status == :certified
     @test length(result.attempts) == 1
@@ -81,6 +93,7 @@
     limited = search_polynomial(
         spec,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1, 9],
             internal_formats = [format],
             max_attempts = 1,
@@ -93,7 +106,11 @@
     @test only(limited.attempts).plan.program !== nothing
     exhausted = search_polynomial(
         spec,
-        PolynomialSearchConfig(degrees = [1], internal_formats = [format]),
+        PolynomialSearchConfig(
+            evaluation = :separate,
+            degrees = [1],
+            internal_formats = [format],
+        ),
     )
     @test exhausted.status == :search_limit
     @test exhausted.stop_reason == :choices_exhausted
@@ -116,6 +133,7 @@
     result = search_polynomial(
         constant,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [0],
             internal_formats = [FixedFormat(8, 3), format],
         ),
@@ -135,6 +153,7 @@
     result = search_polynomial(
         impossible,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1, 2],
             internal_formats = [format, FloatFormat(8, 27)],
         ),
@@ -155,7 +174,11 @@
     )
     result = search_polynomial(
         tiny,
-        PolynomialSearchConfig(degrees = [0], internal_formats = [FloatFormat(15, 160)]),
+        PolynomialSearchConfig(
+            evaluation = :separate,
+            degrees = [0],
+            internal_formats = [FloatFormat(15, 160)],
+        ),
     )
     @test result.status == :certified
     @test result.selected.total_bound == 0
@@ -174,7 +197,11 @@ end
     format = FixedFormat(24, 6)
     defaults = (; degrees = [0, 1], internal_formats = [format])
     for degrees in ([], [0, 0], [-1, 1], [33], [1.0], [true], Iterators.countfrom(0))
-        @test_throws ArgumentError PolynomialSearchConfig(; defaults..., degrees)
+        @test_throws ArgumentError PolynomialSearchConfig(;
+            evaluation = :separate,
+            defaults...,
+            degrees,
+        )
     end
     for internal_formats in (
         [],
@@ -183,17 +210,27 @@ end
         [FixedFormat(8, 3; rounding = :down)],
         [FixedFormat(8, 3; overflow = :wrap)],
     )
-        @test_throws ArgumentError PolynomialSearchConfig(; defaults..., internal_formats)
+        @test_throws ArgumentError PolynomialSearchConfig(;
+            evaluation = :separate,
+            defaults...,
+            internal_formats,
+        )
     end
     for max_attempts in (0, -1, big(typemax(Int)) + 1)
-        @test_throws ArgumentError PolynomialSearchConfig(; defaults..., max_attempts)
+        @test_throws ArgumentError PolynomialSearchConfig(;
+            evaluation = :separate,
+            defaults...,
+            max_attempts,
+        )
     end
     for timeout in (0, -1, Inf, NaN, big(1) // (big(1) << 2000))
         @test_throws ArgumentError PolynomialSearchConfig(;
+            evaluation = :separate,
             defaults...,
             job_timeout = timeout,
         )
         @test_throws ArgumentError PolynomialSearchConfig(;
+            evaluation = :separate,
             defaults...,
             total_timeout = timeout,
         )
@@ -201,22 +238,42 @@ end
     @test_throws ArgumentError PolynomialSearchConfig(; defaults..., evaluation = :other)
     for generation_precision in (11, big(typemax(Cint)) + 1)
         @test_throws ArgumentError PolynomialSearchConfig(;
+            evaluation = :separate,
             defaults...,
             generation_precision,
         )
     end
     for proof_precision in (63, big(typemax(Cint)) + 1)
-        @test_throws ArgumentError PolynomialSearchConfig(; defaults..., proof_precision)
+        @test_throws ArgumentError PolynomialSearchConfig(;
+            evaluation = :separate,
+            defaults...,
+            proof_precision,
+        )
     end
-    @test_throws ArgumentError PolynomialSearchConfig(; defaults..., max_refinements = 9)
-    @test_throws ArgumentError PolynomialSearchConfig(; defaults..., accuracy = 0)
-    @test_throws ArgumentError PolynomialSearchConfig(; defaults..., accuracy = 1)
-    @test PolynomialSearchConfig(degrees = 0:2, internal_formats = (IEEE32,)).degrees ==
-          (0, 1, 2)
+    @test_throws ArgumentError PolynomialSearchConfig(;
+        evaluation = :separate,
+        defaults...,
+        max_refinements = 9,
+    )
+    @test_throws ArgumentError PolynomialSearchConfig(;
+        evaluation = :separate,
+        defaults...,
+        accuracy = 0,
+    )
+    @test_throws ArgumentError PolynomialSearchConfig(;
+        evaluation = :separate,
+        defaults...,
+        accuracy = 1,
+    )
+    @test PolynomialSearchConfig(
+        evaluation = :separate,
+        degrees = 0:2,
+        internal_formats = (IEEE32,),
+    ).degrees == (0, 1, 2)
     # All formats are validated before any worker, even beyond max_attempts.
     launched = Ref(false)
     started = (process, directory) -> (launched[] = true)
-    config = PolynomialSearchConfig(; defaults..., max_attempts = 1)
+    config = PolynomialSearchConfig(; evaluation = :separate, defaults..., max_attempts = 1)
     for spec in (
         FunctionSpec("x"),
         FunctionSpec("x"; input_format = FixedFormat(8, 3), domain = (1 // 128, 1 // 64)),
@@ -235,7 +292,11 @@ end
     @test !launched[]
     # Config captures the choice lists, independent of later caller mutation.
     degrees, formats = [1, 9], [format]
-    config = PolynomialSearchConfig(; degrees, internal_formats = formats)
+    config = PolynomialSearchConfig(;
+        evaluation = :separate,
+        degrees,
+        internal_formats = formats,
+    )
     degrees[1] = 32
     formats[1] = FixedFormat(8, 3)
     @test config.degrees == (1, 9)
@@ -251,9 +312,8 @@ end
     )
     format = FixedFormat(24, 6)
     fixture = joinpath(@__DIR__, "fixtures", "polynomial_worker.jl")
-    # Fresh workers include Julia compilation. Leave enough time for successful
-    # numerical jobs; the controlled hang still exceeds this bounded deadline.
-    fixture_timeout = 30
+    # Worker startup includes Julia compilation before the controlled hang.
+    fixture_timeout = 60
     for (mode, expected) in (
         ("timeout", :timeout),
         ("crash", :worker_crashed),
@@ -264,10 +324,11 @@ end
         processes, directories = Base.Process[], String[]
         ready = Bool[]
         config = PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [0, 1],
             internal_formats = [format],
             job_timeout = fixture_timeout,
-            total_timeout = 90,
+            total_timeout = 3fixture_timeout,
         )
         command =
             directory -> addenv(
@@ -324,9 +385,10 @@ end
     result = PRESAGe._search_polynomial(
         spec,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [0, 1, 2],
             internal_formats = [format],
-            job_timeout = 30,
+            job_timeout = fixture_timeout,
             total_timeout = fixture_timeout,
         );
         worker_command = command,
@@ -350,6 +412,7 @@ end
     result = PRESAGe._search_polynomial(
         spec,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [format],
             total_timeout = 1e-300,
@@ -368,10 +431,11 @@ end
     result = PRESAGe._search_polynomial(
         spec,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [format],
             job_timeout = fixture_timeout,
-            total_timeout = 90,
+            total_timeout = 3fixture_timeout,
         );
         worker_command = directory -> addenv(
             PRESAGe._polynomial_worker_command(directory; script = fixture),
@@ -394,6 +458,7 @@ end
     result = PRESAGe._search_polynomial(
         spec,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [format],
             job_timeout = 30,
@@ -412,7 +477,11 @@ end
     empty!(directories)
     @test_throws ErrorException PRESAGe._search_polynomial(
         spec,
-        PolynomialSearchConfig(degrees = [1], internal_formats = [format]);
+        PolynomialSearchConfig(
+            evaluation = :separate,
+            degrees = [1],
+            internal_formats = [format],
+        );
         process_started = (process, directory) -> begin
             push!(processes, process)
             push!(directories, directory)

@@ -1,0 +1,832 @@
+name = "vitis-xcu280-fsvh2892-2L-e-calibrated"
+priority = ["luts", "rams", "dsps", "ffs"]
+schema = "presage-resource-model"
+schema_version = 1
+toolchain = "vitis"
+
+[dsp]
+operand_bits = [24, 17]
+
+[memory]
+depth = 512
+distributed_depth = 64
+distributed_luts = 1
+distributed_max_bits = 4096
+distributed_word_bits = 1
+policy = "auto"
+word_bits = 32
+
+[pipeline]
+dsps = 0
+ffs = 0
+luts = 0
+mlabs = 0
+rams = 0
+
+[[rules]]
+format = "fixed"
+integer_bits = 4
+operand_constants = ["variable", "variable"]
+operand_widths = [16, 16]
+operation = "add"
+overflow = "reject"
+result_width = 16
+rounding = "nearest_even"
+
+    [rules.dsps]
+
+    [rules.ffs]
+    constant = 22
+
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+
+    [rules.luts]
+    constant = 104
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+integer_bits = 4
+operand_constants = ["variable", "variable"]
+operand_widths = [16, 16]
+operation = "mul"
+overflow = "reject"
+result_width = 16
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 1
+
+    [rules.ffs]
+    constant = 22
+
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+
+    [rules.luts]
+    constant = 142
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+integer_bits = 4
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [16, 16, 16]
+operation = "fma"
+overflow = "reject"
+result_width = 16
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 1
+
+    [rules.ffs]
+    constant = 40
+
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 16
+
+    [rules.luts]
+    constant = 183
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+integer_bits = 4
+operand_constants = ["variable", "variable"]
+operand_widths = [32, 32]
+operation = "add"
+overflow = "reject"
+result_width = 32
+rounding = "nearest_even"
+
+    [rules.dsps]
+
+    [rules.ffs]
+    constant = 38
+
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+
+    [rules.luts]
+    constant = 168
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+integer_bits = 4
+operand_constants = ["variable", "variable"]
+operand_widths = [32, 32]
+operation = "mul"
+overflow = "reject"
+result_width = 32
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 4
+
+    [rules.ffs]
+    constant = 76
+
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+
+    [rules.luts]
+    constant = 223
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+integer_bits = 4
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [32, 32, 32]
+operation = "fma"
+overflow = "reject"
+result_width = 32
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 4
+
+    [rules.ffs]
+    constant = 76
+
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 32
+
+    [rules.luts]
+    constant = 294
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+integer_bits = 4
+operand_constants = ["variable", "variable"]
+operand_widths = [64, 64]
+operation = "add"
+overflow = "reject"
+result_width = 64
+rounding = "nearest_even"
+
+    [rules.dsps]
+
+    [rules.ffs]
+    constant = 70
+
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+
+    [rules.luts]
+    constant = 295
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+integer_bits = 4
+operand_constants = ["variable", "variable"]
+operand_widths = [64, 64]
+operation = "mul"
+overflow = "reject"
+result_width = 64
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 16
+
+    [rules.ffs]
+    constant = 200
+
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+
+    [rules.luts]
+    constant = 375
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+integer_bits = 4
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [64, 64, 64]
+operation = "fma"
+overflow = "reject"
+result_width = 64
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 16
+
+    [rules.ffs]
+    constant = 264
+
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+    [[rules.formats]]
+        [rules.formats.format]
+        integer_bits = 4
+        kind = "fixed"
+        overflow = "reject"
+        rounding = "nearest_even"
+        signed = true
+        width = 64
+
+    [rules.luts]
+    constant = 510
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "input"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "constant"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "table_load"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "bitcast"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "extract_bits"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "copy_sign"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "compare"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+    max_operand_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "select"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+    result_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "guard"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+    result_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "bitop"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+    result_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "any"
+operation = "classify"
+
+    [rules.dsps]
+
+    [rules.ffs]
+
+    [rules.luts]
+    max_operand_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+max_width = 256
+operation = "add"
+
+    [rules.dsps]
+
+    [rules.ffs]
+    result_bits = 1
+
+    [rules.luts]
+    result_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+max_width = 256
+operation = "mul"
+
+    [rules.dsps]
+    dsp_tiles = 1
+
+    [rules.ffs]
+    result_bits = 2
+
+    [rules.luts]
+    result_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+max_width = 256
+operation = "fma"
+
+    [rules.dsps]
+    dsp_tiles = 1
+
+    [rules.ffs]
+    result_bits = 2
+
+    [rules.luts]
+    result_bits = 2
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+max_width = 256
+operation = "convert"
+
+    [rules.dsps]
+
+    [rules.ffs]
+    result_bits = 1
+
+    [rules.luts]
+    result_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "fixed"
+max_width = 256
+operation = "scale_pow2"
+
+    [rules.dsps]
+
+    [rules.ffs]
+    result_bits = 1
+
+    [rules.luts]
+    result_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+format = "uint"
+operation = "add"
+
+    [rules.dsps]
+
+    [rules.ffs]
+    result_bits = 1
+
+    [rules.luts]
+    result_bits = 1
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 23
+operation = "mul"
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 3
+
+    [rules.ffs]
+    constant = 143
+
+    [rules.luts]
+    constant = 78
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 23
+operation = "add"
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 2
+
+    [rules.ffs]
+    constant = 318
+
+    [rules.luts]
+    constant = 198
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 23
+operation = "fma"
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 5
+
+    [rules.ffs]
+    constant = 461
+
+    [rules.luts]
+    constant = 276
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 11
+format = "float"
+fraction_bits = 52
+operation = "mul"
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 8
+
+    [rules.ffs]
+    constant = 388
+
+    [rules.luts]
+    constant = 127
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 11
+format = "float"
+fraction_bits = 52
+operation = "add"
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 3
+
+    [rules.ffs]
+    constant = 685
+
+    [rules.luts]
+    constant = 635
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 11
+format = "float"
+fraction_bits = 52
+operation = "fma"
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 11
+
+    [rules.ffs]
+    constant = 1073
+
+    [rules.luts]
+    constant = 762
+
+    [rules.mlabs]
+
+    [rules.rams]
+
+[target]
+compiler = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+device = "xcu280-fsvh2892-2L-e"

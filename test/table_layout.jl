@@ -182,6 +182,7 @@ end
               max(1, ndigits(count - 1; base = 2))
     end
     config = PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [1],
         internal_formats = [format],
         segments = [128, 256, 512],

@@ -306,12 +306,14 @@ end
     end
     for degree in (0, 2, 32)
         @test_throws ArgumentError PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [degree],
             internal_formats = [IEEE64],
             transformation = :atan,
         )
     end
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [15],
         internal_formats = [IEEE64],
         transformation = :atan,

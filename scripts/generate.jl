@@ -6,7 +6,7 @@ include(joinpath(@__DIR__, "generation_artifacts.jl"))
 
 function generate_main(args)
     length(args) >= 2 || error(
-        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--resource-model=MODEL.toml] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--lut-max-entries=65536] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams] [--max-table-blocks=N] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--max-parallel=N] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false] [--trace=true|false]",
+        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--resource-model=MODEL.toml] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--lut-max-entries=65536] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams|mlabs] [--max-table-blocks=N] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--max-mlabs=N] [--max-parallel=N] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false] [--trace=true|false]",
     )
     source, directory = args[1:2]
     options = Dict{String, String}()
@@ -46,6 +46,7 @@ function generate_main(args)
             "max-ffs",
             "max-dsps",
             "max-rams",
+            "max-mlabs",
             "max-parallel",
         ) || error("unknown option $key")
         haskey(options, key) && error("duplicate option $key")
@@ -79,9 +80,11 @@ function generate_main(args)
         error("implementation must be auto, lut or polynomial")
     lut_max_entries =
         PRESAGe._lut_entry_limit(parse(BigInt, get(options, "lut-max-entries", "65536")))
-    limits = Dict{Symbol, BigInt}(
-        name => parse(BigInt, options["max-$name"]) for
-        name in PRESAGe._RESOURCE_NAMES if haskey(options, "max-$name")
+    limits = Dict{Symbol, Union{BigInt, Rational{BigInt}}}(
+        name => PRESAGe._resource_count(
+            PRESAGe._resource_exact(options["max-$name"]),
+            name,
+        ) for name in PRESAGe._RESOURCE_NAMES if haskey(options, "max-$name")
     )
     resource_budget = ResourceBudget(; limits...)
     max_table_blocks =
@@ -96,8 +99,15 @@ function generate_main(args)
         resource_model,
         resource_budget,
     )
-    selection_options =
-        ("objective", "max-table-blocks", "max-luts", "max-ffs", "max-dsps", "max-rams")
+    selection_options = (
+        "objective",
+        "max-table-blocks",
+        "max-luts",
+        "max-ffs",
+        "max-dsps",
+        "max-rams",
+        "max-mlabs",
+    )
     compare_implementations =
         resource_model !== nothing || any(k -> haskey(options, k), selection_options)
     compare_implementations &&
@@ -146,6 +156,7 @@ function generate_main(args)
                 "max-ffs",
                 "max-dsps",
                 "max-rams",
+                "max-mlabs",
                 "max-parallel",
             ),
             keys(options),
@@ -189,7 +200,11 @@ function generate_main(args)
         else
             haskey(options, "max-parallel") &&
                 error("max-parallel requires implementation selection")
-            search = search_polynomial(contract.spec, config)
+            search = search_polynomial(
+                contract.spec,
+                config;
+                target = target == :kernel ? TargetProfile(toolchain; backend) : nothing,
+            )
             if search.status != :certified
                 _generation_search_failure(directory, search)
                 detail =
@@ -385,6 +400,7 @@ function generate_main(args)
                 "max-ffs",
                 "max-dsps",
                 "max-rams",
+                "max-mlabs",
             ),
             keys(options),
         ) || error("generation options require the erf source")

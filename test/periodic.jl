@@ -291,11 +291,13 @@ end
             degree = 3,
         ).status == :proof_failed
         @test_throws ArgumentError PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [16],
             internal_formats = [IEEE64],
             transformation = kind,
         )
         @test_throws ArgumentError PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [3],
             segments = [2],
             internal_formats = [IEEE64],

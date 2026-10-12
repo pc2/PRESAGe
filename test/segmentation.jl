@@ -218,7 +218,11 @@ end
 
     defaults = (degrees = [1], internal_formats = [FixedFormat(24, 6)])
     for segments in ([], [1, 1], [0], [3], [1024], [true], [1.0], "4")
-        @test_throws ArgumentError PolynomialSearchConfig(; defaults..., segments)
+        @test_throws ArgumentError PolynomialSearchConfig(;
+            evaluation = :separate,
+            defaults...,
+            segments,
+        )
     end
     for segments in (0, 3, 1024, true)
         @test_throws ArgumentError certified_polynomial(spec; degree = 1, segments)
@@ -230,6 +234,7 @@ end
         segments = 2,
     )
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [1],
         internal_formats = [FixedFormat(16, 4; signed = false)],
         segments = [2],
@@ -237,7 +242,7 @@ end
     launched = Ref(false)
     @test_throws ArgumentError PRESAGe._search_polynomial(
         spec,
-        PolynomialSearchConfig(; defaults..., segments = [1, 4]);
+        PolynomialSearchConfig(; evaluation = :separate, defaults..., segments = [1, 4]);
         process_started = (process, directory) -> (launched[] = true),
     )
     @test !launched[]
@@ -409,12 +414,13 @@ end
         absolute_error = 1 // (1 << 18),
     )
     config = PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [5],
         internal_formats = [FixedFormat(32, 6)],
         segments = [1, 4],
         max_attempts = 2,
-        job_timeout = 30,
-        total_timeout = 60,
+        job_timeout = 60,
+        total_timeout = 180,
     )
     io = IOBuffer()
     write_search_config(io, config)

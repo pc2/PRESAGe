@@ -1,6 +1,5 @@
-# Editable assumptions. Fixed/control costs and DSP dimensions are illustrative.
-# Floating constants below are copied from generator/ResourceEstimation.hpp.
-# One rule per reachable node; no scheduling, sharing or constant-folding model.
+# Fixed and control costs require calibration for the selected device.
+# Floating arithmetic requires a matching measured rule.
 schema = "presage-resource-model"
 schema_version = 1
 name = "oneapi-initial"
@@ -10,7 +9,7 @@ priority = ["luts", "rams", "dsps", "ffs"]
 [memory]
 depth = 512
 word_bits = 32
-policy = "auto"
+policy = "block"
 # <= this padded bit count uses distributed ROM; override freely.
 distributed_max_bits = 4096
 distributed_depth = 32
@@ -149,28 +148,4 @@ format = "uint"
 luts = { result_bits = 1 }
 ffs = { result_bits = 1 }
 dsps = 0
-rams = 0
-
-# Historical floating arithmetic cost, nearest-even only.
-[[rules]]
-operation = "fma"
-format = "float"
-exponent_bits = 8
-fraction_bits = 23
-rounding = "nearest_even"
-luts = 64
-ffs = 128
-dsps = 1
-rams = 0
-
-# Historical floating arithmetic cost, nearest-even only.
-[[rules]]
-operation = "fma"
-format = "float"
-exponent_bits = 11
-fraction_bits = 52
-rounding = "nearest_even"
-luts = 2850
-ffs = 389
-dsps = 4
 rams = 0

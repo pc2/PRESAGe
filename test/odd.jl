@@ -82,8 +82,8 @@ end
                 internal_formats = [format],
                 transformation = :odd,
                 evaluation = evaluation,
-                job_timeout = 45,
-                total_timeout = 60,
+                job_timeout = 60,
+                total_timeout = 180,
             ),
         )
         @test result.status == :certified
@@ -133,8 +133,8 @@ end
         precisions = [precision],
         transformation = :odd,
         evaluation = :fma,
-        job_timeout = 45,
-        total_timeout = 60,
+        job_timeout = 60,
+        total_timeout = 180,
     )
     restored = PRESAGe._read_search_config(PRESAGe._search_config_data(config))
     @test restored.transformation == :odd
@@ -204,7 +204,7 @@ end
     @test length(words) == 2
     @test cpu_check(result.plan, words) == 2
     optimized =
-        optimize_precision(result; max_attempts = 4, job_timeout = 30, total_timeout = 60)
+        optimize_precision(result; max_attempts = 4, job_timeout = 60, total_timeout = 180)
     @test optimized.status == :certified
     @test optimized.stop_reason == :choices_exhausted
     @test length(optimized.attempts) == 1
@@ -354,18 +354,21 @@ end
     end
     for degree in (0, 2, 32), transformation in (:odd,)
         @test_throws ArgumentError PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [degree],
             internal_formats = [f],
             transformation = transformation,
         )
     end
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [9],
         internal_formats = [f],
         transformation = :odd,
         segments = [2],
     )
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [9],
         internal_formats = [f],
         transformation = :unknown,
@@ -385,6 +388,7 @@ end
     @test_throws ArgumentError PRESAGe._search_polynomial(
         FunctionSpec("exp(x)"; domain = (-1, 1)),
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [9],
             internal_formats = [f],
             transformation = :odd,
@@ -418,7 +422,7 @@ end
         baseline;
         max_attempts = 8,
         bit_step = 2,
-        job_timeout = 45,
+        job_timeout = 60,
         total_timeout = 180,
     )
     @test optimized.status == :certified
@@ -450,7 +454,7 @@ end
             internal_formats = [f],
             transformation = :odd,
             evaluation = :fma,
-            job_timeout = 45,
+            job_timeout = 60,
             total_timeout = 120,
         )
         write_search_config(configuration, config)

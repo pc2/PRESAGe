@@ -357,6 +357,7 @@ end
         @test_throws ArgumentError exp_polynomial_plan(spec, [1], 1, 1)
     end
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [9],
         internal_formats = [IEEE64],
         transformation = :exp,

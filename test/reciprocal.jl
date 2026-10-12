@@ -340,6 +340,7 @@ end
         [1],
     )
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [3],
         internal_formats = [IEEE32],
         segments = [2],

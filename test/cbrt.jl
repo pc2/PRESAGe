@@ -308,6 +308,7 @@ end
         [1],
     )
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [3],
         internal_formats = [IEEE32],
         transformation = :cbrt,
@@ -639,6 +640,7 @@ end
     search = search_polynomial(
         negative,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [IEEE32],
             job_timeout = 60,

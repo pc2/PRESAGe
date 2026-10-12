@@ -12,3 +12,6 @@ relative = 0
 [rams]
 absolute = 0
 relative = 0
+[mlabs]
+absolute = 0
+relative = 0

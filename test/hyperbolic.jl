@@ -238,6 +238,7 @@ end
                 exact = search_polynomial(
                     spec,
                     PolynomialSearchConfig(
+                        evaluation = :separate,
                         degrees = [0],
                         internal_formats = [FixedFormat(32, 8)],
                         transformation = kind,
@@ -295,6 +296,7 @@ end
         low = search_polynomial(
             spec,
             PolynomialSearchConfig(
+                evaluation = :separate,
                 degrees = [0],
                 internal_formats = [IEEE64],
                 transformation = kind,
@@ -314,11 +316,13 @@ end
         @test_throws ArgumentError hyperbolic_polynomial_plan(spec, [1], [1], 1, 1)
     end
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [16],
         internal_formats = [IEEE64],
         transformation = :sinh,
     )
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [9],
         internal_formats = [IEEE64],
         transformation = :cosh,
@@ -327,6 +331,7 @@ end
     @test_throws ArgumentError search_polynomial(
         FunctionSpec("sinh(x)"; domain = (-2, 2)),
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [9],
             internal_formats = [IEEE64],
             transformation = :cosh,

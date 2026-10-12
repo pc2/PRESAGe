@@ -10,6 +10,11 @@ enum class Status : unsigned char {
 // presage:helper copy_bits
 template <class T, int Width, class U> inline T copy_bits(const U &source) {
     T result = T(0);
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
     for (int bit = 0; bit < Width; ++bit)
         result[bit] = bool(source[bit]);
     return result;
@@ -20,6 +25,11 @@ template <class T, int Width, std::size_t N>
 inline T from_chunks(const unsigned long long (&words)[N]) {
     static_assert(N == (Width + 63) / 64, "incorrect constant word count");
     T result = T(0);
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
     for (int bit = 0; bit < Width; ++bit)
         result[bit] = (words[bit / 64] >> (bit % 64)) & 1ULL;
     return result;
@@ -28,6 +38,11 @@ inline T from_chunks(const unsigned long long (&words)[N]) {
 // presage:helper limit
 template <class T, int Width, bool Signed> inline T limit(bool upper) {
     T result = 0;
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
     for (int bit = 0; bit < Width; ++bit)
         result[bit] = upper ? !(Signed && bit == Width - 1) : (Signed && bit == Width - 1);
     return result;

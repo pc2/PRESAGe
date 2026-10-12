@@ -105,6 +105,10 @@ function _cpp_emit_header(
     ac_fixed = "ac_fixed" in identifiers
     ac_float = "ac_std_float" in identifiers
     ac_int = "ac_int" in identifiers
+    if "ap_float" in identifiers
+        println(io, "#include <sycl/sycl.hpp>")
+        println(io, "#include <sycl/ext/intel/ac_types/ap_float.hpp>")
+    end
     ap && println(io, _cpp_vendor_include(:ap_fixed; context = string(target)))
     if ac_fixed || ac_float || ac_int
         if target == :kernel && toolchain == :oneapi

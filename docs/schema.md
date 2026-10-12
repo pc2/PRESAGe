@@ -134,7 +134,11 @@ status does not claim successful evaluator publication.
 
 ## Search configurations
 
-`write_search_config` writes `schema = "presage-search-config"`, version 1.
+`write_search_config` writes `schema = "presage-search-config"`.
+Automatic arithmetic uses version 15 and records `evaluation = "auto"`.
+This version supports the same transformations and precision layouts as explicit arithmetic configurations.
+Versions 1 through 14 retain separate arithmetic when the evaluation setting is omitted.
+Selected plans and certificates always record concrete arithmetic.
 `read_search_config` accepts a path or IO and validates the complete request.
 Unknown fields, versions and traversal orders are rejected. Choices are
 mandatory; omitted numerical settings and limits use `PolynomialSearchConfig`

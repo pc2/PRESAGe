@@ -159,6 +159,8 @@ function _cpp_ac_expr(
     elseif n isa IR.Guard
         return ""
     elseif n isa IR.BitCast
+        f isa FixedFormat &&
+            return _cpp_decode_bits(call(n.source), f, backend, :ac_float; type)
         p.types[n.source] isa FixedFormat &&
             return _cpp_fixed_bitcast(p, n, backend, type(f); call)
         return f isa FloatFormat ? "ac_float_from_bits<$(type(f))>($(call(n.source)))" :

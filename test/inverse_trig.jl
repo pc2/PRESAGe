@@ -328,6 +328,7 @@ end
             )
         end
         @test_throws ArgumentError PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [9],
             internal_formats = [IEEE64],
             transformation = kind,
@@ -390,6 +391,7 @@ end
         coarse = search_polynomial(
             spec,
             PolynomialSearchConfig(
+                evaluation = :separate,
                 degrees = [0],
                 internal_formats = [FixedFormat(72, 24)],
                 transformation = kind,

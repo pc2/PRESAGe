@@ -257,6 +257,7 @@ end
         @test_throws ArgumentError log_polynomial_plan(spec, [0], 1)
     end
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [2],
         internal_formats = [IEEE32],
         transformation = :log,

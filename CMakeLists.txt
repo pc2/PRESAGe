@@ -21,7 +21,7 @@ set(PRESAGE_PLAN "" CACHE FILEPATH "Existing evaluator plan; empty generates a f
 set(PRESAGE_RESOURCE_MODEL "" CACHE FILEPATH "Optional editable resource profile and kernel memory policy")
 set(PRESAGE_TARGET cpu CACHE STRING "Evaluator target: cpu or kernel")
 set_property(CACHE PRESAGE_TARGET PROPERTY STRINGS cpu kernel)
-set(PRESAGE_TOOLCHAIN generic CACHE STRING "Kernel memory hints: generic, vitis or oneapi")
+set(PRESAGE_TOOLCHAIN generic CACHE STRING "Kernel toolchain: generic, vitis or oneapi")
 set_property(CACHE PRESAGE_TOOLCHAIN PROPERTY STRINGS generic vitis oneapi)
 if(NOT PRESAGE_TARGET MATCHES "^(cpu|kernel)$")
   message(FATAL_ERROR "PRESAGE_TARGET must be cpu or kernel")

@@ -1,12 +1,14 @@
 """
     PolynomialSearchConfig(; degrees, internal_formats, precisions=nothing, transformation=:none,
-        segments=(1,), evaluation=:separate,
+        segments=(1,), evaluation=:auto,
         generation_precision=256, proof_precision=256, accuracy=1//1024,
         max_refinements=2, max_attempts=64, job_timeout=60, total_timeout=300)
 
 Finite, ordered choices and limits for `search_polynomial`. Visit segment counts,
 then degrees, then internal formats, each in the supplied order.
 Formats are explicit: no integer or exponent range is changed automatically.
+Automatic arithmetic tries separate operations and then fused multiply add for each choice.
+Each supported form receives its own certificate and consumes one attempt.
 Optional `precisions` align one `PolynomialPrecision` (or `nothing` for shared
 formats) with each internal format choice. Their lists cover the largest degree.
 For `transformation=:odd`, degrees are odd original-function degrees in `1:31`,
@@ -61,7 +63,7 @@ struct PolynomialSearchConfig
         precisions = nothing,
         transformation::Symbol = :none,
         segments = (1,),
-        evaluation::Symbol = :separate,
+        evaluation::Symbol = :auto,
         generation_precision::Integer = 256,
         proof_precision::Integer = 256,
         accuracy::Union{Integer, Rational} = 1 // 1024,
@@ -106,7 +108,8 @@ struct PolynomialSearchConfig
         end
         length(unique(segments)) == length(segments) ||
             throw(ArgumentError("segment choices must not contain duplicates"))
-        # The same numerical/policy validation is used by the one-attempt API.
+        evaluation in (:auto, :separate, :fma) ||
+            throw(ArgumentError("evaluation must be auto, separate or fma"))
         for format in internal_formats
             any(>(1), segments) &&
                 format isa FixedFormat &&
@@ -117,7 +120,7 @@ struct PolynomialSearchConfig
             _validate_polynomial_settings(
                 first(degrees),
                 format,
-                evaluation,
+                evaluation == :auto ? :separate : evaluation,
                 generation_precision,
                 proof_precision,
                 accuracy,
@@ -148,6 +151,31 @@ struct PolynomialSearchConfig
     end
 end
 
+function _evaluation_config(config, evaluation)
+    config.evaluation == evaluation && return config
+    fields = (;
+        (name => getfield(config, name) for name in fieldnames(PolynomialSearchConfig))...
+    )
+    return PolynomialSearchConfig(; fields..., evaluation)
+end
+
+_evaluation_configs(config::PolynomialSearchConfig) =
+    config.evaluation == :auto ?
+    (_evaluation_config(config, :separate), _evaluation_config(config, :fma)) : (config,)
+
+function _evaluation_configs(configs::Tuple, degree, internal_format, precision, target)
+    length(configs) == 1 && return configs
+    transformation = first(configs).transformation
+    _coefficient_degree(degree, transformation) == 0 &&
+        transformation in (:none, :odd, :reciprocal, :sqrt, :rsqrt, :cbrt) &&
+        return (first(configs),)
+    choices = filter(configs) do candidate
+        request = (; config = candidate, degree, internal_format, precision)
+        _target_candidate_reason(request, target) === nothing
+    end
+    return isempty(choices) ? (first(configs),) : choices
+end
+
 """One attempted configuration, with exact stored data when available."""
 struct SearchAttempt
     degree::Int
@@ -161,6 +189,7 @@ struct SearchAttempt
     reason::String
     generation_seconds::Union{Nothing, Float64}
     proof_seconds::Union{Nothing, Float64}
+    evaluation::Union{Nothing, Symbol}
 end
 SearchAttempt(
     degree,
@@ -172,6 +201,10 @@ SearchAttempt(
     plan,
     certificate,
     reason,
+    generation_seconds = nothing,
+    proof_seconds = nothing;
+    evaluation = plan === nothing || !haskey(plan.settings, "evaluation") ? nothing :
+                 Symbol(plan.settings["evaluation"]),
 ) = SearchAttempt(
     degree,
     format,
@@ -182,9 +215,13 @@ SearchAttempt(
     plan,
     certificate,
     reason,
-    nothing,
-    nothing,
+    generation_seconds,
+    proof_seconds,
+    evaluation,
 )
+
+_request_evaluation(request) =
+    get(request, :implementation, :polynomial) == :lut ? nothing : request.config.evaluation
 
 """First certified candidate, or `search_limit` with the complete attempt history."""
 struct PolynomialSearchResult
@@ -362,7 +399,8 @@ function _run_polynomial_job(
                     nothing,
                     aborted ? "Sweep cancelled before launch" :
                     deadline ? "Total search deadline expired before launch" :
-                    "Job wall-time limit expired before launch",
+                    "Job wall-time limit expired before launch";
+                    evaluation = _request_evaluation(request),
                 ),
                 deadline
             end
@@ -453,7 +491,8 @@ function _run_polynomial_job(
             certificate,
             reason,
             generation_seconds,
-            proof_seconds,
+            proof_seconds;
+            evaluation = _request_evaluation(request),
         ),
         deadline
     end
@@ -473,16 +512,18 @@ or the total deadline returns `search_limit`, not a claim of infeasibility. Atte
 retain exact plans, proof contributions and reasons when available, including a
 candidate checkpoint if proof was interrupted. No global cost optimality is claimed.
 """
-search_polynomial(spec::FunctionSpec, config::PolynomialSearchConfig) =
-    _search_polynomial(spec, config)
+search_polynomial(spec::FunctionSpec, config::PolynomialSearchConfig; target = nothing) =
+    _search_polynomial(spec, config; target)
 
 function _search_polynomial(
     spec,
     config;
+    target::Union{Nothing, TargetProfile} = nothing,
     worker_command = _polynomial_worker_command,
     process_started = (process, directory) -> nothing,
 )
     domain = _validate_search_request(spec, config)
+    configurations = _evaluation_configs(config)
     started = time_ns()
     attempts = SearchAttempt[]
     finish(status, selected, reason) = PolynomialSearchResult(
@@ -496,15 +537,63 @@ function _search_polynomial(
     )
     for segments in config.segments,
         degree in config.degrees,
-        (internal_format, precision) in zip(config.internal_formats, config.precisions)
+        (internal_format, precision) in zip(config.internal_formats, config.precisions),
+        candidate in
+        _evaluation_configs(configurations, degree, internal_format, precision, target)
 
         _search_remaining(started, config.total_timeout) <= 0 &&
             return finish(:search_limit, nothing, :total_deadline)
         length(attempts) >= config.max_attempts &&
             return finish(:search_limit, nothing, :attempt_limit)
-        request = (; spec, config, domain, degree, internal_format, segments, precision)
+        request = (;
+            spec,
+            config = candidate,
+            domain,
+            degree,
+            internal_format,
+            segments,
+            precision,
+        )
+        reason = _target_candidate_reason(request, target)
+        if reason !== nothing
+            push!(
+                attempts,
+                SearchAttempt(
+                    degree,
+                    internal_format,
+                    segments,
+                    precision,
+                    :target_unsupported,
+                    0.0,
+                    nothing,
+                    nothing,
+                    reason;
+                    evaluation = candidate.evaluation,
+                ),
+            )
+            continue
+        end
         attempt, deadline =
             _run_polynomial_job(request, started; worker_command, process_started)
+        if target !== nothing && attempt.plan !== nothing
+            support = target_support(attempt.plan, target)
+            if !support.supported
+                attempt = SearchAttempt(
+                    attempt.degree,
+                    attempt.internal_format,
+                    attempt.segments,
+                    attempt.precision,
+                    :target_unsupported,
+                    attempt.elapsed_seconds,
+                    attempt.plan,
+                    attempt.certificate,
+                    join(support.reasons, ", "),
+                    attempt.generation_seconds,
+                    attempt.proof_seconds;
+                    evaluation = attempt.evaluation,
+                )
+            end
+        end
         push!(attempts, attempt)
         (deadline || _search_remaining(started, config.total_timeout) <= 0) &&
             return finish(:search_limit, nothing, :total_deadline)
@@ -536,7 +625,7 @@ function _validate_search_request(spec, config)
             spec,
             first(config.degrees),
             format,
-            config.evaluation,
+            config.evaluation == :auto ? :separate : config.evaluation,
             config.generation_precision,
             config.proof_precision,
             config.accuracy,
@@ -561,6 +650,8 @@ function _search_data(result::PolynomialSearchResult)
             "reason" => attempt.reason,
         )
         config.segments == (1,) || (data["segments"] = attempt.segments)
+        attempt.evaluation === nothing ||
+            (data["evaluation"] = string(attempt.evaluation))
         attempt.precision === nothing ||
             (data["precision"] = _precision_data(attempt.precision))
         attempt.plan === nothing || (data["plan"] = _plan_data(attempt.plan))

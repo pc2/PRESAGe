@@ -80,7 +80,7 @@ function cpu_check(
         PRESAGe._resolved_float_backend(plan.program, float_backend) == :ac_std_float &&
             append!(vendor, ["-isystem", vendor_include(:ac_fixed)])
         run(
-            `$compiler -std=c++20 -O2 -ffp-contract=off -fno-fast-math -frounding-math -Wall -Wextra -Werror $source $vendor $gmp -o $exe`,
+            `$compiler -std=c++20 -O2 -ffp-contract=off -fno-fast-math -frounding-math -Wall -Wextra -Werror $source $gmp $vendor -o $exe`,
         )
         # Check serialized programs, not just the in-memory generator state.
         path = joinpath(directory, "plan.toml")

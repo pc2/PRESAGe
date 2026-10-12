@@ -55,7 +55,13 @@ end
         generate_main(["erf", generated, "--internal=double"])
         @test !isfile(joinpath(generated, "certificate.toml"))
         @test !isfile(joinpath(generated, "certificate-failure.toml"))
-        @test !PRESAGe._has_fixed(read_plan(joinpath(generated, "plan.toml")).program)
+        floating = read_plan(joinpath(generated, "plan.toml"))
+        arithmetic = filter(floating.program.nodes) do node
+            node isa Union{IR.Mul, IR.Add, IR.FMA}
+        end
+        @test !isempty(arithmetic)
+        @test all(node -> node.format == IEEE64, arithmetic)
+        @test all(table -> table.format == IEEE64, floating.program.tables)
         @test_throws ErrorException generate_main([
             "erf",
             generated,
@@ -193,7 +199,7 @@ end
             @test_throws ErrorException generate_main(["erf", lut, options...])
         end
         @test_throws ArgumentError generate_main(["erf", lut, "--implementation=lut"])
-        @test_throws ArgumentError generate_main([
+        @test_throws ErrorException generate_main([
             "erf",
             lut,
             "--input-format=half",

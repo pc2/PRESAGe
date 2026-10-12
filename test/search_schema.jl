@@ -34,7 +34,11 @@
     io = IOBuffer()
     write_search_config(
         io,
-        PolynomialSearchConfig(degrees = [1, 9], internal_formats = [IEEE32]),
+        PolynomialSearchConfig(
+            evaluation = :separate,
+            degrees = [1, 9],
+            internal_formats = [IEEE32],
+        ),
     )
     data = TOML.parse(String(take!(io)))
     minimal = deepcopy(data)

@@ -1,14 +1,14 @@
 # C++ kernels with vendor arithmetic
 
-`emit_kernel` generates a C++17 evaluator using official `ap_fixed`/`ap_uint`
-or `ac_fixed`/`ac_int` types throughout. Floating values use an explicit IEEE
-encoding backed by vendor integers; AC floating arithmetic uses official
-`ac_std_float` operations. `evaluator.hpp` contains type aliases, exact constants,
-tables and one evaluator with local stages and ordinary branches. The same
-header includes only required arithmetic helpers and their dependencies. The host adapter remains
-separate. Kernel code uses bounded arrays and scalar values without GMP/MPFR,
-streams or exceptions. Tracing is disabled by default; `trace=true` adds
-intermediate-value instrumentation for local tests.
+`emit_kernel` generates a C++17 evaluator using vendor integer and fixed types.
+Floating values use an explicit IEEE encoding backed by vendor integers.
+Generic AC floating arithmetic uses public `ac_std_float` operations.
+Intel floating arithmetic uses the toolchain `ap_float` operations and native `sycl::fma` for binary32 and binary64.
+`evaluator.hpp` contains type aliases, exact constants, tables and one evaluator with local stages and ordinary branches.
+The header includes only required arithmetic helpers and their dependencies.
+The host adapter remains separate.
+Kernel code uses bounded arrays and scalar values without GMP, MPFR, streams or exceptions.
+Tracing is disabled by default, `trace=true` adds intermediate value instrumentation for local tests.
 
 ## Spatial Horner with target II=1
 
@@ -77,15 +77,16 @@ julia --project=. scripts/generate.jl plan.toml build/kernel \
   --target=kernel --backend=ac_fixed
 ```
 
-`--toolchain=generic` is the default. `vitis` requires AP types and emits guarded
-array partition hints. `oneapi` requires AC types, selects Intel's AC include
-paths under the Intel compiler and emits guarded FPGA memory attributes.
-Ordinary compilation of that header uses the supplied public AC headers.
-Public header fallbacks are compiled locally. Vendor compiler branches and
-synthesis are still pending.
+`--toolchain=generic` is the default and uses the supplied public vendor headers.
+`vitis` requires AP types and emits guarded array partition hints.
+`oneapi` requires AC integer types, selects Intel arithmetic headers and emits guarded FPGA memory attributes.
+Intel floating headers require the Intel compiler and its arithmetic settings.
+The [integrated resource workflow](resources.md#integrated-synthesis-and-comparison) provides vendor compilation, report collection and emulation.
 
 For the CMake host workflow, set `PRESAGE_PLAN`, `PRESAGE_TARGET=kernel` and
-`PRESAGE_BACKEND=ac_fixed|ap_fixed`. `PRESAGE_TOOLCHAIN` selects the hints.
+`PRESAGE_BACKEND=ac_fixed|ap_fixed`.
+`PRESAGE_TOOLCHAIN` selects arithmetic capabilities and memory hints.
+Keep its default `generic` value for host compilation with the public headers.
 The `presage_cpu` executable is the host adapter, and `kernel_verification`
 is its CTest gate. No FPGA is needed.
 
@@ -140,14 +141,16 @@ choose new formats or replace reduction identities.
   width return zero, including wide shift counts.
 - `UIntAdd` adds equal-width unsigned words modulo `2^width`. The result is
   explicitly narrowed to the declared AP/AC integer width.
-- Table indices are checked before conversion to a host index. Storage uses
-  cyclic banks: entry `i` is in bank `i % banks`, row `i / banks`. Padding is
-  inaccessible. `unroll=true` emits each bank selection explicitly. Horner
-  stages are already expanded by the IR. Both metadata fields remain in the
-  header; toolchain hints may guide the physical implementation. Each ROM entry
-  is an unsigned AP/AC word at the table format's exact width. Storage is
-  `[banks][rows]`; 64-bit chunks are used only to initialize words wider than
-  64 bits, and do not pad the ROM word.
+- Table indices are checked before conversion to a host index.
+  Storage uses cyclic banks, entry `i` is in bank `i % banks` and row `i / banks`.
+  Padding is inaccessible.
+  `unroll=true` emits each bank selection explicitly.
+  Horner stages are already expanded by the IR.
+  Both metadata fields remain in the header, toolchain hints may guide the physical implementation.
+  Generic and Vitis ROM entries use unsigned vendor words at the declared width.
+  Intel ROM entries use native integer storage rounded to 8, 16, 32 or 64 bits, with multiple 64 bit chunks for wider words.
+  Intel converts loaded words to AC values after lookup to preserve constant ROM inference.
+  Resource estimates account for the target storage width.
 
 The old `generator/` inspired the table organization and compiler hints.
 Arithmetic follows the current IR and certificate, including explicit separate
@@ -294,12 +297,12 @@ Fixed arithmetic graphs accept independent fixed or floating interfaces,
 including ordinary, normalized segmented and individually sized polynomial
 evaluators. Canonical fixed binary16/IEEE32 erf and floating LUTs are supported.
 Unsigned nodes and fixed/unsigned/floating tables are supported. Fixed-internal
-reciprocal, sqrt/rsqrt, cbrt and log transformations are also supported. AC
-supports floating `Add`, `Mul`, `FMA` and reciprocal with nearest-even rounding
-and subnormals. Arithmetic canonicalizes NaNs; loads and bit operations retain
-payloads. Directed floating arithmetic and AP floating arithmetic are rejected
-explicitly. AP still supports encoded floating conversions, branches,
-normalization and fixed-core reconstruction.
+reciprocal, sqrt/rsqrt, cbrt and log transformations are also supported.
+Generic AC supports floating `Add`, `Mul`, `FMA` and reciprocal with nearest even rounding and subnormals.
+Intel floating arithmetic follows its [supported format and operation list](resources.md#configurable-resource-estimates).
+Arithmetic canonicalizes NaNs, loads and bit operations retain payloads.
+Directed floating arithmetic and AP floating arithmetic are rejected explicitly.
+AP still supports encoded floating conversions, branches, normalization and fixed core reconstruction.
 
 Formats are parameterized by `FloatFormat(E,M)`; binary16/32/64/128/256 and
 custom encodings have local checks. Floating widths and vendor work words must
@@ -309,11 +312,9 @@ fit the C `int` index range; bank counts cannot exceed its entry count or 4096.
 OneAPI bank counts must be powers of two. Unsupported emission leaves an
 existing destination header or generated bundle intact.
 
-AC floating arithmetic additionally requires at most 30 exponent bits and
-`2*(fraction_bits+1)+12 <= 4096` for its work words. Encoded-only operations
-retain their wider exponent support. Binary32 is the initial oneAPI candidate;
-other combinations are checked with the public headers locally, and require
-separate toolchain validation.
+Generic AC floating arithmetic additionally requires at most 30 exponent bits and `2*(fraction_bits+1)+12 <= 4096` for its work words.
+Encoded operations retain their wider exponent support.
+Public AC conformance does not establish support in the Intel toolchain.
 
 Local conformance establishes arithmetic agreement with the interpreter and
 reference checker. It does not establish vendor compiler acceptance, resources,

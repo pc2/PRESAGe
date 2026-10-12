@@ -195,7 +195,7 @@ function _interpret(p::IR.Program, bits::Integer, trace::Bool)
             visit(n.source)
         elseif n isa IR.BitCast
             source = visit(n.source)
-            f isa FloatFormat ? _float(source, f) : source.bits
+            f isa Union{FloatFormat, FixedFormat} ? _stored(source, f) : source.bits
         elseif n isa IR.ExtractBits
             (visit(n.source) >> n.offset) & IR.mask(f)
         elseif n isa IR.UIntAdd

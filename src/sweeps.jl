@@ -166,7 +166,7 @@ function _sweep_metrics(row, memory_model, resource_model = nothing)
     )
     resource_model === nothing && return metrics
     estimate = estimate_resources(result.plan; model = resource_model, memory_model)
-    return merge(metrics, estimate.totals)
+    return merge(metrics, estimate.totals, (; target_reasons = estimate.support.reasons))
 end
 
 function _sweep_resource_requirements(objective, model, budget)
@@ -180,7 +180,7 @@ function _sweep_resource_requirements(objective, model, budget)
 end
 
 function _sweep_eligibility(cost, max_table_blocks, objective, model, budget)
-    reasons = String[]
+    reasons = String[get(cost, :target_reasons, ())...]
     max_table_blocks === nothing ||
         cost.table_blocks <= max_table_blocks ||
         push!(
@@ -241,6 +241,16 @@ function _sweep_choices(
             if isempty(choices)
                 certified = count(i -> rows[i].spec_index == spec_index, passing)
                 if certified == 0
+                    candidates = [r for r in rows if r.spec_index == spec_index]
+                    if !isempty(candidates) &&
+                       all(r -> r.attempt.status == :target_unsupported, candidates)
+                        return PolynomialSweepSelection(
+                            spec_index,
+                            nothing,
+                            :target_unsupported,
+                            join(unique([r.attempt.reason for r in candidates]), ", "),
+                        )
+                    end
                     return PolynomialSweepSelection(
                         spec_index,
                         nothing,
@@ -266,7 +276,10 @@ function _sweep_choices(
                     i -> any(reason -> occursin("unknown", reason), reasons[i]),
                     rejected,
                 )
+                unsupported =
+                    any(i -> !isempty(get(metrics[i], :target_reasons, ())), rejected)
                 status =
+                    unsupported ? :target_unsupported :
                     missing ? :resource_model_incomplete : :resource_budget_exceeded
                 detail = join(unique(vcat([reasons[i] for i in rejected]...)), "; ")
                 return PolynomialSweepSelection(
@@ -360,6 +373,7 @@ function _sweep_requests(
     implementations = (:polynomial,),
     lut_max_entries = 65536,
     allow_unsupported = false,
+    target = nothing,
 )
     inputs isa Union{FunctionSpec, PlanArtifact} && (inputs = (inputs,))
     inputs isa Union{Tuple, AbstractVector} &&
@@ -394,7 +408,10 @@ function _sweep_requests(
             config.segments == (max(1, length(stored.segments)),) &&
             string(config.transformation) ==
             get(stored.settings, "transformation", "none") &&
-            string(config.evaluation) == stored.settings["evaluation"] || throw(
+            (
+                config.evaluation == :auto ||
+                string(config.evaluation) == stored.settings["evaluation"]
+            ) || throw(
             ArgumentError(
                 "stored sweep must preserve degree, segments, transformation and evaluation",
             ),
@@ -410,10 +427,16 @@ function _sweep_requests(
         end
     end
     # Cap allocation before materializing a possibly huge Cartesian product.
+    arithmetic =
+        stored === nothing ? _evaluation_configs(config) :
+        (_evaluation_config(config, Symbol(stored.settings["evaluation"])),)
+    configurations(degree, format, precision) =
+        _evaluation_configs(arithmetic, degree, format, precision, target)
     polynomial_count =
-        length(config.segments) *
-        BigInt(length(config.degrees)) *
-        length(config.internal_formats)
+        BigInt(length(config.segments)) * sum(
+            length(configurations(degree, format, precision)) for degree in config.degrees
+            for (format, precision) in zip(config.internal_formats, config.precisions)
+        )
     count = sum(
         (
             implementation == :polynomial ? polynomial_count :
@@ -442,12 +465,13 @@ function _sweep_requests(
         end
         for segments in config.segments,
             degree in config.degrees,
-            (format, precision) in zip(config.internal_formats, config.precisions)
+            (format, precision) in zip(config.internal_formats, config.precisions),
+            candidate in configurations(degree, format, precision)
 
             length(requests) >= config.max_attempts && break
             request = (;
                 spec,
-                config,
+                config = candidate,
                 domain = domains[i],
                 degree,
                 internal_format = format,
@@ -470,12 +494,37 @@ function _sweep_job(
     started,
     cache,
     identity;
+    target = nothing,
     worker_command,
     process_started,
     cancelled,
 )
     request = item.request
     implementation = get(request, :implementation, :polynomial)
+    reason = _target_candidate_reason(request, target)
+    if reason !== nothing
+        attempt = SearchAttempt(
+            request.degree,
+            request.internal_format,
+            request.segments,
+            request.precision,
+            :target_unsupported,
+            0.0,
+            nothing,
+            nothing,
+            reason;
+            evaluation = _request_evaluation(request),
+        )
+        return PolynomialSweepRow(
+            index,
+            item.spec_index,
+            attempt,
+            :disabled,
+            nothing,
+            0.0,
+            implementation,
+        )
+    end
     # LUT proofs do not use the polynomial cache audit. Keep cache semantics
     # unchanged until table regeneration is an observed bottleneck.
     implementation == :lut && (cache = nothing)
@@ -533,7 +582,8 @@ function _sweep_job(
             attempt.certificate,
             "Sweep deadline expired before accepting the result",
             attempt.generation_seconds,
-            attempt.proof_seconds,
+            attempt.proof_seconds;
+            evaluation = attempt.evaluation,
         )
     end
     attempt = SearchAttempt(
@@ -547,7 +597,8 @@ function _sweep_job(
         attempt.certificate,
         attempt.reason,
         attempt.generation_seconds,
-        attempt.proof_seconds,
+        attempt.proof_seconds;
+        evaluation = attempt.evaluation,
     )
     PolynomialSweepRow(
         index,
@@ -679,6 +730,8 @@ function _sweep_polynomial(
         implementations,
         lut_max_entries,
         allow_unsupported = implementation_sweep,
+        target = resource_model === nothing || resource_model.toolchain == :generic ?
+                 nothing : TargetProfile(resource_model.toolchain),
     )
     implementation_sweep && (mode = :implementations)
     started = time_ns()
@@ -709,6 +762,9 @@ function _sweep_polynomial(
                         started,
                         cache,
                         identity;
+                        target = resource_model === nothing ||
+                                 resource_model.toolchain == :generic ? nothing :
+                                 TargetProfile(resource_model.toolchain),
                         worker_command = command,
                         process_started,
                         cancelled = () -> aborted,
@@ -768,6 +824,7 @@ end
 # TOML integers are signed 64-bit; retain larger modeled counts as decimal text.
 _sweep_integer_data(value::Integer) =
     typemin(Int64) <= value <= typemax(Int64) ? Int64(value) : string(value)
+_sweep_integer_data(value::Rational) = _resource_number_data(value)
 
 _sweep_selection_paths(selection) = (
     plan = "selected/$(selection.spec_index)/plan.toml",
@@ -854,6 +911,7 @@ function _sweep_data(result; observations = Dict())
             "selection_eligible" => false,
         )
         row.cache_key === nothing || (d["cache_key"] = row.cache_key)
+        a.evaluation === nothing || (d["evaluation"] = string(a.evaluation))
         a.precision === nothing || (d["precision"] = _precision_data(a.precision))
         a.generation_seconds === nothing ||
             (d["generation_seconds"] = a.generation_seconds)
@@ -890,7 +948,7 @@ function _sweep_data(result; observations = Dict())
                 string(k) =>
                     v === nothing ? "unknown" :
                     k == :total_bound ? _rational_text(v) : _sweep_integer_data(v)
-                for (k, v) in pairs(cost)
+                for (k, v) in pairs(cost) if k != :target_reasons
             )
             reasons = _sweep_eligibility(
                 cost,

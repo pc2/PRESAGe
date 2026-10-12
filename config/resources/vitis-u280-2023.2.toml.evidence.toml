@@ -1,0 +1,307 @@
+profile_sha256 = "5746711d136a978fdc7c6d5818bd8f07ca4c50fcc3dbc5accd5115e4c123aa2a"
+schema = "presage-resource-calibration"
+schema_version = 1
+validation = "primitive_only"
+
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "fixed-16-add"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 9.354592084884644
+    mode = "hls_csim"
+    project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+    record_sha256 = "b01beeb5ab824006db846e26584fa730266e558f809af87e6bb9bc019e001000"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "58d156b014562fc50ac222b7087b20632248af1d6d9cd14da466d8b9798ea082"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "fixed-16-add/synthesis-run.toml" = "0329299bb4dc55e9ceb20fc931e9a026e3a6dad1411be54ecfa791399bc1468b"
+    "fixed-16-add/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "c316afbc85d39be84d38c5810592f15574fcff5b6e8683d0ca0658ba2df77069"
+    "fixed-16-add/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "a98804656649f86866104f3173f3b0476384bed0cbdaae844b273aa9516d70bb"
+
+    [probes.sources]
+    "fixed-16-add/evaluator.hpp" = "5eb5bb0c5cd0c96efd0a8610c756c6a79a6671685fa3a252feb3ac7ec903ce5e"
+    "fixed-16-add/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-16-add/plan.toml" = "45094fbf279d6570129f553e79d3d3d2c4654de617c74839f240d942d2a5375a"
+    "fixed-16-add/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
+    "fixed-16-add/resources.toml" = "7d36c404658a7f57f0db711e5dc5508cdd574cc5716d085314ea60d3f87e423b"
+    "fixed-16-add/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "fixed-16-mul"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 8.322551965713501
+    mode = "hls_csim"
+    project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+    record_sha256 = "1499756bdefee425d6362f71a155103a13ee552401d3069d81870782d7676eb6"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "4d142a1d04e13763eac537b3e06cc6690457fe7c462f00665879184642c28581"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "fixed-16-mul/synthesis-run.toml" = "42fae6e282c39870751f737b180157af8bc4142932de3b38bf2b5dac0ace05f4"
+    "fixed-16-mul/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "24a21d0364706bf924c652099ae9ff08d2a9ab885b5620d013651eedad3ebd11"
+    "fixed-16-mul/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "15800430c08a7253f3bf5dd225da884d1446e08766c6f29d9c6194dda259421b"
+
+    [probes.sources]
+    "fixed-16-mul/evaluator.hpp" = "91de931ed2f782a9a8094ce1b3af1f15623892315b06d25be81544ad1d3339aa"
+    "fixed-16-mul/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-16-mul/plan.toml" = "85cbf44047af3ac7504d9030e4566ec92d47cdeec29a26e1ca408235eb130e19"
+    "fixed-16-mul/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
+    "fixed-16-mul/resources.toml" = "852dd62beac5a642132d4fe6b3bd355c977b22b5d1fee5d48cfe009321174e81"
+    "fixed-16-mul/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "fixed-16-fma"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 8.749658107757568
+    mode = "hls_csim"
+    project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+    record_sha256 = "12dec7f7ba41c142af31dd91df92fb5e0f5cc5bca9a446cdfe646e92eeefee95"
+    success = true
+    tested_inputs = 379
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "7531ff607c7d69aef818e1aaa406f92ec0e2707f2f715e71b277ced62831677f"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "fixed-16-fma/synthesis-run.toml" = "70577baef1ba7686c8042545f53a4590016bbc3257ba6828b9c0e74d02d84de8"
+    "fixed-16-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "9ed319657888f60e1deca33288bafc5d3722e406443ada593267af12a7f81942"
+    "fixed-16-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "e82d34b605559544abd901af7b1912c5b2b5c6a3c610c1b4b6bdc1b7f259bf24"
+
+    [probes.sources]
+    "fixed-16-fma/evaluator.hpp" = "71118fd4b5a2b9f493cc7583feb0a48e523b47d49270d1d9b2e6990abe27a22f"
+    "fixed-16-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-16-fma/plan.toml" = "2d6de33ded139b01ff4ba7bd17eaf0f5cdc44afd25a3a9183f8257b7af126722"
+    "fixed-16-fma/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
+    "fixed-16-fma/resources.toml" = "d80d0679730bb08cce27efa95fb95c846a4c2c83d3a919a47a2c0c079b9038d5"
+    "fixed-16-fma/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "fixed-32-add"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 8.406402111053467
+    mode = "hls_csim"
+    project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+    record_sha256 = "d294f1b1c32beee062982175e12dc85385304cb86917d49ccf2b18031859a957"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "1bcee6273f8c7ca1df482ae7907bb91f7901238569e3514cd490c0c5378ae207"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "fixed-32-add/synthesis-run.toml" = "39c6b1a25f0211ee842c37e344aed19601295fe7d9a4e34f9e1d26bc559c5b1b"
+    "fixed-32-add/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "f3e040c6a8c99d977bdb3c1d75b52457b1f7e31907476392af93aaf6fdded1b4"
+    "fixed-32-add/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "c8bf94ec780d381be84eceba368d3a65249b23b5b8da0a6a8bb5d4a81a5fb491"
+
+    [probes.sources]
+    "fixed-32-add/evaluator.hpp" = "5266e785e03df961dccbc3caf7f468135122de2781b13e2506ba7f1e72e0bebd"
+    "fixed-32-add/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-32-add/plan.toml" = "a735dc31eb543cbbe994ecb6ea896c767f8d14d63b1ff469f685b85e5effd82c"
+    "fixed-32-add/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
+    "fixed-32-add/resources.toml" = "5a21d2e98749131255647171153df83fef7e2dafb44f6be49cc64310e18fc752"
+    "fixed-32-add/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "fixed-32-mul"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 8.398967981338501
+    mode = "hls_csim"
+    project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+    record_sha256 = "838d70def8e51159647d320b48aec4d9a11d15bb7316d95076f0e16b96734206"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "31540488b33295ccbef1e88787678e3db7d85eb166ac53234ebe31727fb01c20"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "fixed-32-mul/synthesis-run.toml" = "cc412b8f80890537a7ef01cf4016c4999b7521f3612ac887b38fa208cb8e9e10"
+    "fixed-32-mul/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "0886321664afab81163513c1b7dfd869caa9f79b4141270d2b7079799509f86b"
+    "fixed-32-mul/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "13c2005382e01515eb5c86ad2feb5bdbc896f4f980ea0e02c6cdb062da1250e8"
+
+    [probes.sources]
+    "fixed-32-mul/evaluator.hpp" = "7c6aea56558c4545b864870772fffd060bfd92af51739998aa0a3404a96f9629"
+    "fixed-32-mul/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-32-mul/plan.toml" = "4aac229c91f01a5e2994ce63bbf8208151fcd810c840944a4f3d6803ce8fe1d3"
+    "fixed-32-mul/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
+    "fixed-32-mul/resources.toml" = "998c5a526d413e759d8afaec3a018af374770a74d9f2ef8a5f496f1b022be3f2"
+    "fixed-32-mul/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "fixed-32-fma"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 9.024212837219238
+    mode = "hls_csim"
+    project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+    record_sha256 = "79d928d1243044385a53c33a4a45fae57923b3de42dc281a88ec50002f0ea15a"
+    success = true
+    tested_inputs = 379
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "b90ea2145e0e1f7ecfbe45844a88fa723aa51ef635c674259765da84c3e7ec63"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "fixed-32-fma/synthesis-run.toml" = "abd5fc8ec232e3e79a39488c4d3969358383ef08a0090e4cf34fb2d0a90f4d2d"
+    "fixed-32-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "b5563639d508f5c0e08b24f4c5dd4e6c101b24fc6229950d4e081719e6e88b9a"
+    "fixed-32-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "498e8947e2f04466e43ef0dc3ada99cdad477a54b1f3e313c1513429a67c0be5"
+
+    [probes.sources]
+    "fixed-32-fma/evaluator.hpp" = "f247a7bbe022fa2cbd3df2380a6e3ba9538497f136f59f7cdc7fe45935f9b689"
+    "fixed-32-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-32-fma/plan.toml" = "805e495201147096869ec1a5394d7494263796af9fc374d2092f632c67bd1de6"
+    "fixed-32-fma/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
+    "fixed-32-fma/resources.toml" = "607e5679eed0c41095c76660360b496a8e6398af3373717170170615b8670854"
+    "fixed-32-fma/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "fixed-64-add"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 8.848298788070679
+    mode = "hls_csim"
+    project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+    record_sha256 = "883aae3a8dbb58859ab62324005ebf4e14c698d49688d882004148d31fa5ef5f"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "58d21590fbf81ee3df046036d4c178f5b88169187cc9b7d277958cdad4efeaff"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "fixed-64-add/synthesis-run.toml" = "07bc9d517f303b94d0219b3e411cc51114d5a2f352e208f7cc2e0bf4d385f78d"
+    "fixed-64-add/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "4102896b5abae7dfdfd67eb2a8bf6397d8d9c07c0d283e6accdf428b590acb16"
+    "fixed-64-add/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "3501c183dd119734d76b911040ca60acd5f02ed0c8291889e8ca70bbb9ad34bd"
+
+    [probes.sources]
+    "fixed-64-add/evaluator.hpp" = "55dc624a00cca4d73ee184b6a59ec10876bd3d3b87b9ab7ce3111e5b676bf1b5"
+    "fixed-64-add/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-64-add/plan.toml" = "29d526334c88afa0a51914b56e096c62e7de3d605ae7bf65805f6262d7bfca62"
+    "fixed-64-add/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
+    "fixed-64-add/resources.toml" = "740e08f0f49ebb0085f4c92e5b5e204f74870eebd8af65cf732c4d049718e34f"
+    "fixed-64-add/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "fixed-64-mul"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 9.42382287979126
+    mode = "hls_csim"
+    project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+    record_sha256 = "034d0f887d340a771f497ef0655bcd42365d3f8a4afbb0a4ea31a77234adacac"
+    success = true
+    tested_inputs = 279
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "ad339dede19624d243cf4cb189f4d6118d5ce1622ec5be4551d8fb48f405aa05"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "fixed-64-mul/synthesis-run.toml" = "6c498ac20002a604492b0c3edf7e7a2af35785281f7b1d7e17ff1f13ac022c9e"
+    "fixed-64-mul/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "f99c7e2edda8c38b43c3fb3ef2d4bf39cea79dad52f81b2c65a4545a94469620"
+    "fixed-64-mul/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "3ce86167145410ed5652542ca226da49504c5e1d27539467dd2634f776f19573"
+
+    [probes.sources]
+    "fixed-64-mul/evaluator.hpp" = "07329cd2b90f461993f1cfed63a12c8068d5206e2cff85dd70ead6b24c1bb624"
+    "fixed-64-mul/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-64-mul/plan.toml" = "216c37665df413fb62564cacf64a5986da6593231f2941ad303fbeaf9fe166d2"
+    "fixed-64-mul/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
+    "fixed-64-mul/resources.toml" = "dcccfe0516bdcd32ee14d10424a3f60f6114bf8f8f90fb4b6e7ee23dfc385e1a"
+    "fixed-64-mul/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "fixed-64-fma"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 9.354250192642212
+    mode = "hls_csim"
+    project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+    record_sha256 = "8dafe2ef3bd2c343f5172ba45770bbda594bca03e0cb2f6fdcbf637b778a5975"
+    success = true
+    tested_inputs = 379
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "8f6ab8084a77a41b4b43ed125e15654bec9b338ea7750f7be9a777b2e72cf67a"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "fixed-64-fma/synthesis-run.toml" = "f83670c4c56e857ba9d16417d6c3a81fed20d39156cf1ae011e2613897381f7a"
+    "fixed-64-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "8c34474088ae927776c498ef49d8f8b5ab9c8f3f93bc4445af96e55a6aae3ba7"
+    "fixed-64-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "0c6f9f533715cdcfc0e72d482d0cfd746378c49233182e9925736bddfc4412e0"
+
+    [probes.sources]
+    "fixed-64-fma/evaluator.hpp" = "20ddd51fd5dd5bc98e4da54124dcf5db5df8271273895753fef25e082b14cdba"
+    "fixed-64-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "fixed-64-fma/plan.toml" = "1c47c0e264a3c9f46c9d2371991d7c062f660af160b46846b691bb4c4d4d80c0"
+    "fixed-64-fma/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
+    "fixed-64-fma/resources.toml" = "e2d1e6ca2a8bca480a84a1142d56f8e13a1f3ae8cd72cc45ce6d217c10ac305d"
+    "fixed-64-fma/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+
+[[projects]]
+measurements_sha256 = "d73b2fc9aa6b47703a153e9448b06d972c676cabd423698c83836e23a96edfc1"
+path = "../../build/resource-fixes/probes-vitis/synthesis.toml"
+project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"

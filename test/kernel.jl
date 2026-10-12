@@ -69,7 +69,9 @@ function kernel_trace_check(fixtures, backend)
                     fixture.program;
                     name = "test$i",
                     backend,
-                    toolchain = backend == :ap_fixed ? :vitis : :oneapi,
+                    toolchain = backend == :ap_fixed ? :vitis :
+                                PRESAGe._kernel_has_float_arithmetic(fixture.program) ?
+                                :generic : :oneapi,
                     trace = true,
                     resource_model = hasproperty(fixture, :resource_model) ?
                                      fixture.resource_model : nothing,

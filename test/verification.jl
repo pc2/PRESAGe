@@ -577,6 +577,7 @@ mktempdir() do root
 
     @testset "Sweep observations and verification CLI" begin
         config = PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [FixedFormat(24, 6)],
             max_attempts = 1,

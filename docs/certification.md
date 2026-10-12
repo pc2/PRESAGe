@@ -57,6 +57,11 @@ policies return `unsupported_domain`; possible overflow or native proof failure
 returns `proof_failed`. A successful proof above the requested budget returns
 `bound_exceeds_budget`.
 
+Automatic arithmetic selection resolves each candidate to a concrete graph before certification.
+The user specifies the output error budget, while the proof includes all internal rounding and format conversions.
+Emission preserves the certified arithmetic order and rounding behavior.
+Compiler transformations that change these semantics require a matching proof before they can be enabled.
+
 ```julia
 using PRESAGe
 spec = FunctionSpec("x/2+1/4";

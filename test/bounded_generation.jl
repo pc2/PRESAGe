@@ -69,6 +69,7 @@ end
         write_search_config(
             failure_config,
             PolynomialSearchConfig(
+                evaluation = :separate,
                 degrees = [1, 9],
                 internal_formats = [FixedFormat(32, 6)],
                 max_attempts = 1,
@@ -99,6 +100,7 @@ end
         write_search_config(
             failure_config,
             PolynomialSearchConfig(
+                evaluation = :separate,
                 degrees = [9],
                 internal_formats = [FixedFormat(32, 6)],
                 total_timeout = 1e-300,
@@ -119,7 +121,11 @@ end
         # Numerical success cannot replace a valid bundle if C++ emission fails.
         write_search_config(
             failure_config,
-            PolynomialSearchConfig(degrees = [9], internal_formats = [FixedFormat(32, 6)]),
+            PolynomialSearchConfig(
+                evaluation = :separate,
+                degrees = [9],
+                internal_formats = [FixedFormat(32, 6)],
+            ),
         )
         @test_throws ArgumentError generate_main([
             contract,

@@ -26,7 +26,7 @@ function resource_table_program(entries, width; banks = 1)
     )
 end
 
-@testset "Exact configurable resource rules and historical floating costs" begin
+@testset "Exact resource rules and missing floating point calibration" begin
     for (profile, format, operation, expected) in (
         ("vitis", IEEE32, :mul, (78, 143, 3)),
         ("vitis", IEEE32, :add, (198, 318, 2)),
@@ -34,11 +34,13 @@ end
         ("vitis", IEEE64, :mul, (127, 388, 8)),
         ("vitis", IEEE64, :add, (635, 685, 3)),
         ("vitis", IEEE64, :fma, (762, 1073, 11)),
-        ("oneapi", IEEE32, :fma, (64, 128, 1)),
-        ("oneapi", IEEE64, :fma, (2850, 389, 4)),
     )
         model = resource_profile(profile)
-        estimate = estimate_resources(resource_operation_program(format, operation); model)
+        estimate = estimate_resources(
+            resource_operation_program(format, operation);
+            model,
+            target = nothing,
+        )
         @test estimate.status == :complete
         @test (estimate.totals.luts, estimate.totals.ffs, estimate.totals.dsps) == expected
         @test estimate.totals.rams == 0
@@ -46,14 +48,20 @@ end
     end
     for program in (
         resource_operation_program(IEEE32, :mul),
+        resource_operation_program(IEEE32, :fma),
+        resource_operation_program(IEEE64, :fma),
         resource_operation_program(IEEE16, :fma),
         resource_operation_program(IEEE32, :fma; rounding = :down),
     )
-        estimate = estimate_resources(program; model = resource_profile("oneapi"))
+        estimate = estimate_resources(
+            program;
+            model = resource_profile("oneapi"),
+            target = nothing,
+        )
         @test estimate.status == :partial
-        @test all(value -> value === nothing, estimate.totals)
+        @test all(name -> estimate.totals[name] === nothing, (:luts, :ffs, :dsps, :rams))
         @test length(filter(node -> !isempty(node.missing), estimate.nodes)) == 1
-        @test estimate.known == (luts = 0, ffs = 0, dsps = 0, rams = 0)
+        @test estimate.known == (luts = 0, ffs = 0, dsps = 0, rams = 0, mlabs = 0)
     end
 
     input, operand, output = FixedFormat(32, 4), FixedFormat(17, 4), FixedFormat(65, 8)
@@ -70,7 +78,7 @@ end
     )
     model = ResourceModel(rules = (rule, baseline.rules...))
     estimate = estimate_resources(program; model)
-    @test estimate.totals == (luts = 67, ffs = 65, dsps = 2, rams = 0)
+    @test estimate.totals == (luts = 67, ffs = 65, dsps = 2, rams = 0, mlabs = 0)
     @test last(estimate.nodes).signature.operand_bits == 49
     @test last(estimate.nodes).signature.dsp_tiles == 2
     @test last(estimate.nodes).rule_index == 1
@@ -153,7 +161,7 @@ end
         program = resource_table_program(entries, width; banks)
         estimate = estimate_resources(program; model = auto)
         @test estimate.status == :complete
-        @test estimate.totals == (luts = luts, ffs = 0, dsps = 0, rams = rams)
+        @test estimate.totals == (luts = luts, ffs = 0, dsps = 0, rams = rams, mlabs = 0)
         @test only(estimate.tables).blocks == table_memory_cost(program).blocks
         @test only(estimate.tables).storage == (rams == 0 ? :distributed : :block)
     end
@@ -171,8 +179,10 @@ end
         distributed_luts = 20,
         rules = baseline.rules,
     )
-    @test estimate_resources(resource_table_program(512, 32); model = oneapi).totals.luts ==
-          640
+    @test estimate_resources(resource_table_program(512, 32); model = oneapi).known.mlabs ==
+          32
+    @test estimate_resources(resource_table_program(512, 32); model = oneapi).status ==
+          :unsupported
     dead = IR.Program(
         [IR.Input(FixedFormat(8, 2))];
         tables = [IR.Table(IR.UIntFormat(32), [0])],
@@ -182,7 +192,7 @@ end
 
     for (backend, toolchain, block_hint, distributed_hint) in (
         (:ap_fixed, :vitis, "impl=bram", "impl=lutram"),
-        (:ac_fixed, :oneapi, "fpga_memory(\"M20K\")", "fpga_memory(\"MLAB\")"),
+        (:ac_fixed, :oneapi, "fpga_memory(\"BLOCK_RAM\")", "fpga_memory(\"MLAB\")"),
     )
         for (policy, hint) in ((:block, block_hint), (:distributed, distributed_hint))
             model = ResourceModel(
@@ -190,6 +200,16 @@ end
                 memory_policy = policy,
                 rules = baseline.rules,
             )
+            if toolchain == :oneapi && policy == :distributed
+                @test_throws ArgumentError emit_kernel(
+                    IOBuffer(),
+                    resource_table_program(128, 32);
+                    backend,
+                    toolchain,
+                    resource_model = model,
+                )
+                continue
+            end
             text = sprint(
                 io -> emit_kernel(
                     io,
@@ -231,7 +251,10 @@ end
     @test only(select_sweep(resources; objective = :dsps).selections).row_index == 2
     @test only(select_sweep(resources; objective = :memory).selections).row_index == 2
     @test only(
-        select_sweep(resources; resource_budget = ResourceBudget(rams = 0)).selections,
+        select_sweep(
+            resources;
+            resource_budget = ResourceBudget(rams = 0, mlabs = 0),
+        ).selections,
     ).row_index == 1
     denied = select_sweep(resources; resource_budget = ResourceBudget(rams = 0, dsps = 4))
     @test only(denied.selections).status == :resource_budget_exceeded
@@ -299,28 +322,36 @@ end
 end
 
 @testset "Synthesis-count comparisons and small CI examples" begin
-    totals = (; totals = (luts = big(12), ffs = big(12), dsps = big(2), rams = big(3)))
-    measured = ResourceBudget(luts = 9, ffs = 9, dsps = 2, rams = 3)
-    exact = ResourceBudget(luts = 0, ffs = 0, dsps = 0, rams = 0)
-    relative = (luts = 1 // 3, ffs = 1 // 3, dsps = 0, rams = 0)
+    totals = (;
+        totals = (
+            luts = big(12),
+            ffs = big(12),
+            dsps = big(2),
+            rams = big(3),
+            mlabs = big(0),
+        )
+    )
+    measured = ResourceBudget(luts = 9, ffs = 9, dsps = 2, rams = 3, mlabs = 0)
+    exact = ResourceBudget(luts = 0, ffs = 0, dsps = 0, rams = 0, mlabs = 0)
+    relative = (luts = 1 // 3, ffs = 1 // 3, dsps = 0, rams = 0, mlabs = 0)
     @test compare_resources(totals, measured; absolute = exact, relative)["status"] ==
           "passed"
     @test compare_resources(
         totals,
         measured;
         absolute = exact,
-        relative = (luts = 1 // 4, ffs = 1 // 3, dsps = 0, rams = 0),
+        relative = (luts = 1 // 4, ffs = 1 // 3, dsps = 0, rams = 0, mlabs = 0),
     )["status"] == "failed"
     @test compare_resources(totals, ResourceBudget())["status"] == "unresolved"
     @test compare_resources(
-        (; totals = (luts = nothing, ffs = 9, dsps = 2, rams = 3)),
+        (; totals = (luts = nothing, ffs = 9, dsps = 2, rams = 3, mlabs = 0)),
         measured,
     )["status"] == "unresolved"
     @test_throws ArgumentError compare_resources(totals, measured; relative = (luts = 1,))
     @test_throws ArgumentError compare_resources(
         totals,
         measured;
-        relative = (luts = -1, ffs = 0, dsps = 0, rams = 0),
+        relative = (luts = -1, ffs = 0, dsps = 0, rams = 0, mlabs = 0),
     )
     @test_throws ArgumentError compare_resources(
         totals,
@@ -328,12 +359,17 @@ end
         absolute = ResourceBudget(),
     )
     huge = Dict(
-        "totals" =>
-            Dict("luts" => string(big(2)^100), "ffs" => 0, "dsps" => 0, "rams" => 0),
+        "totals" => Dict(
+            "luts" => string(big(2)^100),
+            "ffs" => 0,
+            "dsps" => 0,
+            "rams" => 0,
+            "mlabs" => 0,
+        ),
     )
     @test compare_resources(
         huge,
-        ResourceBudget(luts = big(2)^100, ffs = 0, dsps = 0, rams = 0),
+        ResourceBudget(luts = big(2)^100, ffs = 0, dsps = 0, rams = 0, mlabs = 0),
     )["status"] == "passed"
 
     fixtures = resource_example_plans()
@@ -365,7 +401,10 @@ end
     model = resource_profile("oneapi")
     for (_, plan) in floating
         @test certify_plan(plan).status == :certified
-        @test estimate_resources(plan; model).status == :complete
+        estimate = estimate_resources(plan; model)
+        @test estimate.status == :partial
+        @test estimate.support.supported
+        @test estimate.totals.dsps === nothing
     end
     kernel_trace_check(
         [
@@ -439,6 +478,7 @@ end
             domain = (-1, 1),
         )
         config = PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             segments = [4],
             internal_formats = [FixedFormat(24, 4)],
@@ -458,7 +498,7 @@ end
             cache,
             resource_model = resource_profile("oneapi"),
             objective = :dsps,
-            resource_budget = ResourceBudget(rams = 0),
+            resource_budget = ResourceBudget(rams = 3, mlabs = 0),
             process_started = (p, d) ->
                 error("resource-only change launched numerical worker"),
         )
@@ -480,8 +520,9 @@ end
             "--resource-model=$profile",
             "--max-luts=100000",
             "--max-ffs=100000",
-            "--max-dsps=100",
-            "--max-rams=0",
+            "--max-dsps=7/2",
+            "--max-rams=3",
+            "--max-mlabs=0",
             "--objective=resources",
             "--memory-depth=128",
             "--memory-word-bits=36",
@@ -489,7 +530,7 @@ end
         @test sweep_main(args) == 0
         report = TOML.parsefile(joinpath(output, "sweep.toml"))
         @test report["schema_version"] == 4
-        @test report["selection_policy"]["resource_budget"]["rams"] == 0
+        @test report["selection_policy"]["resource_budget"]["rams"] == 3
         @test report["rows"][1]["cache_status"] == "hit"
         selected = joinpath(output, "selected", "1")
         model_path = joinpath(selected, "resource-model.toml")
@@ -506,7 +547,7 @@ end
         @test TOML.parsefile(joinpath(generated, "resources.toml")) ==
               TOML.parsefile(joinpath(selected, "resources.toml"))
         @test occursin(
-            "fpga_memory(\"MLAB\")",
+            "fpga_memory(\"BLOCK_RAM\")",
             read(joinpath(generated, "evaluator.hpp"), String),
         )
         @test generate_main([
@@ -516,7 +557,7 @@ end
         ]) isa PlanArtifact
         @test !isfile(joinpath(generated, "resources.toml")) &&
               !isfile(joinpath(generated, "resource-model.toml"))
-        blocked = replace.(args, "--max-dsps=100" => "--max-dsps=0")
+        blocked = replace.(args, "--max-dsps=7/2" => "--max-dsps=0")
         @test sweep_main(blocked) == 1
         @test isempty(readdir(joinpath(output, "selected")))
         denied = TOML.parsefile(joinpath(output, "sweep.toml"))

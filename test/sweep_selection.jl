@@ -42,7 +42,11 @@ function selection_fixture(
             PolynomialSweepRow(i, spec_indices[i], attempt, :disabled, nothing, 0.0)
         end,
     )
-    config = PolynomialSearchConfig(degrees = [1], internal_formats = [FixedFormat(32, 4)])
+    config = PolynomialSearchConfig(
+        evaluation = :separate,
+        degrees = [1],
+        internal_formats = [FixedFormat(32, 4)],
+    )
     result = PolynomialSweepResult(
         specs,
         config,
@@ -276,6 +280,7 @@ end
             domain = (-1, 1),
         )
         config = PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [3, 1],
             segments = [4, 8],
             internal_formats = [FixedFormat(24, 4)],

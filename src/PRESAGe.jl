@@ -100,6 +100,17 @@ export FloatFormat,
     ResourceFormula,
     ResourceRule,
     ResourceModel,
+    resource_probe_plans,
+    write_resource_probes,
+    calibrate_resource_model,
+    TargetProfile,
+    target_support,
+    prepare_synthesis,
+    run_synthesis,
+    run_emulation,
+    collect_synthesis,
+    resource_example_plans,
+    write_resource_examples,
     read_resource_model,
     write_resource_model,
     estimate_resources,
@@ -137,6 +148,7 @@ include("cpp_cpu_emit.jl")
 include("kernels.jl")
 include("fixed_kernels.jl")
 include("costs.jl")
+include("targets.jl")
 include("resources.jl")
 include("resource_schema.jl")
 include("cpp_kernel.jl")
@@ -164,5 +176,8 @@ include("sweeps.jl")
 include("implementation_selection.jl")
 include("sweep_artifacts.jl")
 include("verification.jl")
+include("synthesis.jl")
+include("emulation.jl")
+include("resource_examples.jl")
 
 end

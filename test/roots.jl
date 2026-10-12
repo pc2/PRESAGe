@@ -378,6 +378,7 @@ end
         ),
     ).status == :bound_exceeds_budget
     @test_throws ArgumentError PolynomialSearchConfig(
+        evaluation = :separate,
         degrees = [3],
         internal_formats = [IEEE32],
         transformation = :sqrt,

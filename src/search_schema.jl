@@ -1,4 +1,5 @@
 _search_schema_version(config) =
+    config.evaluation == :auto ? 15 :
     config.transformation in (:asin, :acos) ? 14 :
     config.transformation in (:sin, :cos) ? 13 :
     config.transformation == :erfc ? 12 :
@@ -76,7 +77,7 @@ function _read_search_config(data)
     get(data, "schema", nothing) == "presage-search-config" ||
         throw(ArgumentError("unknown search configuration schema"))
     version = get(data, "schema_version", nothing)
-    version isa Integer && !(version isa Bool) && version in 1:14 ||
+    version isa Integer && !(version isa Bool) && version in 1:15 ||
         throw(ArgumentError("unsupported search configuration version"))
     (version == 1 ? !haskey(data, "segments") : haskey(data, "segments")) ||
         throw(ArgumentError("segment choices require search configuration v2"))
@@ -123,6 +124,25 @@ function _read_search_config(data)
         throw(ArgumentError("search configuration v3 requires precision layouts"))
     transformation = get(data, "transformation", "none")
     (
+        version == 15 ?
+        transformation in (
+            "none",
+            "odd",
+            "reciprocal",
+            "sqrt",
+            "rsqrt",
+            "cbrt",
+            "log",
+            "atan",
+            "exp",
+            "sinh",
+            "cosh",
+            "erfc",
+            "sin",
+            "cos",
+            "asin",
+            "acos",
+        ) :
         version == 14 ? transformation in ("asin", "acos") :
         version == 13 ? transformation in ("sin", "cos") :
         version == 12 ? transformation == "erfc" :
@@ -156,6 +176,9 @@ function _read_search_config(data)
         ("max_attempts", "job_timeout_seconds", "total_timeout_seconds"),
         "search limits",
     )
+    evaluation = get(settings, "evaluation", version == 15 ? "auto" : "separate")
+    (evaluation != "auto" || version == 15) ||
+        throw(ArgumentError("automatic arithmetic requires search configuration v15"))
     try
         return PolynomialSearchConfig(
             degrees = data["degrees"],
@@ -163,7 +186,7 @@ function _read_search_config(data)
             precisions = precisions,
             transformation = Symbol(transformation),
             segments = get(data, "segments", (1,)),
-            evaluation = Symbol(get(settings, "evaluation", "separate")),
+            evaluation = Symbol(evaluation),
             generation_precision = get(settings, "generation_precision", 256),
             proof_precision = get(settings, "proof_precision", 256),
             accuracy = _parse_rational(get(settings, "norm_accuracy", "1/1024")),

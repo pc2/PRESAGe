@@ -83,6 +83,19 @@ function _kernel_validate(p, backend, toolchain)
         backend != :ac_fixed &&
         throw(ArgumentError("oneapi kernels require ac_fixed"))
     foreach(f -> _kernel_type(f, backend), p.types)
+    target = TargetProfile(toolchain; backend)
+    for (i, n) in enumerate(p.nodes)
+        f = IR.format(p, i)
+        if n isa IR.FloatReciprocal ||
+           n isa Union{IR.Add, IR.Mul, IR.FMA} && f isa FloatFormat
+            operation =
+                n isa IR.FMA ? :fma :
+                n isa IR.Add ? :add : n isa IR.Mul ? :mul : :reciprocal
+            rounding = n isa IR.FloatReciprocal ? :nearest_even : n.rounding
+            reason = _target_float_reason(target, f, operation, rounding)
+            reason === nothing || throw(ArgumentError("node $i: $reason"))
+        end
+    end
     for n in p.nodes
         if n isa Union{IR.Convert, IR.Quantize, IR.ScalePow2} &&
            n.format isa FixedFormat &&
@@ -262,6 +275,21 @@ function _kernel_table(
     word_type = type(IR.UIntFormat(width))
     type = type(t.format)
     load = source -> "copy_bits<$type, $width>($source)"
+    if toolchain == :oneapi
+        load =
+            source -> begin
+                word =
+                    width <= 64 ? "$word_type($source)" :
+                    join(
+                        [
+                            "($word_type($source[$chunk]) << $(64chunk))" for
+                            chunk = 0:(cld(width, 64) - 1)
+                        ],
+                        " | ",
+                    )
+                "copy_bits<$type, $width>($word)"
+            end
+    end
     println(io, "inline constexpr unsigned table$(number)_banks = $(t.banks);")
     println(io, "inline constexpr bool table$(number)_unroll = $(t.unroll);")
     println(
@@ -276,15 +304,28 @@ function _kernel_table(
         println(io, "#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)")
         println(
             io,
-            "    [[intel::numbanks($(t.banks)), intel::max_replicates(1), intel::fpga_memory$(storage == :auto ? "" : storage == :block ? "(\"M20K\")" : "(\"MLAB\")")]]",
+            "    [[intel::numbanks($(t.banks)), intel::max_replicates(1), intel::fpga_memory$(storage == :auto ? "" : storage == :block ? "(\"BLOCK_RAM\")" : "(\"MLAB\")")]]",
         )
         println(io, "#endif")
     end
-    println(io, "    static const $word_type table[$(t.banks)][$rows] = {")
+    if toolchain == :oneapi
+        storage_type =
+            width <= 8 ? "unsigned char" :
+            width <= 16 ? "unsigned short" :
+            width <= 32 ? "unsigned int" : "unsigned long long"
+        chunks = width <= 64 ? "" : "[$(cld(width, 64))]"
+        println(
+            io,
+            "    static constexpr $storage_type table[$(t.banks)][$rows]$chunks = {",
+        )
+    else
+        println(io, "    static const $word_type table[$(t.banks)][$rows] = {")
+    end
     for bank = 1:(t.banks)
         values = map(bank:(t.banks):(rows * t.banks)) do index
             bits = index <= length(t.values) ? t.values[index] : 0
             literal = _kernel_chunks(bits, width)
+            toolchain == :oneapi && return width <= 64 ? literal : "{$literal}"
             return width <= 64 ? "$word_type($literal)" :
                    "from_chunks<$word_type, $width>({$literal})"
         end
@@ -325,22 +366,26 @@ end
 
 function _kernel_support(io, body; name, backend, toolchain)
     files = ["cpp_policies.hpp", "cpp_kernel.hpp", "cpp_kernel_float.hpp"]
-    backend == :ac_fixed && push!(files, "cpp_kernel_ac_float.hpp")
+    backend == :ac_fixed && push!(
+        files,
+        toolchain == :oneapi ? "cpp_kernel_intel_float.hpp" : "cpp_kernel_ac_float.hpp",
+    )
     prelude =
         "// presage:helper UInt\n" *
         "template <int Width> using UInt = $(backend == :ap_fixed ? "ap_uint<Width>" : "ac_int<Width, false>");\n"
     return _cpp_emit_header(io, body, files; name, target = :kernel, toolchain, prelude)
 end
 
-function _kernel_emit_constant(io, p, i, types)
+function _kernel_emit_constant(io, p, i, types; local_scope = false)
     n, f = p.nodes[i], IR.format(p, i)
     name, type = _cpp_value_name(p, i), _cpp_alias!(types, f)
+    prefix = local_scope ? "    " : "inline "
     if f == Bool
-        println(io, "inline constexpr bool $name = $(n.bits != 0);")
+        println(io, "$(prefix)constexpr bool $name = $(n.bits != 0);")
     else
         width = _kernel_width(f)
-        println(io, "inline const $type $name = from_chunks<$type, $width>(")
-        println(io, "    {$(_kernel_chunks(n.bits, width))});")
+        println(io, "$(prefix)const $type $name = from_chunks<$type, $width>(")
+        println(io, "$(local_scope ? "    " : "")    {$(_kernel_chunks(n.bits, width))});")
     end
 end
 
@@ -372,6 +417,12 @@ function emit_kernel(
     flow, scopes = _cpp_flow(p)
     reachable = _cpp_reachable(flow)
     tables = _cpp_used_tables(p, reachable)
+    if toolchain == :oneapi && resource_model !== nothing
+        any(
+            i -> _resource_table_storage(p.tables[i], resource_model) == :distributed,
+            tables,
+        ) && throw(ArgumentError("Intel constant ROM emission requires block storage"))
+    end
     types = _CppTypes(backend)
     type = f -> _cpp_alias!(types, f)
     vendor_type = (args...) -> _cpp_vendor_alias!(types, args...)
@@ -430,8 +481,10 @@ struct BitsResult {
             resource_model === nothing ? :auto : _resource_table_storage(t, resource_model)
         _kernel_table(body_io, i, t, backend, toolchain; type, storage)
     end
-    for i in sort!(collect(flow.constants))
-        _kernel_emit_constant(body_io, p, i, types)
+    if toolchain != :oneapi
+        for i in sort!(collect(flow.constants))
+            _kernel_emit_constant(body_io, p, i, types)
+        end
     end
     if trace
         println(body_io, "\nstruct Trace {")
@@ -448,6 +501,11 @@ struct BitsResult {
         "\ninline Result evaluate([[maybe_unused]] const Input& input$(trace ? ", Trace* trace = nullptr" : "")) {",
     )
     println(body_io, "    [[maybe_unused]] Status status = Status::ok;")
+    if toolchain == :oneapi
+        for i in sort!(collect(flow.constants))
+            _kernel_emit_constant(body_io, p, i, types; local_scope = true)
+        end
+    end
     for i in sort!(collect(flow.cached))
         println(body_io, "    bool computed_$(_cpp_value_name(p, i)) = false;")
     end

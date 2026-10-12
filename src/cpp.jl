@@ -156,6 +156,7 @@ function _cpp_expr(
     elseif n isa IR.Guard
         return ""
     elseif n isa IR.BitCast
+        f isa FixedFormat && return _cpp_decode_bits(call(n.source), f, backend; type)
         IR.format(p, n.source) isa FixedFormat &&
             return _cpp_fixed_bitcast(p, n, backend, type(f); call)
         if f isa FloatFormat

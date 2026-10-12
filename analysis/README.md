@@ -1,5 +1,9 @@
 # Analysis
 
+This directory retains the historical experiments and workflows for the old generator.
+New generator calibration uses the [integrated resource workflow](../docs/resources.md#integrated-synthesis-and-comparison).
+Keep historical results here and add new target validation to the core workflow.
+
 Accuracy and resource analysis of the math libraries shipped with AMD Vitis HLS and Intel oneAPI for FPGA, plus evaluation of the generated approximations.
 
 ## Structure

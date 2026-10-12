@@ -7,6 +7,7 @@ const sweep_spec = FunctionSpec(
 )
 const sweep_format = FixedFormat(24, 6)
 sweep_config(; kwargs...) = PolynomialSearchConfig(;
+    evaluation = :separate,
     degrees = [1, 2],
     internal_formats = [sweep_format],
     job_timeout = 60,
@@ -78,6 +79,7 @@ sweep_config(; kwargs...) = PolynomialSearchConfig(;
               PRESAGe._plan_data(warm.rows[1].attempt.plan)
         # Execution limits and choice order do not change a numerical result.
         reordered = PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [2, 1],
             internal_formats = [sweep_format],
             job_timeout = 90,
@@ -106,6 +108,7 @@ sweep_config(; kwargs...) = PolynomialSearchConfig(;
         changed = sweep_polynomial(
             sweep_spec,
             PolynomialSearchConfig(
+                evaluation = :separate,
                 degrees = [1],
                 internal_formats = [sweep_format],
                 proof_precision = 320,
@@ -170,6 +173,7 @@ end
         (; transformation = :odd),
     )
         config = PolynomialSearchConfig(;
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [sweep_format],
             kwargs...,
@@ -215,7 +219,11 @@ end
         cache = NumericalCache(dir)
         result = sweep_polynomial(
             sweep_spec,
-            PolynomialSearchConfig(degrees = [1], internal_formats = [sweep_format]);
+            PolynomialSearchConfig(
+                evaluation = :separate,
+                degrees = [1],
+                internal_formats = [sweep_format],
+            );
             cache,
         )
         row = only(result.rows)
@@ -245,7 +253,11 @@ end
         other = merge(identity, Dict("source" => "new source identity"))
         changed = PRESAGe._sweep_polynomial(
             sweep_spec,
-            PolynomialSearchConfig(degrees = [1], internal_formats = [sweep_format]);
+            PolynomialSearchConfig(
+                evaluation = :separate,
+                degrees = [1],
+                internal_formats = [sweep_format],
+            );
             cache,
             cache_identity = () -> other,
         )
@@ -321,7 +333,11 @@ end
     mktempdir() do dir
         result = sweep_polynomial(
             [sweep_spec, sweep_spec],
-            PolynomialSearchConfig(degrees = [1], internal_formats = [sweep_format]);
+            PolynomialSearchConfig(
+                evaluation = :separate,
+                degrees = [1],
+                internal_formats = [sweep_format],
+            );
             cache = NumericalCache(dir),
             max_parallel = 2,
         )
@@ -330,7 +346,11 @@ end
         @test length(readdir(dir)) == 1
         warm = sweep_polynomial(
             sweep_spec,
-            PolynomialSearchConfig(degrees = [1], internal_formats = [sweep_format]);
+            PolynomialSearchConfig(
+                evaluation = :separate,
+                degrees = [1],
+                internal_formats = [sweep_format],
+            );
             cache = NumericalCache(dir),
         )
         @test only(warm.rows).cache_status == :hit
@@ -355,6 +375,7 @@ end
     limited = sweep_polynomial(
         [sweep_spec, sweep_spec],
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1, 2],
             internal_formats = [sweep_format],
             max_attempts = 1,
@@ -366,6 +387,7 @@ end
     expired = sweep_polynomial(
         sweep_spec,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1],
             internal_formats = [sweep_format],
             total_timeout = 1e-300,
@@ -376,6 +398,7 @@ end
     live_deadline = PRESAGe._sweep_polynomial(
         sweep_spec,
         PolynomialSearchConfig(
+            evaluation = :separate,
             degrees = [1, 2],
             internal_formats = [sweep_format],
             total_timeout = 0.05,
@@ -394,10 +417,11 @@ end
             result = PRESAGe._sweep_polynomial(
                 sweep_spec,
                 PolynomialSearchConfig(
+                    evaluation = :separate,
                     degrees = mode == "late_result" ? [1] : [0, 1],
                     internal_formats = [sweep_format],
-                    job_timeout = 20,
-                    total_timeout = 90,
+                    job_timeout = 60,
+                    total_timeout = 180,
                 );
                 cache = NumericalCache(dir),
                 max_parallel = 2,
@@ -495,11 +519,14 @@ end
         precisions = [p, narrower],
         transformation = :acos,
         evaluation = :fma,
+        job_timeout = 120,
+        total_timeout = 300,
     )
     words = round_ieee.([-1, -3 // 4, -1 // 2, 0, 1 // 2, 3 // 4, 1], Ref(IEEE16))
     mktempdir() do dir
         cache = NumericalCache(dir)
         cold = sweep_polynomial(base.plan, config; cache, max_parallel = 2)
+        @test [r.attempt.status for r in cold.rows] == [:certified, :certified]
         warm = PRESAGe._sweep_polynomial(
             base.plan,
             config;

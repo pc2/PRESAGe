@@ -296,7 +296,8 @@ function _cpp_render_block(io, flow, block, scopes, expressions, types, indent, 
         if scopes[i] == block &&
            (length(flow.writes[i]) > 1 || first(flow.writes[i]) != block)
             type, value = _cpp_alias!(types, IR.format(p, i)), _cpp_value_name(p, i)
-            println(io, indent, "$type $value{};")
+            initialization = types.target == :kernel ? "(0)" : "{}"
+            println(io, indent, "$type $value$initialization;")
         end
     end
     for statement in flow.blocks[block].statements

@@ -3,14 +3,14 @@ using PRESAGe
 
 function sweep_main(args)
     length(args) >= 3 || error(
-        "Usage: scripts/sweep.jl CONTRACT_OR_PLAN.toml SEARCH.toml OUTPUT_DIR [--implementation=auto|lut|polynomial] [--lut-max-entries=65536] [--cache=DIR] [--max-parallel=N] [--checker=EXEC] [--memory-depth=N] [--memory-word-bits=N] [--max-table-blocks=N] [--resource-model=MODEL.toml] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams]",
+        "Usage: scripts/sweep.jl CONTRACT_OR_PLAN.toml SEARCH.toml OUTPUT_DIR [--implementation=auto|lut|polynomial] [--lut-max-entries=65536] [--cache=DIR] [--max-parallel=N] [--checker=EXEC] [--memory-depth=N] [--memory-word-bits=N] [--max-table-blocks=N] [--resource-model=MODEL.toml] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--max-mlabs=N] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams|mlabs]",
     )
     input, settings, destination = args[1:3]
     cache, parallel, checker = nothing, 1, nothing
     depth, word_bits, budget, objective = nothing, nothing, nothing, :memory
     resource_model = nothing
     implementation, lut_max_entries = nothing, 65536
-    limits = Dict{Symbol, BigInt}()
+    limits = Dict{Symbol, Union{BigInt, Rational{BigInt}}}()
     seen = Set{String}()
     for argument in args[4:end]
         parts = split(argument, '='; limit = 2)
@@ -28,6 +28,7 @@ function sweep_main(args)
                 "--max-ffs",
                 "--max-dsps",
                 "--max-rams",
+                "--max-mlabs",
                 "--implementation",
                 "--lut-max-entries",
             ) &&
@@ -56,7 +57,8 @@ function sweep_main(args)
         elseif parts[1] == "--lut-max-entries"
             lut_max_entries = PRESAGe._lut_entry_limit(parse(BigInt, parts[2]))
         elseif startswith(parts[1], "--max-")
-            limits[Symbol(parts[1][7:end])] = parse(BigInt, parts[2])
+            name = Symbol(parts[1][7:end])
+            limits[name] = PRESAGe._resource_count(PRESAGe._resource_exact(parts[2]), name)
         else
             objective = Symbol(parts[2])
         end

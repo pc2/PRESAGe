@@ -73,6 +73,11 @@ template <class T> inline T float_reciprocal(const T &value) {
     // Construct 1 from its encoded exponent; no native floating conversions.
     T one(0);
     UInt<T::exponent_bits> field = T::bias;
+#if defined(__INTEL_LLVM_COMPILER) && defined(__SYCL_DEVICE_ONLY__)
+#pragma unroll
+#elif defined(__SYNTHESIS__)
+#pragma HLS unroll
+#endif
     for (int bit = 0; bit < T::exponent_bits; ++bit)
         one.bits[T::fraction_bits + bit] = bool(field[bit]);
     return arithmetic_result<T>(

@@ -6,6 +6,18 @@ stored plan. Contracts share a `PolynomialSearchConfig`; visit contracts, then
 segments, degrees and formats in the supplied order. Invalid requests are
 validated before launching workers or reading cache entries.
 
+`PolynomialSearchConfig` defaults to `evaluation=:auto`.
+For each degree and precision choice, automatic arithmetic considers separate multiplication and addition, then fused multiply add.
+Target profiles exclude unsupported arithmetic before launching workers.
+Every retained candidate has its own concrete graph and numerical certificate.
+Resource sweeps compare both forms using the selected cost objective.
+Bounded search returns the first passing candidate in this order.
+Explicit `:separate` and `:fma` settings restrict the search to one form.
+Constant kernels are evaluated once unless their reconstruction depends on the arithmetic choice.
+Stored plan sweeps preserve the saved arithmetic when configured with `:auto`.
+Each arithmetic candidate counts toward the attempt limit and has a distinct numerical cache identity.
+Attempt records preserve the chosen arithmetic even when generation fails before producing a plan.
+
 ```julia
 using PRESAGe
 spec = FunctionSpec("exp(x)"; input_format=IEEE16, output_format=IEEE32,
