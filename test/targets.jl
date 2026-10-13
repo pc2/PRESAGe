@@ -16,14 +16,40 @@
         @test_throws ArgumentError emit_kernel(io, p; toolchain = :oneapi)
         @test isempty(take!(io))
     end
-    fused = IR.Program([IR.Input(FloatFormat(8, 17)), IR.FMA(1, 1, 1, FloatFormat(8, 17))])
-    @test !target_support(fused, target).supported
-    @test target_support(fused, TargetProfile(:generic)).supported
-    dead = IR.Program(
-        [IR.Input(FloatFormat(8, 17)), IR.FMA(1, 1, 1, FloatFormat(8, 17))];
-        output = 1,
-    )
+end
+
+@testset "FMA supports custom widths on both vendor targets" begin
+    for target in (TargetProfile(:oneapi), TargetProfile(:vitis)),
+        format in
+        (FloatFormat(2, 1), FloatFormat(8, 17), FloatFormat(7, 24), IEEE32, IEEE64, IEEE128)
+
+        fused = IR.Program([IR.Input(format), IR.FMA(1, 1, 1, format)])
+        @test target_support(fused, target).supported
+        text = sprint(
+            io -> emit_kernel(
+                io,
+                fused;
+                backend = target.backend,
+                toolchain = target.toolchain,
+            ),
+        )
+        @test occursin("integer_float_fma", text)
+    end
+end
+
+@testset "Unsupported FMA is rejected before writing including unreachable nodes" begin
+    target = TargetProfile(:oneapi)
+    format = FloatFormat(8, 17)
+    fused = IR.Program([IR.Input(format), IR.FMA(1, 1, 1, format; rounding = :down)])
+    dead = IR.Program(fused.nodes; output = 1)
     @test !target_support(dead, target).supported
+    for format in (FloatFormat(31, 23), FloatFormat(8, 2042)),
+        target in (TargetProfile(:oneapi), TargetProfile(:vitis))
+
+        program = IR.Program([IR.Input(format), IR.FMA(1, 1, 1, format)])
+        @test !target_support(program, target).supported
+        @test PRESAGe._target_float_reason(target, format, :fma) !== nothing
+    end
     mktempdir() do directory
         path = joinpath(directory, "evaluator.hpp")
         write(path, "preserved")
@@ -55,8 +81,8 @@ end
         read_resource_model(joinpath(@__DIR__, "..", "config", "resources", "oneapi.toml"))
     fused = IR.Program([IR.Input(FloatFormat(8, 17)), IR.FMA(1, 1, 1, FloatFormat(8, 17))])
     estimate = estimate_resources(fused; model)
-    @test estimate.status == :unsupported
-    @test !estimate.support.supported
+    @test estimate.status == :partial
+    @test estimate.support.supported
     @test all(isnothing, estimate.totals)
     multiply = IR.Program([IR.Input(IEEE32), IR.Mul(1, 1, IEEE32)])
     estimate = estimate_resources(multiply; model)

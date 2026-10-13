@@ -30,12 +30,15 @@ const _INTEL_FLOAT_FORMATS = (
 )
 
 function _target_float_reason(target, format, operation, rounding = :nearest_even)
-    target.backend == :ac_fixed || return "floating arithmetic requires ac_fixed"
     rounding == :nearest_even || return "floating arithmetic requires nearest_even"
-    if target.toolchain == :oneapi
-        operation == :fma &&
-            format ∉ (IEEE32, IEEE64) &&
-            return "Intel fused multiply add requires binary32 or binary64"
+    format.exponent_bits <= 30 ||
+        return "floating arithmetic exponent fields must fit 30 bits"
+    2BigInt(format.fraction_bits + 1) + 12 <= _VENDOR_WIDTH_LIMIT ||
+        return "floating arithmetic work widths exceed the 4096-bit limit"
+    target.backend == :ap_fixed &&
+        operation == :reciprocal &&
+        return "floating reciprocal requires ac_fixed"
+    if target.toolchain == :oneapi && operation != :fma
         (format.exponent_bits, format.fraction_bits) in _INTEL_FLOAT_FORMATS ||
             return "Intel ap_float does not support exponent_bits=$(format.exponent_bits), fraction_bits=$(format.fraction_bits)"
     end

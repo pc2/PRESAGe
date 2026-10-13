@@ -4,6 +4,7 @@
 Floating values use an explicit IEEE encoding backed by vendor integers.
 Generic AC floating arithmetic uses public `ac_std_float` operations.
 Intel floating arithmetic uses the toolchain `ap_float` operations and native `sycl::fma` for binary32 and binary64.
+Other Intel FMA formats and Vitis floating arithmetic use vendor integer operations with one final rounding.
 `evaluator.hpp` contains type aliases, exact constants, tables and one evaluator with local stages and ordinary branches.
 The header includes only required arithmetic helpers and their dependencies.
 The host adapter remains separate.
@@ -301,8 +302,8 @@ reciprocal, sqrt/rsqrt, cbrt and log transformations are also supported.
 Generic AC supports floating `Add`, `Mul`, `FMA` and reciprocal with nearest even rounding and subnormals.
 Intel floating arithmetic follows its [supported format and operation list](resources.md#configurable-resource-estimates).
 Arithmetic canonicalizes NaNs, loads and bit operations retain payloads.
-Directed floating arithmetic and AP floating arithmetic are rejected explicitly.
-AP still supports encoded floating conversions, branches, normalization and fixed core reconstruction.
+Vitis supports floating `Add`, `Mul` and `FMA` with nearest even rounding and subnormals.
+Directed floating arithmetic and Vitis floating reciprocal are rejected explicitly.
 
 Formats are parameterized by `FloatFormat(E,M)`; binary16/32/64/128/256 and
 custom encodings have local checks. Floating widths and vendor work words must
@@ -312,7 +313,7 @@ fit the C `int` index range; bank counts cannot exceed its entry count or 4096.
 OneAPI bank counts must be powers of two. Unsupported emission leaves an
 existing destination header or generated bundle intact.
 
-Generic AC floating arithmetic additionally requires at most 30 exponent bits and `2*(fraction_bits+1)+12 <= 4096` for its work words.
+Floating arithmetic requires at most 30 exponent bits and `2*(fraction_bits+1)+12 <= 4096` for its work words.
 Encoded operations retain their wider exponent support.
 Public AC conformance does not establish support in the Intel toolchain.
 

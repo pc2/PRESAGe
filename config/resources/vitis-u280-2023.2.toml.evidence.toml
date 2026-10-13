@@ -1,4 +1,4 @@
-profile_sha256 = "5746711d136a978fdc7c6d5818bd8f07ca4c50fcc3dbc5accd5115e4c123aa2a"
+profile_sha256 = "829c0dbeee6aff1c22acb76b5ca43991329d2a044dbeb1be8b14103efd69510e"
 schema = "presage-resource-calibration"
 schema_version = 1
 validation = "primitive_only"
@@ -300,8 +300,144 @@ tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.
     "fixed-64-fma/resource-model.toml" = "7aa66deecb129874c7b03b07ddc8dbc9da6f28cc874b46e62e4abe2d81fd92b7"
     "fixed-64-fma/resources.toml" = "e2d1e6ca2a8bca480a84a1142d56f8e13a1f3ae8cd72cc45ce6d217c10ac305d"
     "fixed-64-fma/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "float-5-10-fma"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 9.243767023086548
+    mode = "hls_csim"
+    project_sha256 = "8a8c16af71d1a90412cdcd4e07e3e278cff2e9c13dab1ddf5c50f2da12701367"
+    record_sha256 = "43c7d52d828149e6213944a1dcdbbd57b8978c0a957e47d7ae32d72082536bb9"
+    success = true
+    tested_inputs = 985
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "5c21fdcba70670a71697063c549a6653f7fa4d299c70fb810da05f886efe4d5f"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "float-5-10-fma/synthesis-run.toml" = "c857b56acb4627186acc8cc69ef781962a98709b8271d699ce3faa8aa096dcd9"
+    "float-5-10-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "81c4ea64a39574c8d22d31520e874be1dc6ccef5ddf7ef340498a5be19635a1e"
+    "float-5-10-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "39ac6d252b3be04e5aec00ede20babf793551588a4e19bf65c9a95572ab10f76"
+
+    [probes.sources]
+    "float-5-10-fma/evaluator.hpp" = "aaad157fa88f3af266a8fda2d4e81e1760c324b69f039c9d11b2fb108b9442cf"
+    "float-5-10-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-5-10-fma/plan.toml" = "bc2776ff12bbf16d11fe07982b783254b6d1ed65f11edac68a9be1b82c960377"
+    "float-5-10-fma/resource-model.toml" = "58138f6882b54dd0419ac40379b5ec3d45ab56c27e0927ed0d5d1467c45b5fec"
+    "float-5-10-fma/resources.toml" = "0d5d0c8d6e0c68e14113775f85a3ed7fd14719f24e55fe50c2d3e9f2e6667933"
+    "float-5-10-fma/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "float-8-17-fma"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 9.438173055648804
+    mode = "hls_csim"
+    project_sha256 = "8a8c16af71d1a90412cdcd4e07e3e278cff2e9c13dab1ddf5c50f2da12701367"
+    record_sha256 = "b617b9e8f3bfc8b4238653614dde5e7d63aceb4b2dfe190f4b6aed971900c0aa"
+    success = true
+    tested_inputs = 985
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "799887c7a3903406b5b01db7727722de579012a1f777e96220c86d688ddc5c3e"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "float-8-17-fma/synthesis-run.toml" = "73aedac2b599e4208631363e58fb1ec4b8a78ba6118e92d4ba94d8b3ec4682f5"
+    "float-8-17-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "2ec0984cbe3b50e066d59e87f8c2c0ca74a1dc4465015509d1e9622974c0ea6c"
+    "float-8-17-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "ce77af8dec306666818a5c570e74973f1917a87a0653c1a615deb6330ef8193b"
+
+    [probes.sources]
+    "float-8-17-fma/evaluator.hpp" = "156b57ad7e02a88200f26ef5410b8cda16f00257975e13721b938ba11741267d"
+    "float-8-17-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-8-17-fma/plan.toml" = "23b9b94f826eb02d01caa90f6abf56594f9c2e6dc10cb5ddb5f2b296c15714a6"
+    "float-8-17-fma/resource-model.toml" = "58138f6882b54dd0419ac40379b5ec3d45ab56c27e0927ed0d5d1467c45b5fec"
+    "float-8-17-fma/resources.toml" = "66266c9c30072caed0c892909f237bb7fb3013cf8f9e090733f40ffb7d143832"
+    "float-8-17-fma/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "float-8-23-fma"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 8.951004981994629
+    mode = "hls_csim"
+    project_sha256 = "8a8c16af71d1a90412cdcd4e07e3e278cff2e9c13dab1ddf5c50f2da12701367"
+    record_sha256 = "e8df63deeb044d7634a5de1a9afb013bdc0267f6b49a7f56efc207df71e0fd52"
+    success = true
+    tested_inputs = 985
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "96516bd58001ddaffbcf158422b398b0477e9ebc507e267c7067c57fd29e0251"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "float-8-23-fma/synthesis-run.toml" = "f0951f2da7df73af00307d992477c1f268c69e2fbeb7b15d607b5945a5aa2891"
+    "float-8-23-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "9e003c031ca0d44a12cc236f6c5713b8d28708f7becb53bd4df5f086d9dff1e7"
+    "float-8-23-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "06db9fe124aa93c17e4b669523258eaa7ecf3ed88601f05797e9a91758ef767b"
+
+    [probes.sources]
+    "float-8-23-fma/evaluator.hpp" = "ab19dda13d1142a75fc75ac1c805dae916a6f319ba8a359367e9f0f3101d06ce"
+    "float-8-23-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-8-23-fma/plan.toml" = "2e22ab1b829306436b8ab57807d6f0c0d3cab5b53e034c273280c1e877b65dff"
+    "float-8-23-fma/resource-model.toml" = "58138f6882b54dd0419ac40379b5ec3d45ab56c27e0927ed0d5d1467c45b5fec"
+    "float-8-23-fma/resources.toml" = "fbe482ac65a89aa8ef90b3396d122486998e8d9032e6ea2f3e3d5de90b9dc9fc"
+    "float-8-23-fma/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
+[[probes]]
+device = "xcu280-fsvh2892-2L-e"
+example = "float-11-52-fma"
+pipeline = []
+resource_units = ["LUT", "FF", "DSP_equivalent", "BRAM18K", "MLAB"]
+scope = "evaluator"
+tool_version = """Vitis HLS - High-Level Synthesis from C, C++ and OpenCL v2023.2 (64-bit)\nSW Build 4023990 on Oct 11 2023\nIP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023\nTool Version Limit: 2023.10\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.\nSharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023\n\n"""
+
+    [probes.emulation]
+    commands = [["vitis_hls", "-f", "emulation.tcl"]]
+    elapsed_seconds = 9.650580883026123
+    mode = "hls_csim"
+    project_sha256 = "8a8c16af71d1a90412cdcd4e07e3e278cff2e9c13dab1ddf5c50f2da12701367"
+    record_sha256 = "fea3e73d827518ec77871aa289adbc922f5251901cc956ef2589fd87c5566273"
+    success = true
+    tested_inputs = 985
+
+        [probes.emulation.sources]
+        "emulation-vectors.hpp" = "f63bbad2e3af4c5fe5738472da181cfcabc732b35336ebea4d42f8334f04840b"
+        "emulation.cpp" = "907b7656a39b82fa996ba1ffafe83263f7738892b37a22cfbfb73871169165a2"
+
+    [probes.reports]
+    "float-11-52-fma/synthesis-run.toml" = "5bb9bfac1a1d2abf6d39a8dbf7bb6beb018e91e5a74347a11b2430a483938b08"
+    "float-11-52-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.rpt" = "5482af05e0b42e6d0b74fd9c14beabc7d27dcd27dce6c996355c43f0899c3469"
+    "float-11-52-fma/synthesis/solution/syn/report/presage_resource_kernel_csynth.xml" = "57f2eac8c9593d0e0ace020eef4f86d38f177bd3da81771372d960940aad449e"
+
+    [probes.sources]
+    "float-11-52-fma/evaluator.hpp" = "08e31530cbdb594df41990e968f4b3bf5b5a5089422f42edac3b49f4edd6106e"
+    "float-11-52-fma/kernel.cpp" = "566da273b47e1bbda4190baecddd8924465a9aa9173376971de0ed68913b7d33"
+    "float-11-52-fma/plan.toml" = "aff31543aaf803546bd7af819be2484f0caa07a01e49b0463576dcf129da75fa"
+    "float-11-52-fma/resource-model.toml" = "58138f6882b54dd0419ac40379b5ec3d45ab56c27e0927ed0d5d1467c45b5fec"
+    "float-11-52-fma/resources.toml" = "2c3f9b01182ef4ffaa0a4469989ace11c65b16fa3a275fa5da78f48a31f274a0"
+    "float-11-52-fma/synthesis.tcl" = "65e11c12364bfea1fae6505b31c53072c81b1afa76c7a51cf9506cfa510bf2a0"
 
 [[projects]]
 measurements_sha256 = "d73b2fc9aa6b47703a153e9448b06d972c676cabd423698c83836e23a96edfc1"
 path = "../../build/resource-fixes/probes-vitis/synthesis.toml"
 project_sha256 = "40f648192ff15d65f0463988c10e91f0693ef6a5344e21c1e715f6001b389b6e"
+[[projects]]
+measurements_sha256 = "2e1bcc29ded21d9c3ef21f3f4c13c830274f8ea78f4a2d6a7be3f2a75a6108fe"
+path = "../../build/generic-fma/vitis-probes/synthesis.toml"
+project_sha256 = "8a8c16af71d1a90412cdcd4e07e3e278cff2e9c13dab1ddf5c50f2da12701367"

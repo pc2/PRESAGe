@@ -114,9 +114,6 @@ function write_resource_examples(
     certify::Bool = true,
 )
     TargetProfile(model.toolchain; backend)
-    include_float &&
-        backend != :ac_fixed &&
-        throw(ArgumentError("floating examples require ac_fixed"))
     plans = collect(plans)
     names = first.(plans)
     length(unique(names)) == length(names) ||

@@ -1,5 +1,5 @@
 # Editable assumptions. Fixed/control costs and DSP dimensions are illustrative.
-# Floating constants below are copied from generator/ResourceEstimation.hpp.
+# Floating arithmetic requires matching measured rules.
 # One rule per reachable node; no scheduling, sharing or constant-folding model.
 schema = "presage-resource-model"
 schema_version = 1
@@ -149,76 +149,4 @@ format = "uint"
 luts = { result_bits = 1 }
 ffs = { result_bits = 1 }
 dsps = 0
-rams = 0
-
-# Historical floating arithmetic cost, nearest-even only.
-[[rules]]
-operation = "mul"
-format = "float"
-exponent_bits = 8
-fraction_bits = 23
-rounding = "nearest_even"
-luts = 78
-ffs = 143
-dsps = 3
-rams = 0
-
-# Historical floating arithmetic cost, nearest-even only.
-[[rules]]
-operation = "add"
-format = "float"
-exponent_bits = 8
-fraction_bits = 23
-rounding = "nearest_even"
-luts = 198
-ffs = 318
-dsps = 2
-rams = 0
-
-# Historical floating arithmetic cost, nearest-even only.
-[[rules]]
-operation = "fma"
-format = "float"
-exponent_bits = 8
-fraction_bits = 23
-rounding = "nearest_even"
-luts = 276
-ffs = 461
-dsps = 5
-rams = 0
-
-# Historical floating arithmetic cost, nearest-even only.
-[[rules]]
-operation = "mul"
-format = "float"
-exponent_bits = 11
-fraction_bits = 52
-rounding = "nearest_even"
-luts = 127
-ffs = 388
-dsps = 8
-rams = 0
-
-# Historical floating arithmetic cost, nearest-even only.
-[[rules]]
-operation = "add"
-format = "float"
-exponent_bits = 11
-fraction_bits = 52
-rounding = "nearest_even"
-luts = 635
-ffs = 685
-dsps = 3
-rams = 0
-
-# Historical floating arithmetic cost, nearest-even only.
-[[rules]]
-operation = "fma"
-format = "float"
-exponent_bits = 11
-fraction_bits = 52
-rounding = "nearest_even"
-luts = 762
-ffs = 1073
-dsps = 11
 rams = 0

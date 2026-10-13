@@ -22,9 +22,6 @@ function resource_examples_main(args)
     flag = get(options, "--include-float", "false")
     flag in ("true", "false") || error("include-float must be true or false")
     include_float = flag == "true"
-    include_float &&
-        (backend != :ac_fixed || model.toolchain == :vitis) &&
-        error("floating kernel examples require AC with generic or oneAPI emission")
     data = write_resource_examples(destination; model, backend, include_float)
     println(
         "Generated $(length(data["examples"])) certified resource examples in $destination",

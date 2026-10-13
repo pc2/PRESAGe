@@ -24,16 +24,14 @@ function _kernel_has_float_arithmetic(p)
     end
 end
 
-function _kernel_float_arithmetic(n, f, backend)
-    backend == :ac_fixed ||
-        throw(ArgumentError("floating kernel arithmetic requires the ac_fixed backend"))
+function _kernel_float_arithmetic(n, f)
     (n isa IR.FloatReciprocal || n.rounding == :nearest_even) ||
-        throw(ArgumentError("AC floating kernel arithmetic requires nearest-even rounding"))
+        throw(ArgumentError("floating kernel arithmetic requires nearest-even rounding"))
     f.exponent_bits <= 30 ||
-        throw(ArgumentError("AC floating arithmetic exponent fields must fit 30 bits"))
-    # Reserve headroom for AC's product/FMA accumulator and rounding temporaries.
+        throw(ArgumentError("floating arithmetic exponent fields must fit 30 bits"))
+    # The accumulator and rounding temporaries must fit the vendor integer limit.
     2BigInt(f.fraction_bits + 1) + 12 <= _VENDOR_WIDTH_LIMIT ||
-        throw(ArgumentError("AC floating arithmetic work widths exceed the 4096-bit limit"))
+        throw(ArgumentError("floating arithmetic work widths exceed the 4096-bit limit"))
     return nothing
 end
 
@@ -161,7 +159,7 @@ function _kernel_expr(
         )
     elseif n isa Union{IR.Mul, IR.Add, IR.FMA}
         if f isa FloatFormat
-            _kernel_float_arithmetic(n, f, backend)
+            _kernel_float_arithmetic(n, f)
             operation =
                 n isa IR.Add ? "float_add" : n isa IR.Mul ? "float_mul" : "float_fma"
             return "$operation($(join(call.(IR.refs(n)),",")))"
@@ -183,7 +181,7 @@ function _kernel_expr(
     elseif n isa IR.FloatExponent
         return "float_exponent<$(type(f))>($(call(n.source)),status)"
     elseif n isa IR.FloatReciprocal
-        _kernel_float_arithmetic(n, f, backend)
+        _kernel_float_arithmetic(n, f)
         return "float_reciprocal($(call(n.source)))"
     elseif n isa IR.ScaleByInputExponent
         return _kernel_scale_expr(
@@ -365,9 +363,11 @@ function _kernel_table(
 end
 
 function _kernel_support(io, body; name, backend, toolchain)
-    files = ["cpp_policies.hpp", "cpp_kernel.hpp", "cpp_kernel_float.hpp"]
-    backend == :ac_fixed && push!(
+    files =
+        ["cpp_policies.hpp", "cpp_kernel.hpp", "cpp_kernel_float.hpp", "cpp_kernel_fma.hpp"]
+    push!(
         files,
+        backend == :ap_fixed ? "cpp_kernel_ap_float.hpp" :
         toolchain == :oneapi ? "cpp_kernel_intel_float.hpp" : "cpp_kernel_ac_float.hpp",
     )
     prelude =
@@ -393,8 +393,9 @@ end
 
 The header includes only the arithmetic helpers needed by its emitted operations.
 `trace=true` adds optional intermediate-value instrumentation for conformance tests.
-`toolchain=:generic` uses public headers; `:vitis` and `:oneapi` select vendor
-include paths and guarded memory hints. AC floating arithmetic is nearest-even.
+`toolchain=:generic` uses public headers.
+`:vitis` and `:oneapi` select vendor include paths and guarded memory hints.
+Floating arithmetic uses nearest even rounding.
 `resource_model` applies its per-table block/distributed-ROM storage policy.
 """
 function emit_kernel(

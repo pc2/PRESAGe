@@ -27,37 +27,17 @@ function resource_table_program(entries, width; banks = 1)
 end
 
 @testset "Exact resource rules and missing floating point calibration" begin
-    for (profile, format, operation, expected) in (
-        ("vitis", IEEE32, :mul, (78, 143, 3)),
-        ("vitis", IEEE32, :add, (198, 318, 2)),
-        ("vitis", IEEE32, :fma, (276, 461, 5)),
-        ("vitis", IEEE64, :mul, (127, 388, 8)),
-        ("vitis", IEEE64, :add, (635, 685, 3)),
-        ("vitis", IEEE64, :fma, (762, 1073, 11)),
-    )
-        model = resource_profile(profile)
-        estimate = estimate_resources(
-            resource_operation_program(format, operation);
-            model,
-            target = nothing,
+    for profile in ("oneapi", "vitis"),
+        program in (
+            resource_operation_program(IEEE32, :mul),
+            resource_operation_program(IEEE32, :fma),
+            resource_operation_program(IEEE64, :fma),
+            resource_operation_program(IEEE16, :fma),
+            resource_operation_program(IEEE32, :fma; rounding = :down),
         )
-        @test estimate.status == :complete
-        @test (estimate.totals.luts, estimate.totals.ffs, estimate.totals.dsps) == expected
-        @test estimate.totals.rams == 0
-        @test count(node -> node.signature.operation == operation, estimate.nodes) == 1
-    end
-    for program in (
-        resource_operation_program(IEEE32, :mul),
-        resource_operation_program(IEEE32, :fma),
-        resource_operation_program(IEEE64, :fma),
-        resource_operation_program(IEEE16, :fma),
-        resource_operation_program(IEEE32, :fma; rounding = :down),
-    )
-        estimate = estimate_resources(
-            program;
-            model = resource_profile("oneapi"),
-            target = nothing,
-        )
+
+        estimate =
+            estimate_resources(program; model = resource_profile(profile), target = nothing)
         @test estimate.status == :partial
         @test all(name -> estimate.totals[name] === nothing, (:luts, :ffs, :dsps, :rams))
         @test length(filter(node -> !isempty(node.missing), estimate.nodes)) == 1

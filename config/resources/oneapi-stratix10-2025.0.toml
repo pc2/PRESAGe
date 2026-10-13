@@ -878,6 +878,285 @@ rounding = "nearest_even"
 
     [rules.rams]
 [[rules]]
+exponent_bits = 5
+format = "float"
+fraction_bits = 10
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [16, 16, 16]
+operation = "fma"
+result_width = 16
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = "1/2"
+
+    [rules.ffs]
+    constant = 1291
+
+    [[rules.formats]]
+    format = "binary16"
+    [[rules.formats]]
+    format = "binary16"
+    [[rules.formats]]
+    format = "binary16"
+    [[rules.formats]]
+    format = "binary16"
+
+    [rules.luts]
+    constant = 11249
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 7
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [16, 16, 16]
+operation = "fma"
+result_width = 16
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = "1/2"
+
+    [rules.ffs]
+    constant = 1055
+
+    [[rules.formats]]
+    format = "float(8,7)"
+    [[rules.formats]]
+    format = "float(8,7)"
+    [[rules.formats]]
+    format = "float(8,7)"
+    [[rules.formats]]
+    format = "float(8,7)"
+
+    [rules.luts]
+    constant = 8772
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 10
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [19, 19, 19]
+operation = "fma"
+result_width = 19
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = "1/2"
+
+    [rules.ffs]
+    constant = 1405
+
+    [[rules.formats]]
+    format = "float(8,10)"
+    [[rules.formats]]
+    format = "float(8,10)"
+    [[rules.formats]]
+    format = "float(8,10)"
+    [[rules.formats]]
+    format = "float(8,10)"
+
+    [rules.luts]
+    constant = 11360
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 17
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [26, 26, 26]
+operation = "fma"
+result_width = 26
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = "1/2"
+
+    [rules.ffs]
+    constant = 1887
+
+    [[rules.formats]]
+    format = "float(8,17)"
+    [[rules.formats]]
+    format = "float(8,17)"
+    [[rules.formats]]
+    format = "float(8,17)"
+    [[rules.formats]]
+    format = "float(8,17)"
+
+    [rules.luts]
+    constant = 16538
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 26
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [35, 35, 35]
+operation = "fma"
+result_width = 35
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 1
+
+    [rules.ffs]
+    constant = 2489
+
+    [[rules.formats]]
+    format = "float(8,26)"
+    [[rules.formats]]
+    format = "float(8,26)"
+    [[rules.formats]]
+    format = "float(8,26)"
+    [[rules.formats]]
+    format = "float(8,26)"
+
+    [rules.luts]
+    constant = 23641
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 10
+format = "float"
+fraction_bits = 35
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [46, 46, 46]
+operation = "fma"
+result_width = 46
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 2
+
+    [rules.ffs]
+    constant = 4727
+
+    [[rules.formats]]
+    format = "float(10,35)"
+    [[rules.formats]]
+    format = "float(10,35)"
+    [[rules.formats]]
+    format = "float(10,35)"
+    [[rules.formats]]
+    format = "float(10,35)"
+
+    [rules.luts]
+    constant = 33342
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 11
+format = "float"
+fraction_bits = 44
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [56, 56, 56]
+operation = "fma"
+result_width = 56
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = "7/2"
+
+    [rules.ffs]
+    constant = 5990
+
+    [[rules.formats]]
+    format = "float(11,44)"
+    [[rules.formats]]
+    format = "float(11,44)"
+    [[rules.formats]]
+    format = "float(11,44)"
+    [[rules.formats]]
+    format = "float(11,44)"
+
+    [rules.luts]
+    constant = 40589
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 15
+format = "float"
+fraction_bits = 63
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [79, 79, 79]
+operation = "fma"
+result_width = 79
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 8
+
+    [rules.ffs]
+    constant = 11370
+
+    [[rules.formats]]
+    format = "float(15,63)"
+    [[rules.formats]]
+    format = "float(15,63)"
+    [[rules.formats]]
+    format = "float(15,63)"
+    [[rules.formats]]
+    format = "float(15,63)"
+
+    [rules.luts]
+    constant = 59706
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 22
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [31, 31, 31]
+operation = "fma"
+result_width = 31
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 1
+
+    [rules.ffs]
+    constant = 2317
+
+    [[rules.formats]]
+    format = "float(8,22)"
+    [[rules.formats]]
+    format = "float(8,22)"
+    [[rules.formats]]
+    format = "float(8,22)"
+    [[rules.formats]]
+    format = "float(8,22)"
+
+    [rules.luts]
+    constant = 20477
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
 format = "any"
 operation = "input"
 

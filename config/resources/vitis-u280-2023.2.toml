@@ -24,6 +24,130 @@ mlabs = 0
 rams = 0
 
 [[rules]]
+exponent_bits = 5
+format = "float"
+fraction_bits = 10
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [16, 16, 16]
+operation = "fma"
+result_width = 16
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 1
+
+    [rules.ffs]
+    constant = 1232
+
+    [[rules.formats]]
+    format = "binary16"
+    [[rules.formats]]
+    format = "binary16"
+    [[rules.formats]]
+    format = "binary16"
+    [[rules.formats]]
+    format = "binary16"
+
+    [rules.luts]
+    constant = 5626
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 17
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [26, 26, 26]
+operation = "fma"
+result_width = 26
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 1
+
+    [rules.ffs]
+    constant = 982
+
+    [[rules.formats]]
+    format = "float(8,17)"
+    [[rules.formats]]
+    format = "float(8,17)"
+    [[rules.formats]]
+    format = "float(8,17)"
+    [[rules.formats]]
+    format = "float(8,17)"
+
+    [rules.luts]
+    constant = 9412
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 8
+format = "float"
+fraction_bits = 23
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [32, 32, 32]
+operation = "fma"
+result_width = 32
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 2
+
+    [rules.ffs]
+    constant = 1771
+
+    [[rules.formats]]
+    format = "binary32"
+    [[rules.formats]]
+    format = "binary32"
+    [[rules.formats]]
+    format = "binary32"
+    [[rules.formats]]
+    format = "binary32"
+
+    [rules.luts]
+    constant = 12055
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
+exponent_bits = 11
+format = "float"
+fraction_bits = 52
+operand_constants = ["variable", "variable", "variable"]
+operand_widths = [64, 64, 64]
+operation = "fma"
+result_width = 64
+rounding = "nearest_even"
+
+    [rules.dsps]
+    constant = 9
+
+    [rules.ffs]
+    constant = 3855
+
+    [[rules.formats]]
+    format = "binary64"
+    [[rules.formats]]
+    format = "binary64"
+    [[rules.formats]]
+    format = "binary64"
+    [[rules.formats]]
+    format = "binary64"
+
+    [rules.luts]
+    constant = 26844
+
+    [rules.mlabs]
+
+    [rules.rams]
+[[rules]]
 format = "fixed"
 integer_bits = 4
 operand_constants = ["variable", "variable"]
@@ -708,120 +832,6 @@ operation = "add"
 
     [rules.luts]
     result_bits = 1
-
-    [rules.mlabs]
-
-    [rules.rams]
-[[rules]]
-exponent_bits = 8
-format = "float"
-fraction_bits = 23
-operation = "mul"
-rounding = "nearest_even"
-
-    [rules.dsps]
-    constant = 3
-
-    [rules.ffs]
-    constant = 143
-
-    [rules.luts]
-    constant = 78
-
-    [rules.mlabs]
-
-    [rules.rams]
-[[rules]]
-exponent_bits = 8
-format = "float"
-fraction_bits = 23
-operation = "add"
-rounding = "nearest_even"
-
-    [rules.dsps]
-    constant = 2
-
-    [rules.ffs]
-    constant = 318
-
-    [rules.luts]
-    constant = 198
-
-    [rules.mlabs]
-
-    [rules.rams]
-[[rules]]
-exponent_bits = 8
-format = "float"
-fraction_bits = 23
-operation = "fma"
-rounding = "nearest_even"
-
-    [rules.dsps]
-    constant = 5
-
-    [rules.ffs]
-    constant = 461
-
-    [rules.luts]
-    constant = 276
-
-    [rules.mlabs]
-
-    [rules.rams]
-[[rules]]
-exponent_bits = 11
-format = "float"
-fraction_bits = 52
-operation = "mul"
-rounding = "nearest_even"
-
-    [rules.dsps]
-    constant = 8
-
-    [rules.ffs]
-    constant = 388
-
-    [rules.luts]
-    constant = 127
-
-    [rules.mlabs]
-
-    [rules.rams]
-[[rules]]
-exponent_bits = 11
-format = "float"
-fraction_bits = 52
-operation = "add"
-rounding = "nearest_even"
-
-    [rules.dsps]
-    constant = 3
-
-    [rules.ffs]
-    constant = 685
-
-    [rules.luts]
-    constant = 635
-
-    [rules.mlabs]
-
-    [rules.rams]
-[[rules]]
-exponent_bits = 11
-format = "float"
-fraction_bits = 52
-operation = "fma"
-rounding = "nearest_even"
-
-    [rules.dsps]
-    constant = 11
-
-    [rules.ffs]
-    constant = 1073
-
-    [rules.luts]
-    constant = 762
 
     [rules.mlabs]
 

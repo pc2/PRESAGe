@@ -47,17 +47,20 @@ template <class T> inline T float_mul(const T &a, const T &b) {
 
 // presage:helper float_fma
 template <class T> inline T float_fma(const T &a, const T &b, const T &c) {
-    static_assert((T::exponent_bits == 8 && T::fraction_bits == 23) ||
-                  (T::exponent_bits == 11 && T::fraction_bits == 52));
-    if (a.is_nan() || b.is_nan() || c.is_nan())
-        return float_special<T>(false, true);
-    using F = ihc::ap_float<T::exponent_bits, T::fraction_bits>;
-    if constexpr (T::width == 32)
-        return arithmetic_result<T>(F(sycl::fma(static_cast<float>(arithmetic_float(a)),
-            static_cast<float>(arithmetic_float(b)), static_cast<float>(arithmetic_float(c)))));
-    else
-        return arithmetic_result<T>(F(sycl::fma(static_cast<double>(arithmetic_float(a)),
-            static_cast<double>(arithmetic_float(b)), static_cast<double>(arithmetic_float(c)))));
+    if constexpr ((T::exponent_bits == 8 && T::fraction_bits == 23) ||
+                  (T::exponent_bits == 11 && T::fraction_bits == 52)) {
+        if (a.is_nan() || b.is_nan() || c.is_nan())
+            return float_special<T>(false, true);
+        using F = ihc::ap_float<T::exponent_bits, T::fraction_bits>;
+        if constexpr (T::width == 32)
+            return arithmetic_result<T>(F(sycl::fma(static_cast<float>(arithmetic_float(a)),
+                static_cast<float>(arithmetic_float(b)), static_cast<float>(arithmetic_float(c)))));
+        else
+            return arithmetic_result<T>(F(sycl::fma(static_cast<double>(arithmetic_float(a)),
+                static_cast<double>(arithmetic_float(b)), static_cast<double>(arithmetic_float(c)))));
+    } else {
+        return integer_float_fma(a, b, c);
+    }
 }
 
 // presage:helper float_reciprocal

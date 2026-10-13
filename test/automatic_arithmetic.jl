@@ -80,18 +80,19 @@ end
     target = TargetProfile(:oneapi)
     format = FloatFormat(8, 17)
     config = PolynomialSearchConfig(degrees = [1], internal_formats = [format])
-    spec = FunctionSpec("x"; input_format = IEEE32, domain = (-1, 1))
-    _, requests, count, _ = PRESAGe._sweep_requests(spec, config; target)
-    @test count == 1
-    @test only(requests).request.config.evaluation == :separate
-    explicit = PRESAGe._evaluation_config(config, :fma)
-    result = PRESAGe._search_polynomial(
-        spec,
-        explicit;
-        target,
-        worker_command = _ -> error("Unsupported arithmetic must not launch a worker."),
+    spec = FunctionSpec(
+        "x";
+        input_format = IEEE32,
+        domain = (-1, 1),
+        absolute_error = 1 // 256,
     )
-    @test only(result.attempts).status == :target_unsupported
+    _, requests, count, _ = PRESAGe._sweep_requests(spec, config; target)
+    @test count == 2
+    @test [item.request.config.evaluation for item in requests] == [:separate, :fma]
+    explicit = PRESAGe._evaluation_config(config, :fma)
+    result = PRESAGe._search_polynomial(spec, explicit; target)
+    @test only(result.attempts).status == :certified
+    @test target_support(result.selected.plan, target).supported
 
     precision = PolynomialPrecision(
         IEEE32;
@@ -104,9 +105,9 @@ end
         precisions = [precision],
     )
     _, requests, count, _ = PRESAGe._sweep_requests(spec, mixed; target)
-    @test count == 1
-    @test only(requests).request.config.evaluation == :separate
-    @test only(requests).request.precision == precision
+    @test count == 2
+    @test [item.request.config.evaluation for item in requests] == [:separate, :fma]
+    @test all(item -> item.request.precision == precision, requests)
 
     odd_spec = FunctionSpec("sin(x)"; input_format = IEEE32, domain = (-1, 1))
     for transformation in (:odd, :atan)

@@ -103,6 +103,89 @@ end
     kernel_trace_check(kernel_arithmetic_fixtures(), :ac_fixed)
 end
 
+@testset "Portable floating arithmetic matches exact rounding" begin
+    fixtures = filter(kernel_arithmetic_fixtures()) do fixture
+        !(last(fixture.program.nodes) isa IR.FloatReciprocal)
+    end
+    kernel_trace_check(fixtures, :ap_fixed)
+end
+
+function kernel_fma_rounding_words(format)
+    width = PRESAGe._width(format)
+    words = BigInt[]
+    pack(a, b, c) = a | b << width | c << (2width)
+    encode(a, b, c) = pack(
+        BigInt(round_ieee(a, format)),
+        BigInt(round_ieee(b, format)),
+        BigInt(round_ieee(c, format)),
+    )
+    p = format.fraction_bits + 1
+    unit = 1 // (big(1) << (p - 1))
+    for sign in (-1, 1),
+        gap in (0, 1, 2, 3, p - 1, p, p + 1, 2p, 2p + 4),
+        offset in (-1, 0, 1)
+
+        factor = PRESAGe._pow2(-gap)
+        push!(words, encode(sign * (1 + unit), 1 - unit, factor * (1 + offset * unit)))
+        push!(words, encode(sign * (1 + unit), 1 - unit, -factor * (1 + offset * unit)))
+    end
+    maximum = PRESAGe._inf(format) - 1
+    push!(
+        words,
+        pack(maximum, BigInt(round_ieee(2, format)), maximum | PRESAGe._sign(format)),
+    )
+    mask = (big(1) << width) - 1
+    state = big(0x243f6a8885a308d3)
+    for _ = 1:4096
+        operands = BigInt[]
+        for _ = 1:3
+            state =
+                (state * 6364136223846793005 + 1442695040888963407) &
+                ((big(1) << (3width)) - 1)
+            push!(operands, (state >> width) & mask)
+        end
+        push!(words, pack(operands...))
+    end
+    return unique(words)
+end
+
+@testset "Portable FMA preserves cancellation and distant rounding bits" begin
+    fixtures = [
+        (;
+            program = kernel_arithmetic_program(format, :fma),
+            words = kernel_fma_rounding_words(format),
+        ) for format in
+        (FloatFormat(3, 4), IEEE16, FloatFormat(8, 17), IEEE32, IEEE64, IEEE128)
+    ]
+    kernel_trace_check(fixtures, :ap_fixed)
+end
+
+@testset "FMA polynomials preserve individual stage widths" begin
+    spec = FunctionSpec(
+        "1/3+2/7*x-3/11*x^2+4/13*x^3";
+        input_format = FixedFormat(10, 3),
+        output_format = IEEE32,
+        domain = (-1, 1),
+        absolute_error = 1 // 256,
+    )
+    precision = PolynomialPrecision(
+        IEEE32;
+        coefficient_formats = [FloatFormat(8, m) for m in (12, 18, 20, 22)],
+        stage_formats = [FloatFormat(8, m) for m in (17, 22, 26, 23)],
+    )
+    plan = polynomial_plan(
+        spec,
+        [1 // 3, 2 // 7, -3 // 11, 4 // 13];
+        internal_format = IEEE32,
+        evaluation = :fma,
+        precision,
+    )
+    @test certify_plan(plan).status == :certified
+    @test target_support(plan, TargetProfile(:oneapi)).supported
+    @test target_support(plan, TargetProfile(:vitis)).supported
+    kernel_trace_check([(; program = plan.program, words = BigInt.(0:1023))], :ap_fixed)
+end
+
 @testset "AC floating kernel capabilities" begin
     for operation in (IR.Add, IR.Mul, IR.FMA), rounding in (:toward_zero, :up, :down)
         args = operation == IR.FMA ? (1, 1, 1) : (1, 1)

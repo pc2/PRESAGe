@@ -484,7 +484,7 @@ end
 
 @testset "Kernel emission validates before writing" begin
     good = IR.Program([IR.Input(FixedFormat(8, 4))])
-    float = IR.Program([IR.Input(IEEE32), IR.Add(1, 1, IEEE32)])
+    float = IR.Program([IR.Input(IEEE32), IR.FloatReciprocal(1)])
     for options in (
         (; backend = :portable),
         (; backend = :ac_fixed, toolchain = :vitis),

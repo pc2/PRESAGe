@@ -34,14 +34,14 @@ write_resource_report("resources.toml", estimate)
 | Editable profile | Contents |
 | --- | --- |
 | [generic](../config/resources/generic.toml) | Illustrative fixed arithmetic, integer/control logic and memory assumptions. |
-| [vitis](../config/resources/vitis.toml) | Illustrative rules plus the existing generator's single/double floating multiplier, adder and combined FMA costs. |
+| [vitis](../config/resources/vitis.toml) | Illustrative fixed and control rules, floating arithmetic requires calibration. |
 | [oneAPI](../config/resources/oneapi.toml) | Illustrative fixed and control rules with native integer ROM storage. Floating arithmetic requires calibration. |
 
 The measured [U280 profile](../config/resources/vitis-u280-2023.2.toml) and [Stratix 10 profile](../config/resources/oneapi-stratix10-2025.0.toml) contain experimental primitive calibration rules.
 Their companion evidence files record the synthesis and emulation inputs.
 Whole evaluator accuracy remains incomplete, these profiles do not establish reliable resource limits for arbitrary compositions.
 
-The Stratix 10 profile includes 23 measured arithmetic probes with passing FPGA emulation.
+The Stratix 10 profile includes 32 distinct measured arithmetic patterns with passing FPGA emulation.
 Independent Horner validation uses coefficients equal to `1/3` with highest coefficient `2/7`, plus cubic evaluators with variable coefficients.
 Predicted and measured DSP equivalents agree for every floating case below.
 
@@ -71,12 +71,23 @@ julia --project=. scripts/check_resources.jl build/oneapi-validation/examples.to
 
 The complete comparison reports the unresolved pipeline costs and fixed arithmetic discrepancies.
 
-Historical floating constants come from
-[ResourceEstimation.hpp](../generator/ResourceEstimation.hpp). Vitis FMA values
-sum multiplier and adder measurements. Matching requires the declared floating
-precision and nearest-even rounding. Fixed/control costs, DSP operand dimensions
-and FF coefficients are placeholders for later calibration. Generic has no
-floating arithmetic costs.
+The [FMA validation example](../examples/fma_validation.jl) prepares eleven Intel and four Vitis primitive formats, a polynomial with individual stage widths and a cubic with variable coefficients.
+All nineteen designs achieve II equal to one and pass vendor simulation against the interpreter.
+Both polynomials with individual stage widths have output error certificates and pass all 1,024 input encodings.
+The independent variable coefficient cubics match their DSP predictions at 1.5 Intel DSP equivalents and 3 Vitis DSPs.
+Their LUT estimates pass the configured tolerance.
+Intel datapath FFs also pass, the Vitis FF prediction is 2,946 against 5,920 measured and falls just outside the configured tolerance.
+Conversions in the individual stage designs still have unknown costs.
+
+Generic FMA uses substantial logic, the Vitis binary32 primitive requires 12,055 evaluator LUTs and 2 DSPs.
+The native Intel binary32 and binary64 FMA primitives retain their measured costs of 1 and 4 DSP equivalents.
+Only measured formats and operand patterns receive calibrated costs.
+Run `julia --project=. examples/fma_validation.jl config/resources/oneapi.toml build/fma-oneapi` to prepare the Intel checks, use the Vitis profile for U280.
+The generated `probes`, `holdout` and `composition` projects use the usual synthesis, emulation and collection commands.
+
+Fixed and control costs, DSP operand dimensions and FF coefficients are placeholders for calibration.
+Floating costs require measurements of the emitted arithmetic implementation.
+Separate multiplication and addition costs do not predict a fused operation.
 
 Target support is checked independently of cost coverage.
 Vendor profiles automatically validate the complete lowered evaluator against `TargetProfile(:vitis)` or `TargetProfile(:oneapi)`.
@@ -108,12 +119,17 @@ Changing these settings also requires matching interpreter and certificate seman
 The Intel host emulator ignores the requested accuracy level, so emulation alone cannot validate reduced accuracy hardware arithmetic.
 Intel documents the mapping differences in its [ap_float resource guidance](https://www.intel.com/content/www/us/en/docs/oneapi-fpga-add-on/developer-guide/2024-1/quality-of-results-and-the-ap-float-data-type.html).
 Intel floating FMA uses native `sycl::fma` for binary32 and binary64 with exact format conversion at the arithmetic boundary.
-Other floating FMA formats are unsupported.
-Automatic arithmetic selection retains separate operations for those formats.
+Other floating FMA formats use vendor integers to preserve the full product and perform one rounding after addition.
+Vitis uses the same implementation for floating FMA, addition and multiplication.
+The accumulator retains exact cancellation and sticky information for distant operands.
+Both paths support subnormals, signed zeros, infinities and canonical NaNs with nearest even rounding.
+Floating arithmetic requires at most 30 exponent bits and `2*(fraction_bits+1)+12 <= 4096`.
+Intel addition, multiplication and reciprocal still require one of the native formats listed above.
+Vitis floating reciprocal is unsupported.
+Automatic arithmetic selection can consider FMA at custom stage widths.
 Intel synthesis uses `-fp-model=precise -no-fma -no-ftz` to preserve explicit operation boundaries and subnormal behavior.
 Explicit `sycl::fma` retains fused semantics under these flags.
 External builds of the generated headers require the same arithmetic settings.
-Vitis floating arithmetic is currently unsupported by the kernel emitter.
 Encoded floating interfaces, tables and integer conversions retain general `FloatFormat` support.
 Arithmetic constraints apply to intermediate nodes as well as outputs.
 Emission rejects unsupported nodes before writing the destination, including unreachable nodes.

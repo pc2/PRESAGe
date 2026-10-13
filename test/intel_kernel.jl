@@ -22,10 +22,17 @@ T word(const unsigned long long (&chunks)[Chunks]) {
 }
 """,
                 )
-                for (e, m) in PRESAGe._INTEL_FLOAT_FORMATS,
+                for (e, m) in (
+                        PRESAGe._INTEL_FLOAT_FORMATS...,
+                        (2, 1),
+                        (7, 24),
+                        (8, 22),
+                        (10, 53),
+                        (15, 112),
+                    ),
                     operation in (
-                        FloatFormat(e, m) in (IEEE32, IEEE64) ?
-                        (:add, :mul, :reciprocal, :fma) : (:add, :mul, :reciprocal)
+                        (e, m) in PRESAGe._INTEL_FLOAT_FORMATS ?
+                        (:add, :mul, :reciprocal, :fma) : (:fma,)
                     )
 
                     format = FloatFormat(e, m)
