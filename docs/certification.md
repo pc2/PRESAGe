@@ -289,7 +289,7 @@ config = PolynomialSearchConfig(degrees=[1,9],
     internal_formats=[FixedFormat(16,6), FixedFormat(32,6)],
     generation_precision=256, proof_precision=256,
     accuracy=1//1024, max_refinements=2,
-    max_attempts=4, job_timeout=60, total_timeout=300)
+    max_attempts=8, job_timeout=60, total_timeout=300)
 search = search_polynomial(spec, config)
 write_search_report("search.toml", search)
 @assert search.status == :certified
@@ -299,8 +299,11 @@ certificate = search.selected
 Choice lists must be nonempty finite vectors or tuples without duplicates.
 An optional `segments=[1,4,8]` adds segment-count choices; the default is `[1]`.
 Counts are visited first, then degrees, then formats, each in caller order.
-Selection stops at the first complete passing certificate.
-This policy provides a feasible evaluator without optimizing hardware cost.
+Automatic arithmetic compares separate and fused candidates within the attempt and time limits.
+Pass `resource_model` and optional `resource_budget` to rank complete certified evaluators by resource cost.
+Without a profile, selection uses structural memory and arithmetic costs.
+Explicit `evaluation=:separate` or `evaluation=:fma` without selection options stops at the first passing certificate.
+The concrete plan constructors and `certified_polynomial` build one requested arithmetic form, use search or sweeps to compare forms.
 Increasing fixed fractional precision or floating significand precision does
 not change an integer or exponent range: supply each desired format explicitly.
 
@@ -316,24 +319,29 @@ reading exact results can add a small amount of time beyond a deadline.
 The next attempt starts with a fresh worker. There is no persistent pool,
 parallel candidate execution or cache yet.
 
-`PolynomialSearchResult` contains `status`, `selected`, `attempts`,
-`elapsed_seconds` and `stop_reason`. A successful search has status and stop
-reason `certified`, with its `CertificationResult` in `selected`. Exhaustion
-returns `search_limit` with `selected=nothing` and one of these stop reasons:
+`PolynomialSearchResult` contains `status`, `selected`, `attempts`, `elapsed_seconds`, `stop_reason` and `selection`.
+A successful search has status `certified`, with its `CertificationResult` in `selected`.
+Cost based search stores its complete sweep and decision in `selection`, including incomplete exploration and unknown resource costs.
+Its report uses schema version 16 and records the actual selected attempt, which need not be the last attempt.
+Ordered search leaves `selection` empty and stops with reason `certified` on success.
+Exhaustion without a certificate returns `search_limit`, resource selection can instead report missing costs or exceeded budgets.
+The exploration stop reasons are these.
 
 | Stop reason | Meaning |
 | --- | --- |
-| `choices_exhausted` | Every supplied segment/degree/format combination was attempted. |
+| `choices_exhausted` | Every configured segment, degree, format and arithmetic combination was attempted. |
 | `attempt_limit` | Further choices remain, but the maximum attempt count was reached. |
-| `total_deadline` | The total time limit expired; any active worker was stopped. |
+| `total_deadline` | The total time limit expired, any active worker was stopped. |
 
 Each `SearchAttempt` records segment count, degree, internal format, status, elapsed seconds,
 reason, an optional exact `plan` and an optional `certificate`. Normal numerical
 statuses remain `generation_failed`, `bound_exceeds_budget`, `proof_failed` or
 `certified`. Supervision adds `timeout`, `worker_crashed` and `worker_failed`.
-An individual timeout, crash or numerical failure advances to the next choice
-if limits permit. A total timeout stops the search. No further candidate starts
-after success or a limit. Exhaustion makes no mathematical infeasibility claim.
+An individual timeout, crash or numerical failure advances to the next choice if limits permit.
+Automatic selection continues after a passing certificate to compare remaining candidates within the limits.
+Ordered search stops after its first passing certificate.
+Neither mode starts another candidate after an attempt limit or total timeout.
+Exhaustion makes no mathematical infeasibility claim.
 
 Workers checkpoint a generated plan before proof. Interrupted proofs can
 therefore retain coefficient payloads and the IR, even without a certificate.

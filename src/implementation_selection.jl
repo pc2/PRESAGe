@@ -144,6 +144,8 @@ function _implementation_selection_data(result::ImplementationSelection)
             "certificate" => _certificate_data(certificate),
             "selection_eligible" => false,
         )
+        row.attempt.evaluation === nothing ||
+            (item["evaluation"] = string(row.attempt.evaluation))
         if row.attempt.status == :certified
             costs = _sweep_metrics(row, result.memory_model, result.resource_model)
             item["cost"] = Dict(

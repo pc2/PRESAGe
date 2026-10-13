@@ -198,6 +198,17 @@ function _sweep_eligibility(cost, max_table_blocks, objective, model, budget)
     return reasons
 end
 
+function _sweep_needs_calibration(cost, max_table_blocks, objective, model, budget)
+    isempty(get(cost, :target_reasons, ())) || return false
+    max_table_blocks === nothing || cost.table_blocks <= max_table_blocks || return false
+    required = _sweep_resource_requirements(objective, model, budget)
+    for name in required
+        value, limit = getfield(cost, name), getfield(budget, name)
+        value !== nothing && limit !== nothing && value > limit && return false
+    end
+    return any(name -> getfield(cost, name) === nothing, required)
+end
+
 function _sweep_choices(
     rows,
     spec_count,
@@ -237,6 +248,24 @@ function _sweep_choices(
     order = _sweep_selection_order(objective, resource_model)
     selections = Tuple(
         map(1:spec_count) do spec_index
+            unresolved = filter(passing) do i
+                rows[i].spec_index == spec_index && _sweep_needs_calibration(
+                    metrics[i],
+                    max_table_blocks,
+                    objective,
+                    resource_model,
+                    resource_budget,
+                )
+            end
+            if !isempty(unresolved)
+                indices = join([rows[i].index for i in unresolved], ", ")
+                return PolynomialSweepSelection(
+                    spec_index,
+                    nothing,
+                    :resource_model_incomplete,
+                    "Resource comparison needs synthesis or calibration for certified rows $indices with unknown required estimates.",
+                )
+            end
             choices = filter(i -> rows[i].spec_index == spec_index, eligible)
             if isempty(choices)
                 certified = count(i -> rows[i].spec_index == spec_index, passing)
@@ -272,15 +301,9 @@ function _sweep_choices(
                         "All $certified certified candidates exceed the $max_table_blocks modeled table-block budget",
                     )
                 end
-                missing = any(
-                    i -> any(reason -> occursin("unknown", reason), reasons[i]),
-                    rejected,
-                )
                 unsupported =
                     any(i -> !isempty(get(metrics[i], :target_reasons, ())), rejected)
-                status =
-                    unsupported ? :target_unsupported :
-                    missing ? :resource_model_incomplete : :resource_budget_exceeded
+                status = unsupported ? :target_unsupported : :resource_budget_exceeded
                 detail = join(unique(vcat([reasons[i] for i in rejected]...)), "; ")
                 return PolynomialSweepSelection(
                     spec_index,
@@ -613,7 +636,8 @@ end
 
 """
     sweep_polynomial(spec_or_specs_or_plan, config; max_parallel=1, cache=nothing,
-        memory_model=BlockMemoryModel(), max_table_blocks=nothing, objective=:memory)
+        memory_model=BlockMemoryModel(), max_table_blocks=nothing,
+        objective=resource_model === nothing ? :memory : :resources)
 
 Evaluate every candidate in spec/segment/degree/format order, up to the global
 `config.max_attempts` and `total_timeout`. Run at most `max_parallel` owned Julia
@@ -643,7 +667,8 @@ sweep_polynomial(
     memory_model::BlockMemoryModel = resource_model === nothing ? BlockMemoryModel() :
                                      resource_model.memory,
     max_table_blocks = nothing,
-    objective::Symbol = :memory,
+    objective::Symbol = resource_model === nothing ? :memory : :resources,
+    target::Union{Nothing, TargetProfile} = nothing,
 ) = _sweep_polynomial(
     inputs,
     config;
@@ -654,6 +679,7 @@ sweep_polynomial(
     resource_budget,
     max_table_blocks,
     objective,
+    target,
 )
 
 """
@@ -705,6 +731,7 @@ function _sweep_polynomial(
     cache = nothing,
     resource_model::Union{Nothing, ResourceModel} = nothing,
     resource_budget::ResourceBudget = ResourceBudget(),
+    target::Union{Nothing, TargetProfile} = nothing,
     memory_model::BlockMemoryModel = resource_model === nothing ? BlockMemoryModel() :
                                      resource_model.memory,
     max_table_blocks = nothing,
@@ -716,6 +743,12 @@ function _sweep_polynomial(
     lut_max_entries = 65536,
     implementation_sweep = false,
 )
+    if resource_model !== nothing && resource_model.toolchain != :generic
+        target === nothing ||
+            target.toolchain == resource_model.toolchain ||
+            throw(ArgumentError("target does not match the resource model"))
+        target = TargetProfile(resource_model.toolchain)
+    end
     !(max_parallel isa Bool) && 1 <= max_parallel <= 64 ||
         throw(ArgumentError("max_parallel must be an integer in 1:64"))
     budget = _validate_sweep_selection(
@@ -730,8 +763,7 @@ function _sweep_polynomial(
         implementations,
         lut_max_entries,
         allow_unsupported = implementation_sweep,
-        target = resource_model === nothing || resource_model.toolchain == :generic ?
-                 nothing : TargetProfile(resource_model.toolchain),
+        target,
     )
     implementation_sweep && (mode = :implementations)
     started = time_ns()
@@ -762,9 +794,7 @@ function _sweep_polynomial(
                         started,
                         cache,
                         identity;
-                        target = resource_model === nothing ||
-                                 resource_model.toolchain == :generic ? nothing :
-                                 TargetProfile(resource_model.toolchain),
+                        target,
                         worker_command = command,
                         process_started,
                         cancelled = () -> aborted,

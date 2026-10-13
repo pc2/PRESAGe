@@ -33,6 +33,9 @@ end
         @test PRESAGe._has_fixed(plan.program)
         @test TOML.parsefile(joinpath(generated, "certificate.toml"))["status"] ==
               "certified"
+        choices = TOML.parsefile(joinpath(generated, "implementations.toml"))
+        @test Set(candidate["evaluation"] for candidate in choices["candidates"]) ==
+              Set(["separate", "fma"])
         repeated = joinpath(directory, "repeated")
         generate_main([joinpath(generated, "plan.toml"), repeated])
         @test read(joinpath(generated, "evaluator.hpp")) ==
@@ -69,6 +72,12 @@ end
             "--fraction-bits=30",
         ])
         @test_throws ErrorException generate_main(["erf", generated, "--certify=maybe"])
+        @test_throws ErrorException generate_main([
+            "erf",
+            generated,
+            "--certify=false",
+            "--evaluation=auto",
+        ])
         @test_throws ErrorException generate_main([
             "erf",
             generated,

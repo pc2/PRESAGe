@@ -1,5 +1,6 @@
 schema = "presage-search-config"
-schema_version = 1
+schema_version = 15
+segments = [1]
 degrees = [1, 9]
 internal_formats = [
     { format = { kind = "fixed", width = 16, integer_bits = 6, signed = true, rounding = "nearest_even", overflow = "reject" } },
@@ -7,13 +8,13 @@ internal_formats = [
 ]
 
 [settings]
-evaluation = "separate"
+evaluation = "auto"
 generation_precision = 256
 proof_precision = 256
 norm_accuracy = "1/1024"
 max_refinements = 2
 
 [limits]
-max_attempts = 4
+max_attempts = 8
 job_timeout_seconds = 60
 total_timeout_seconds = 300

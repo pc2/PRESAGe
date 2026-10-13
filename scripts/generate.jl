@@ -6,7 +6,7 @@ include(joinpath(@__DIR__, "generation_artifacts.jl"))
 
 function generate_main(args)
     length(args) >= 2 || error(
-        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--resource-model=MODEL.toml] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--lut-max-entries=65536] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams|mlabs] [--max-table-blocks=N] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--max-mlabs=N] [--max-parallel=N] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=separate|fma] [--fraction-bits=31] [--certify=true|false] [--trace=true|false]",
+        "Usage: generate.jl erf|PLAN.toml|CONTRACT.toml OUTPUT_DIR [--target=cpu|kernel] [--toolchain=generic|vitis|oneapi] [--resource-model=MODEL.toml] [--search-config=SEARCH.toml] [--backend=portable|ap_fixed|ac_fixed] [--float-backend=auto|native|ac_std_float] [--internal=fixed|single|double] [--input-format=half|single] [--output-format=half|single] [--implementation=auto|lut|polynomial] [--lut-max-bits=1048576] [--lut-max-entries=65536] [--objective=memory|arithmetic|resources|luts|ffs|dsps|rams|mlabs] [--max-table-blocks=N] [--max-luts=N] [--max-ffs=N] [--max-dsps=N] [--max-rams=N] [--max-mlabs=N] [--max-parallel=N] [--absolute-error=RATIONAL] [--degree=9] [--segments=4] [--evaluation=auto|separate|fma] [--fraction-bits=31] [--certify=true|false] [--trace=true|false]",
     )
     source, directory = args[1:2]
     options = Dict{String, String}()
@@ -186,6 +186,7 @@ function generate_main(args)
                 resource_budget,
                 max_table_blocks,
                 objective,
+                target = target == :kernel ? TargetProfile(toolchain; backend) : nothing,
                 max_parallel = parse(Int, get(options, "max-parallel", "1")),
             )
             selection = only(implementation_report.selections)
@@ -223,7 +224,12 @@ function generate_main(args)
             error("internal must be fixed, single or double")
         degree = parse(Int, get(options, "degree", "9"))
         segments = parse(Int, get(options, "segments", "4"))
-        evaluation = Symbol(get(options, "evaluation", "separate"))
+        evaluation = Symbol(get(options, "evaluation", certify ? "auto" : "separate"))
+        evaluation in (:auto, :separate, :fma) ||
+            error("evaluation must be auto, separate or fma")
+        evaluation == :auto &&
+            !certify &&
+            error("automatic arithmetic requires certification")
         precision = parse(Int, get(options, "generation-precision", "256"))
         if internal == "fixed"
             formats = Dict("half" => IEEE16, "single" => IEEE32)
@@ -300,7 +306,7 @@ function generate_main(args)
                     proof_precision,
                     accuracy,
                 )
-                if compare_implementations
+                if compare_implementations || evaluation == :auto && selected != :lut
                     candidates = CertificationResult[]
                     if implementation != :polynomial && (
                         implementation == :lut ||
@@ -318,10 +324,20 @@ function generate_main(args)
                             ),
                         )
                     end
-                    implementation == :lut || push!(
-                        candidates,
-                        certified_erf(; numerical..., implementation = :polynomial),
-                    )
+                    if implementation != :lut
+                        evaluations =
+                            evaluation == :auto ? (:separate, :fma) : (evaluation,)
+                        for arithmetic in evaluations
+                            push!(
+                                candidates,
+                                certified_erf(;
+                                    numerical...,
+                                    evaluation = arithmetic,
+                                    implementation = :polynomial,
+                                ),
+                            )
+                        end
+                    end
                     implementation_report = select_implementation(
                         candidates;
                         resource_model,
@@ -332,6 +348,12 @@ function generate_main(args)
                     )
                     if implementation_report.selected === nothing
                         _generation_implementation_failure(directory, implementation_report)
+                        if all(candidate -> candidate.status != :certified, candidates)
+                            write_certificate(
+                                joinpath(directory, "certificate-failure.toml"),
+                                first(candidates),
+                            )
+                        end
                         error(
                             "$(implementation_report.status): $(implementation_report.reason)",
                         )
@@ -356,6 +378,9 @@ function generate_main(args)
                 )
             end
         else
+            evaluation == :auto && error(
+                "automatic floating erf generation requires a bounded contract and search-config",
+            )
             any(
                 k -> k in (
                     "input-format",

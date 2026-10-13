@@ -23,15 +23,14 @@ end
         report = TOML.parsefile(joinpath(generated, "search.toml"))
         certificate = TOML.parsefile(joinpath(generated, "certificate.toml"))
         @test report["status"] == certificate["status"] == "certified"
-        @test report["selected_attempt"] == 4
-        @test [attempt["status"] for attempt in report["attempts"]] == [
-            "bound_exceeds_budget",
-            "bound_exceeds_budget",
-            "bound_exceeds_budget",
-            "certified",
-        ]
-        @test PRESAGe._plan_data(plan) == report["attempts"][4]["plan"]
-        @test certificate == report["attempts"][4]["certificate"]
+        @test length(report["attempts"]) == 8
+        @test report["selection"]["status"] == "complete"
+        @test Set(attempt["evaluation"] for attempt in report["attempts"]) ==
+              Set(["separate", "fma"])
+        selected = report["selected_attempt"]
+        @test report["attempts"][selected]["status"] == "certified"
+        @test PRESAGe._plan_data(plan) == report["attempts"][selected]["plan"]
+        @test certificate == report["attempts"][selected]["certificate"]
         proof = certify_main([planpath, joinpath(directory, "recertified.toml")])
         @test PRESAGe._rational_text(proof.total_bound) == certificate["total_bound"]
         accepted = check_generated_polynomial(proof, 0:511)

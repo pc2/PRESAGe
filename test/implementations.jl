@@ -231,7 +231,8 @@ end
         resource_budget = ResourceBudget(luts = 0, rams = 0),
     ).status == :resource_budget_exceeded
     incomplete = implementation_profile(priority = (:ffs,), unknown_mul_ffs = true)
-    @test select_implementation(candidates; resource_model = incomplete).selected === lut
+    @test select_implementation(candidates; resource_model = incomplete).status ==
+          :resource_model_incomplete
     @test select_implementation((polynomial,); resource_model = incomplete).status ==
           :resource_model_incomplete
     @test select_implementation((lut, lut); resource_model = profile).selected_index == 1

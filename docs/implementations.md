@@ -44,6 +44,7 @@ write_implementation_report("build/choice.toml", choice)
 Selection first requires a numerical certificate meeting the exact contract.
 Candidates must share the expression, domain, formats and error target.
 Required unknown resource estimates cannot satisfy a budget or ranking objective.
+An otherwise viable candidate with unknown required costs leaves selection unresolved until synthesis or calibration supplies them.
 An explicit backend override also obeys numerical and resource requirements.
 Exact ties use candidate order. Without a profile, selection defaults to modeled
 memory blocks. Profile priorities are estimates pending synthesis calibration;

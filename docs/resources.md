@@ -278,10 +278,11 @@ result = sweep_polynomial(spec, config;
 write_sweep_artifacts("build/sweep", result)
 ```
 
-Unset limits impose no constraint; zero is a real limit. Estimates required by
-limits or ranking must be known. Rejected rows retain numerical certificates
-and eligibility reasons. Missing selection reports `resource_budget_exceeded`
-or `resource_model_incomplete`, as appropriate.
+Unset limits impose no constraint, zero is a real limit.
+Estimates required by limits or ranking must be known.
+An otherwise viable candidate with unknown required estimates leaves selection at `resource_model_incomplete` until synthesis or calibration supplies them.
+Rejected rows retain numerical certificates and eligibility reasons.
+Known budget violations can exclude candidates independently of their missing estimates.
 
 `:resources` follows the profile's `priority` lexicographically, for example
 `["luts", "rams", "dsps", "ffs"]`; a shorter list is allowed. `:luts`, `:ffs`,

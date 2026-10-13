@@ -11,12 +11,19 @@ For each degree and precision choice, automatic arithmetic considers separate mu
 Target profiles exclude unsupported arithmetic before launching workers.
 Every retained candidate has its own concrete graph and numerical certificate.
 Resource sweeps compare both forms using the selected cost objective.
-Bounded search returns the first passing candidate in this order.
+Automatic bounded search uses the same candidate comparison and retains the sweep in `result.selection`.
+Supplying a resource profile makes its priorities the default objective for search and sweeps.
+Without a profile, selection compares structural memory and arithmetic costs and does not predict hardware area.
+Explicit arithmetic without selection options retains the ordered search that stops at the first certificate.
 Explicit `:separate` and `:fma` settings restrict the search to one form.
 Constant kernels are evaluated once unless their reconstruction depends on the arithmetic choice.
 Stored plan sweeps preserve the saved arithmetic when configured with `:auto`.
 Each arithmetic candidate counts toward the attempt limit and has a distinct numerical cache identity.
 Attempt records preserve the chosen arithmetic even when generation fails before producing a plan.
+Unknown costs remain visible and candidates without the required costs cannot enter resource ranking.
+An otherwise viable candidate with unknown required costs leaves selection at `resource_model_incomplete` and preserves the certified plans for synthesis and calibration.
+Known budget violations or unsupported targets can exclude a candidate even when some costs remain unknown.
+Selection among a limited set of evaluated candidates does not establish a global hardware optimum.
 
 ```julia
 using PRESAGe
@@ -124,10 +131,9 @@ integer range are stored as exact decimal strings.
 
 ## Resource estimates
 
-For editable LUT/ALUT, FF, DSP and RAM estimates, individual limits and resource
-priorities, see [resource models](resources.md). Resource objectives require a
-profile; unknown required estimates exclude a candidate. Profiles also control
-block versus distributed ROM hints and export matching selected resource artifacts.
+For editable LUT/ALUT, FF, DSP and RAM estimates, individual limits and resource priorities, see [resource models](resources.md).
+Resource objectives require a profile and selection needs all required estimates for otherwise viable candidates.
+Profiles also control block versus distributed ROM hints and export matching selected resource artifacts.
 
 ## Sampled observations
 

@@ -68,8 +68,8 @@ write_certificate("certificate.toml", result)
 ```
 
 This makes one attempt with the chosen degree and arithmetic format.
-Use `search_polynomial` to try ordered candidates, or a
-[design sweep](docs/sweeps.md) to compare certified designs under resource budgets.
+Use `search_polynomial` with its default automatic arithmetic to compare certified candidates.
+Supply a resource profile and budget to select by estimated hardware cost, or use a [design sweep](docs/sweeps.md) for multiple contracts and cached comparisons.
 
 To generate C++ from a contract and search configuration:
 

@@ -23,6 +23,13 @@
     )
     config = PolynomialSearchConfig(degrees = [1], internal_formats = [format])
     @test config.evaluation == :auto
+    @test_throws ArgumentError search_polynomial(
+        tight,
+        config;
+        target = TargetProfile(:vitis),
+        resource_model = resource_profile("oneapi"),
+        worker_command = _ -> error("An incompatible target must not start a worker."),
+    )
     result = search_polynomial(tight, config; target = TargetProfile(:oneapi))
     @test result.status == :certified
     @test [attempt.status for attempt in result.attempts] == [:bound_exceeds_budget, :certified]
@@ -74,6 +81,123 @@ end
     )
     @test [row.attempt.evaluation for row in sweep.rows] == [:separate, :fma]
     @test [row["evaluation"] for row in PRESAGe._sweep_data(sweep)["rows"]] == ["separate", "fma"]
+end
+
+@testset "Automatic search selects certified arithmetic by resource priorities" begin
+    spec = FunctionSpec(
+        "1/3+2/7*x";
+        input_format = IEEE32,
+        domain = (1, 2),
+        absolute_error = 1,
+    )
+    config = PolynomialSearchConfig(degrees = [1], internal_formats = [IEEE32])
+    rules = [
+        ResourceRule(
+            operation;
+            luts = operation == :fma ? 10 : operation in (:mul, :add) ? 1 : 0,
+            dsps = operation in (:fma, :mul, :add) ? 1 : 0,
+            ffs = 0,
+            rams = 0,
+        ) for operation in PRESAGe._RESOURCE_OPERATIONS
+    ]
+    logic = ResourceModel(; rules, priority = (:luts, :dsps))
+    dsp = ResourceModel(; rules, priority = (:dsps, :luts))
+    for (model, evaluation, index) in ((logic, "separate", 1), (dsp, "fma", 2))
+        result = search_polynomial(spec, config; resource_model = model)
+        @test result.status == :certified
+        @test length(result.attempts) == 2
+        @test all(attempt -> attempt.status == :certified, result.attempts)
+        @test result.selected.plan.settings["evaluation"] == evaluation
+        @test result.selection.objective == :resources
+        @test result.selection.status == :complete
+        report = PRESAGe._search_data(result)
+        @test report["schema_version"] == 16
+        @test report["selected_attempt"] == index
+        @test report["selection"]["selection_policy"]["objective"] == "resources"
+    end
+    constrained = search_polynomial(
+        spec,
+        config;
+        resource_model = logic,
+        resource_budget = ResourceBudget(dsps = 1),
+    )
+    @test constrained.selected.plan.settings["evaluation"] == "fma"
+    @test length(constrained.attempts) == 2
+
+    partial = ResourceModel(
+        rules = filter(rule -> rule.operation != :fma, rules),
+        priority = (:luts,),
+    )
+    unresolved = select_sweep(
+        constrained.selection;
+        resource_model = partial,
+        resource_budget = ResourceBudget(),
+    )
+    @test only(unresolved.selections).status == :resource_model_incomplete
+    @test only(unresolved.selections).row_index === nothing
+    @test occursin("calibration", only(unresolved.selections).reason)
+    @test all(row -> row.attempt.status == :certified, unresolved.rows)
+    over_budget = ResourceModel(
+        rules = [partial.rules..., ResourceRule(:fma; dsps = 4)],
+        priority = (:luts,),
+    )
+    eligible = select_sweep(
+        constrained.selection;
+        resource_model = over_budget,
+        resource_budget = ResourceBudget(dsps = 2),
+    )
+    @test only(eligible.selections).row_index == 1
+    excluded = select_implementation(
+        (constrained.selected,);
+        resource_model = over_budget,
+        resource_budget = ResourceBudget(dsps = 2),
+    )
+    @test excluded.status == :resource_budget_exceeded
+
+    missing = search_polynomial(spec, config; resource_model = ResourceModel())
+    @test missing.status == :resource_model_incomplete
+    @test missing.selected === nothing
+    @test all(attempt -> attempt.status == :certified, missing.attempts)
+    @test !haskey(PRESAGe._search_data(missing), "selected_attempt")
+
+    limited = search_polynomial(
+        spec,
+        PolynomialSearchConfig(
+            degrees = [1],
+            internal_formats = [IEEE32],
+            max_attempts = 1,
+        );
+        resource_model = dsp,
+    )
+    @test limited.selected.plan.settings["evaluation"] == "separate"
+    @test limited.stop_reason == :attempt_limit
+    @test limited.selection.status == :sweep_limit
+
+    mktempdir() do directory
+        contract = joinpath(directory, "contract.toml")
+        configuration = joinpath(directory, "search.toml")
+        profile = joinpath(directory, "model.toml")
+        output = joinpath(directory, "output")
+        write_plan(contract, PlanArtifact(spec))
+        write_search_config(configuration, config)
+        write_resource_model(profile, logic)
+        generate_main([
+            contract,
+            output,
+            "--search-config=$configuration",
+            "--resource-model=$profile",
+            "--implementation=polynomial",
+        ])
+        selected = read_plan(joinpath(output, "plan.toml"))
+        @test selected.settings["evaluation"] == "separate"
+        report = TOML.parsefile(joinpath(output, "implementations.toml"))
+        @test length(report["rows"]) == 2
+        replay = joinpath(directory, "replay")
+        generate_main([joinpath(output, "plan.toml"), replay])
+        @test read(joinpath(output, "evaluator.hpp")) ==
+              read(joinpath(replay, "evaluator.hpp"))
+        @test read_plan(joinpath(replay, "plan.toml")).settings["evaluation"] == "separate"
+    end
 end
 
 @testset "Automatic arithmetic respects target widths and stored plans" begin
@@ -198,8 +322,8 @@ end
     model = ResourceModel(; rules, priority = (:luts,))
     mktempdir() do directory
         cache = NumericalCache(directory)
-        sweep =
-            sweep_polynomial(spec, config; resource_model = model, objective = :luts, cache)
+        sweep = sweep_polynomial(spec, config; resource_model = model, cache)
+        @test sweep.objective == :resources
         @test length(sweep.rows) == 2
         @test all(row -> row.attempt.status == :certified, sweep.rows)
         @test only(sweep.selections).status == :selected

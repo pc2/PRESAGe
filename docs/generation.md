@@ -31,9 +31,9 @@ julia --startup-file=no --project=. scripts/generate.jl \
 
 The checked-in [exp contract](../examples/exp-contract.toml) and
 [search configuration](../examples/polynomial-search.toml) provide a fixed
-input/output example. They need degree nine with `Fixed(32,6)` after three
-budget failures. [Search ordering and limits](certification.md#ordered-search-and-worker-limits)
-also apply to the CLI.
+input/output example.
+The configuration compares separate and fused arithmetic across both degrees and formats.
+[Search ordering and limits](certification.md#ordered-search-and-worker-limits) also apply to the CLI.
 
 Use `segments=[1,4]` with `degrees=[5]` to try a single degree-five polynomial
 followed by four normalized segments. The fixed exp contract passes with the
@@ -143,8 +143,9 @@ build/cpu-macos/presage_cpu < inputs.bin > outputs.bin
 CMake 3.24 or newer generates `plan.toml`, `certificate.toml`, `evaluator.hpp`
 and a binary harness in `build/cpu-macos/generated`. Defaults are four segments
 on `[0,4]`, degree nine, 31 fractional bits, automatic stage integer widths and
-separate multiply/add operations, `ac_fixed` arithmetic and IEEE32 input/output. Generation searches
-within explicit width limits and requires a successful certificate.
+automatic arithmetic selection, `ac_fixed` arithmetic and IEEE32 input/output.
+Generation certifies separate and fused evaluators within the width limits and records their comparison in `implementations.toml`.
+A resource profile selects its configured priorities, otherwise selection uses structural costs.
 
 ### Interfaces and tracing
 
@@ -195,10 +196,14 @@ Floating candidates use `-DPRESAGE_INTERNAL=double -DPRESAGE_CERTIFY=OFF`.
 ### Fresh erf generation options
 
 The generation CLI accepts `--backend=portable|ap_fixed|ac_fixed` (default
-`ac_fixed`), `--internal=fixed|single|double`, `--evaluation=fma`,
+`ac_fixed`), `--internal=fixed|single|double`, `--evaluation=auto|separate|fma`,
 `--degree=N`, `--segments=N` (a power of two), `--fraction-bits=N`,
 `--coefficient-fraction-bits=N` and `--max-fraction-bits=N`. Generation precision,
 proof precision and norm tightness have separate controls. Fixed generation
 certifies by default; `--certify=false` emits an unchecked candidate. Pass an
 existing `plan.toml` instead of `erf` to emit its stored program again and rerun
 the supported certificate.
+Certified fixed generation defaults to automatic arithmetic selection.
+Unchecked generation defaults to separate arithmetic and rejects an explicit automatic choice because it has no certificates to compare.
+Floating automatic generation uses a bounded contract and a search configuration.
+Stored plans retain their concrete arithmetic during replay.

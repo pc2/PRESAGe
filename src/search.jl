@@ -223,8 +223,8 @@ SearchAttempt(
 _request_evaluation(request) =
     get(request, :implementation, :polynomial) == :lut ? nothing : request.config.evaluation
 
-"""First certified candidate, or `search_limit` with the complete attempt history."""
-struct PolynomialSearchResult
+"""Selected certified candidate and attempt history, with a sweep when costs select the result."""
+struct PolynomialSearchResult{Selection}
     spec::FunctionSpec
     config::PolynomialSearchConfig
     status::Symbol
@@ -232,7 +232,9 @@ struct PolynomialSearchResult
     attempts::Tuple{Vararg{SearchAttempt}}
     elapsed_seconds::Float64
     stop_reason::Symbol
+    selection::Selection
 end
+PolynomialSearchResult(args::Vararg{Any, 7}) = PolynomialSearchResult(args..., nothing)
 
 _elapsed(start::UInt64) = Float64(time_ns() - start) / 1e9
 # A budget below one nanosecond cannot survive one clock tick. Treat it as
@@ -499,29 +501,76 @@ function _run_polynomial_job(
 end
 
 """
-    search_polynomial(spec, config::PolynomialSearchConfig)
+    search_polynomial(spec, config::PolynomialSearchConfig; resource_model=nothing,
+        resource_budget=ResourceBudget(), objective=nothing, target=nothing)
 
-Try segment counts in order, then degrees, then formats. Return the first
-complete certificate that meets the contract. Each attempt runs in a fresh Julia
-process; timed-out processes are killed and reaped before continuing. All native
-Sollya objects remain in the worker. Startup counts toward both wall-time limits.
+Automatic arithmetic compares the configured certified candidates within the search limits.
+A resource profile selects its resource priorities, otherwise selection uses structural memory and arithmetic costs.
+Explicit arithmetic without selection options returns the first certificate meeting the contract.
+Each attempt runs in a fresh Julia process and timed out processes are killed and reaped.
+All native Sollya objects remain in the worker.
+Startup counts toward both wall time limits.
 
-Invalid requests throw `ArgumentError` before any worker starts. Candidate failures
-(including timeout and crash) can advance the search. Exhausting choices, attempts
-or the total deadline returns `search_limit`, not a claim of infeasibility. Attempts
-retain exact plans, proof contributions and reasons when available, including a
-candidate checkpoint if proof was interrupted. No global cost optimality is claimed.
+Invalid requests throw `ArgumentError` before any worker starts.
+Candidate failures can advance the search.
+Automatic selection can return a certified candidate from an incomplete comparison, with the limit recorded in `selection.status` and `stop_reason`.
+Required unknown resource costs leave selection unresolved until synthesis or calibration supplies them.
+Attempts retain available plans, proof contributions and failure reasons.
+Search limits establish neither infeasibility nor global cost optimality.
 """
-search_polynomial(spec::FunctionSpec, config::PolynomialSearchConfig; target = nothing) =
-    _search_polynomial(spec, config; target)
+search_polynomial(spec::FunctionSpec, config::PolynomialSearchConfig; kwargs...) =
+    _search_polynomial(spec, config; kwargs...)
 
 function _search_polynomial(
     spec,
     config;
     target::Union{Nothing, TargetProfile} = nothing,
+    resource_model::Union{Nothing, ResourceModel} = nothing,
+    resource_budget::ResourceBudget = ResourceBudget(),
+    objective::Union{Nothing, Symbol} = nothing,
+    max_table_blocks = nothing,
     worker_command = _polynomial_worker_command,
     process_started = (process, directory) -> nothing,
 )
+    if config.evaluation == :auto ||
+       resource_model !== nothing ||
+       objective !== nothing ||
+       max_table_blocks !== nothing ||
+       any(name -> getfield(resource_budget, name) !== nothing, _RESOURCE_NAMES)
+        sweep = _sweep_polynomial(
+            spec,
+            config;
+            target,
+            resource_model,
+            resource_budget,
+            max_table_blocks,
+            objective = something(
+                objective,
+                resource_model === nothing ? :memory : :resources,
+            ),
+            worker_command,
+            process_started,
+        )
+        choice = only(sweep.selections)
+        selected =
+            choice.row_index === nothing ? nothing :
+            only(
+                row for row in sweep.rows if row.index == choice.row_index
+            ).attempt.certificate
+        status =
+            selected !== nothing ? :certified :
+            choice.status == :no_certified_candidate ? :search_limit : choice.status
+        return PolynomialSearchResult(
+            spec,
+            config,
+            status,
+            selected,
+            Tuple(row.attempt for row in sweep.rows),
+            sweep.elapsed_seconds,
+            sweep.stop_reason,
+            sweep,
+        )
+    end
     domain = _validate_search_request(spec, config)
     configurations = _evaluation_configs(config)
     started = time_ns()
@@ -665,7 +714,8 @@ function _search_data(result::PolynomialSearchResult)
     end
     data = Dict{String, Any}(
         "schema" => "presage-search",
-        "schema_version" => _search_schema_version(config),
+        "schema_version" =>
+            result.selection === nothing ? _search_schema_version(config) : 16,
         "spec" => _spec_data(result.spec),
         "status" => string(result.status),
         "stop_reason" => string(result.stop_reason),
@@ -673,7 +723,13 @@ function _search_data(result::PolynomialSearchResult)
         "attempts" => collect(attempts),
     )
     merge!(data, _search_config_fields(config))
-    result.selected === nothing || (data["selected_attempt"] = length(result.attempts))
+    result.selected === nothing || (
+        data["selected_attempt"] = findfirst(
+            attempt -> attempt.certificate === result.selected,
+            result.attempts,
+        )
+    )
+    result.selection === nothing || (data["selection"] = _sweep_data(result.selection))
     return data
 end
 
