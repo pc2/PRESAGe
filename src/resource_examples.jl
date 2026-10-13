@@ -188,6 +188,8 @@ function resource_probe_plans(;
     formats = [FixedFormat(width, 4) for width in (16, 24, 32, 48, 64)],
     operations = (:add, :mul),
     constants = nothing,
+    operand_formats = nothing,
+    input_formats = nothing,
 )
     plans = Pair{String, PlanArtifact}[]
     for format in formats, operation in operations
@@ -195,22 +197,48 @@ function resource_probe_plans(;
             throw(ArgumentError("unsupported primitive operation"))
         width = _kernel_width(format)
         count = operation == :fma ? 3 : 2
+        shapes = operand_formats === nothing ? fill(format, count) : operand_formats
+        length(shapes) == count ||
+            throw(ArgumentError("one format is required per operand"))
+        all(f -> f isa typeof(format), shapes) ||
+            throw(ArgumentError("probe operands must share the output format family"))
+        format isa FloatFormat &&
+            any(!=(format), shapes) &&
+            throw(ArgumentError("floating probes require identical operand formats"))
         values = constants === nothing ? fill(nothing, count) : constants
         length(values) == count ||
             throw(ArgumentError("one constant choice is required per operand"))
+        inputs = input_formats === nothing ? shapes : input_formats
+        length(inputs) == count ||
+            throw(ArgumentError("one input format is required per operand"))
+        for (input, shape, value) in zip(inputs, shapes, values)
+            input == shape && continue
+            value === nothing &&
+                input isa FixedFormat &&
+                shape isa FixedFormat &&
+                input.signed == shape.signed &&
+                input.integer_bits <= shape.integer_bits &&
+                _fraction(input) <= _fraction(shape) || throw(
+                ArgumentError("probe input conversions must be exact fixed extensions"),
+            )
+        end
         variables = Base.count(isnothing, values)
         variables > 0 || throw(ArgumentError("a resource probe needs a variable operand"))
-        input = FixedFormat(variables * width, variables * width; signed = false)
-        nodes = IR.Node[IR.Input(input), IR.BitCast(1, IR.UIntFormat(variables * width))]
+        input_width =
+            sum(_kernel_width(f) for (f, value) in zip(inputs, values) if value === nothing)
+        input = FixedFormat(input_width, input_width; signed = false)
+        nodes = IR.Node[IR.Input(input), IR.BitCast(1, IR.UIntFormat(input_width))]
         operands = Int[]
         index = 0
-        for value in values
+        for (shape, source, value) in zip(shapes, inputs, values)
             if value === nothing
-                push!(nodes, IR.ExtractBits(2, index * width, width))
-                push!(nodes, IR.BitCast(length(nodes), format))
-                index += 1
+                bits = _kernel_width(source)
+                push!(nodes, IR.ExtractBits(2, index, bits))
+                push!(nodes, IR.BitCast(length(nodes), source))
+                source == shape || push!(nodes, IR.Quantize(length(nodes), shape))
+                index += bits
             else
-                push!(nodes, IR.constant(value, format))
+                push!(nodes, IR.constant(value, shape))
             end
             push!(operands, length(nodes))
         end
@@ -235,6 +263,10 @@ function resource_probe_plans(;
         suffix =
             constants === nothing ? "" :
             "-" * bytes2hex(sha256(join(string.(values), ",")))[1:12]
+        operand_formats === nothing ||
+            (suffix *= "-" * bytes2hex(sha256(join(string.(shapes), ",")))[1:12])
+        input_formats === nothing ||
+            (suffix *= "-" * bytes2hex(sha256(join(string.(inputs), ",")))[1:12])
         push!(
             plans,
             "$family-$operation$suffix" => PlanArtifact(

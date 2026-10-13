@@ -20,10 +20,25 @@ function _emulation_words(plan)
     end
     maximum = (big(1) << width) - 1
     words = [big(0), big(1), maximum, [div(i * maximum, 256) for i = 1:255]...]
+    for sample = 1:256
+        word = big(0)
+        for offset = 0:256:(width - 1)
+            digest = sha256("presage-emulation-$sample-$offset")
+            word |= parse(BigInt, bytes2hex(digest); base = 16) << offset
+        end
+        push!(words, word & maximum)
+    end
     if get(plan.settings, "resource_probe", "") == "independent_operands"
-        operand = plan.spec.output_format
-        bits = _kernel_width(operand)
-        values =
+        program = plan.program
+        references = IR.refs(program.nodes[program.output])
+        shapes = map(filter(ref -> !(program.nodes[ref] isa IR.Const), references)) do ref
+            while program.nodes[ref] isa IR.Quantize
+                ref = program.nodes[ref].source
+            end
+            IR.format(program, ref)
+        end
+        boundaries = map(shapes) do operand
+            bits = _kernel_width(operand)
             operand isa FloatFormat ?
             BigInt[
                 0,
@@ -43,13 +58,14 @@ function _emulation_words(plan)
                 (big(1) << (bits - 1)) - 1,
                 big(1) << (bits - 1),
             ]
-        for operands in Iterators.product(fill(values, div(width, bits))...)
-            push!(
-                words,
-                sum(
-                    value << ((index - 1) * bits) for (index, value) in enumerate(operands)
-                ),
-            )
+        end
+        for operands in Iterators.product(boundaries...)
+            word, offset = big(0), 0
+            for (value, shape) in zip(operands, shapes)
+                word |= value << offset
+                offset += _kernel_width(shape)
+            end
+            push!(words, word)
         end
     end
     return unique(words)

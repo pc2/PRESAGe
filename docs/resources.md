@@ -85,6 +85,43 @@ Only measured formats and operand patterns receive calibrated costs.
 Run `julia --project=. examples/fma_validation.jl config/resources/oneapi.toml build/fma-oneapi` to prepare the Intel checks, use the Vitis profile for U280.
 The generated `probes`, `holdout` and `composition` projects use the usual synthesis, emulation and collection commands.
 
+The [fixed validation example](../examples/fixed_validation.jl) prepares 36 Vitis arithmetic probes and 15 complete evaluator and ROM designs.
+The probes cover DSP width boundaries, unequal operand widths, constant coefficients, signedness, rounding and overflow policies.
+The complete evaluators cover constant and variable coefficient cubics, individual stage widths and segmented coefficient tables.
+All 51 designs achieve II equal to one and pass Vitis C simulation against the interpreter.
+The nine approximation contracts also have output error certificates.
+These checks use HLS reports with the default tool clock selection.
+
+| Validation design | Predicted and reported DSPs | Predicted and reported BRAM18 blocks |
+| --- | --- | --- |
+| Variable coefficient cubic at 16, 32 and 64 bits | 3, 12, 48 | 0, 0, 0 |
+| Constant coefficient FMA cubic at 16, 32 and 64 bits | 3, 12, 44 | 0, 0, 0 |
+| Cubic with individual stage widths | 4 | 0 |
+| 128 row, 512 row and mixed column evaluators | 2, 2, 12 | 0, 3, 6 |
+| Distributed 17 bit ROM, two bank 33 bit ROM and four bank 65 bit ROM | 0, 0, 0 | 0, 4, 16 |
+
+DSP and ROM agreement covers these tested patterns, it does not establish exact costs for arbitrary widths or compositions.
+Pipeline FF estimates still need calibration.
+The approximate multiplication LUT formula fits the measured 16, 32 and 64 bit primitives.
+The ROM output LUT formula fits the three isolated ROM layouts and applies when the table is the evaluator result.
+Complete polynomial evaluators provide independent checks of these costs.
+All 51 LUT predictions satisfy the configured rough tolerance.
+FF predictions remain outside tolerance for the 32 bit variable cubic, the 16 bit constant FMA cubic, both banked ROMs and the 128 row and 512 row segmented evaluators.
+The profile therefore remains unsuitable for enforcing exact FF limits.
+
+```sh
+julia --project=. examples/fixed_validation.jl config/resources/vitis-u280-2023.2.toml build/fixed-validation
+julia --project=. scripts/synthesize.jl run build/fixed-validation/holdout/synthesis.toml
+julia --project=. scripts/synthesize.jl emulate build/fixed-validation/holdout/synthesis.toml
+julia --project=. scripts/synthesize.jl collect build/fixed-validation/holdout/synthesis.toml
+julia --project=. scripts/check_resources.jl build/fixed-validation/holdout/examples.toml build/fixed-validation/holdout/measured.toml build/fixed-validation/holdout/comparison.toml --model=config/resources/vitis-u280-2023.2.toml
+```
+
+The `probes`, `patterns`, `constants`, `extensions`, `composition` and `rom` directories support the same commands.
+The optional comparison model recomputes predictions without changing the recorded synthesis inputs.
+Its toolchain, device, compiler and generated kernel must match the measurements.
+The comparison records the profile hash and retains failures for resources outside tolerance.
+
 Fixed and control costs, DSP operand dimensions and FF coefficients are placeholders for calibration.
 Floating costs require measurements of the emitted arithmetic implementation.
 Separate multiplication and addition costs do not predict a fused operation.
@@ -184,6 +221,12 @@ bits, normalization, reciprocal and exponent reconstruction; see `ResourceRule`.
 Rules can require `result_width`, `operand_widths`, `integer_bits`, `overflow` and `operand_constants`.
 The optional `formats` list matches the output and every operand exactly, including signedness and fixed rounding policies.
 Operand constants are hexadecimal bit patterns or `variable`, their order follows the IR operands.
+Fixed constant conversions retain their rounded bit patterns for rule matching.
+Vitis operands loaded directly from ROM use their stored widths after removing redundant sign extension.
+Exact fixed extensions and subsequent exact requantization preserve effective operand widths.
+Rounding that discards unknown bits keeps the full declared width.
+Fixed conversions of ROM outputs use the declared source width because Vitis retains that width at the conversion boundary.
+The `output_bits` cost feature counts result bits only at the evaluator output node.
 Calibrated rules preserve these restrictions because constant multiplication can use different hardware.
 Initial profiles leave unsupported transformations and mixed conversions unknown.
 DSP equivalents remain exact rationals, other resource counts are integers.
@@ -207,8 +250,9 @@ Distributed allocation is
 Vitis/generic assume 64 rows of one bit per one-LUT unit. Intel MLAB counts remain separate from ALUT counts.
 Intel constant ROM emission requires block storage, distributed requests are rejected before output.
 The Intel model counts native integer storage widths, including 128 bits for a 65 bit word.
-The Vitis model removes redundant sign extension from constant ROM widths. These dimensions and the illustrative auto
-threshold are editable.
+The Vitis model removes redundant sign extension from constant ROM widths and rounds allocation widths up to a power of two.
+Storage bits and allocated word bits are reported separately.
+These dimensions and the illustrative automatic storage threshold are editable.
 
 `emit_kernel(...; resource_model=model)` applies the same table choices to
 guarded Vitis `bind_storage` or oneAPI `fpga_memory` hints. An incompatible
@@ -401,6 +445,10 @@ Create a new output directory for each changed design or synthesis configuration
 
 `resource_probe_plans` supplies independent operand bits to one arithmetic operation.
 `constants` optionally supplies exact constant operands, with `nothing` for variable operands.
+`operand_formats` supplies individual fixed operand formats independently of the result format.
+`input_formats` supplies narrower variable inputs through exact fixed extensions.
+Vitis calibration records these extensions as wires and matches the effective widths of their arithmetic consumers.
+Conversions that require rounding or can overflow need separate calibration.
 Fixed formats preserve integer width, rounding and overflow policy.
 These probes verify arithmetic behavior against the interpreter and do not claim approximation certificates.
 

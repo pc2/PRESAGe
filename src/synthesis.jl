@@ -49,6 +49,7 @@ function _resource_calibration(project_path)
                     IR.Const,
                     IR.BitCast,
                     IR.ExtractBits,
+                    IR.Quantize,
                     IR.Add,
                     IR.Mul,
                     IR.FMA,
@@ -56,10 +57,40 @@ function _resource_calibration(project_path)
             program.nodes,
         ) || throw(
             ArgumentError(
-                "calibration operands must use only constants or input bit extraction",
+                "calibration operands must use constants, input bits or exact fixed extensions",
             ),
         )
+        extensions = Dict{String, Any}[]
+        for (index, operation) in enumerate(program.nodes)
+            operation isa IR.Quantize || continue
+            project["toolchain"] == "vitis" ||
+                throw(ArgumentError("exact extension calibration requires Vitis"))
+            source, output = IR.format(program, operation.source), IR.format(program, index)
+            source isa FixedFormat &&
+                output isa FixedFormat &&
+                source.signed == output.signed &&
+                source.integer_bits <= output.integer_bits &&
+                _fraction(source) <= _fraction(output) || throw(
+                ArgumentError("calibration conversions must be exact fixed extensions"),
+            )
+            extent = _resource_signature(program, index, _read_resource_model(data))
+            push!(
+                extensions,
+                Dict{String, Any}(
+                    "operation" => "convert",
+                    "format" => "fixed",
+                    "rounding" => string(operation.rounding),
+                    "result_width" => output.width,
+                    "operand_widths" => collect(extent.operand_widths),
+                    "operand_constants" => collect(extent.operand_constants),
+                    "formats" =>
+                        [Dict("format" => _format_data(f)) for f in (output, source)],
+                    (string(name) => 0 for name in _RESOURCE_NAMES)...,
+                ),
+            )
+        end
         format = IR.format(program)
+        signature = _resource_signature(program, program.output, _read_resource_model(data))
         rule = Dict{String, Any}(
             "operation" => string(_resource_operation(node)),
             "format" => string(_resource_family(format)),
@@ -69,19 +100,18 @@ function _resource_calibration(project_path)
                 Dict("format" => _format_data(f)) for
                 f in (format, (IR.format(program, ref) for ref in IR.refs(node))...)
             ],
-            "operand_widths" =>
-                [_resource_width(IR.format(program, ref)) for ref in IR.refs(node)],
-            "operand_constants" => [
-                program.nodes[ref] isa IR.Const ? _ir_hex(program.nodes[ref].bits) :
-                "variable" for ref in IR.refs(node)
-            ],
+            "operand_widths" => collect(signature.operand_widths),
+            "operand_constants" => collect(signature.operand_constants),
         )
         if format isa FloatFormat
             rule["exponent_bits"], rule["fraction_bits"] =
                 format.exponent_bits, format.fraction_bits
         else
-            rule["integer_bits"], rule["overflow"] =
-                format.integer_bits, string(format.overflow)
+            rule["overflow"] = string(format.overflow)
+            all(
+                ref -> IR.format(program, ref).integer_bits == format.integer_bits,
+                IR.refs(node),
+            ) && (rule["integer_bits"] = format.integer_bits)
         end
         pipeline = filter(part -> get(part, "kind", "") == "pipeline", row["components"])
         for name in _RESOURCE_NAMES
@@ -91,6 +121,7 @@ function _resource_calibration(project_path)
             rule[key] = _resource_number_data(_resource_exact(row[key]) - state)
         end
         push!(rules, rule)
+        append!(rules, extensions)
         proof = Dict{String, Any}(
             "example" => row["name"],
             "tool_version" => row["tool_version"],
@@ -100,6 +131,7 @@ function _resource_calibration(project_path)
             "scope" => row["scope"],
             "pipeline" => pipeline,
             "resource_units" => row["resource_units"],
+            "exact_extensions" => extensions,
         )
         directory = dirname(joinpath(root, example["header"]))
         emulation_path = joinpath(directory, "emulation-run.toml")

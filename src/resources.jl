@@ -69,6 +69,7 @@ Intermediate, rounding and overflow widths describe the fixed arithmetic helpers
 struct ResourceFormula
     constant::Rational{BigInt}
     result_bits::Rational{BigInt}
+    output_bits::Rational{BigInt}
     operand_bits::Rational{BigInt}
     max_operand_bits::Rational{BigInt}
     operand_product::Rational{BigInt}
@@ -79,6 +80,7 @@ struct ResourceFormula
     function ResourceFormula(;
         constant = 0,
         result_bits = 0,
+        output_bits = 0,
         operand_bits = 0,
         max_operand_bits = 0,
         operand_product = 0,
@@ -90,6 +92,7 @@ struct ResourceFormula
         coefficients = map((
             constant,
             result_bits,
+            output_bits,
             operand_bits,
             max_operand_bits,
             operand_product,
@@ -336,6 +339,49 @@ function _resource_operation(n)
     throw(ArgumentError("unmodeled IR operation $(typeof(n))"))
 end
 
+function _resource_constant_bits(p, i)
+    node = p.nodes[i]
+    node isa IR.Const && return node.bits
+    node isa Union{IR.Convert, IR.Quantize, IR.ScalePow2} || return nothing
+    source, output = IR.format(p, node.source), IR.format(p, i)
+    source isa FixedFormat && output isa FixedFormat || return nothing
+    bits = _resource_constant_bits(p, node.source)
+    bits === nothing && return nothing
+    exponent = -BigInt(_fraction(source))
+    node isa IR.ScalePow2 && (exponent += node.exponent)
+    try
+        return _round_fixed_dyadic(
+            _fixed_units(bits, source),
+            exponent,
+            output,
+            node.rounding,
+        )
+    catch error
+        error isa OverflowError || rethrow()
+        return nothing
+    end
+end
+
+function _resource_fixed_extent(p, i, model)
+    node, format = p.nodes[i], IR.format(p, i)
+    width = _resource_width(format)
+    model.toolchain == :vitis && format isa FixedFormat || return (width, 0)
+    node isa IR.TableLoad &&
+        return (_resource_storage_width(p.tables[node.table], model), 0)
+    node isa Union{IR.Convert, IR.Quantize} || return (width, 0)
+    _resource_constant_bits(p, i) === nothing || return (width, 0)
+    source = IR.format(p, node.source)
+    source isa FixedFormat && source.signed == format.signed || return (width, 0)
+    # Vitis retains the declared ROM output width across fixed conversions.
+    source_width, zeros =
+        p.nodes[node.source] isa IR.TableLoad ? (source.width, 0) :
+        _resource_fixed_extent(p, node.source, model)
+    shift = _fraction(format) - _fraction(source)
+    # Exact extensions preserve the input range and known low zero bits.
+    shift + zeros >= 0 && source_width + shift <= width || return (width, 0)
+    return (max(1, source_width + shift), shift + zeros)
+end
+
 function _resource_signature(p, i, model)
     n, output = p.nodes[i], IR.format(p, i)
     operands = [IR.format(p, j) for j in IR.refs(n)]
@@ -348,7 +394,7 @@ function _resource_signature(p, i, model)
         [output, operands...]
     families = unique(_resource_family.(data))
     family = length(families) == 1 ? only(families) : :mixed
-    widths = BigInt.(_resource_width.(operands))
+    widths = BigInt[first(_resource_fixed_extent(p, j, model)) for j in IR.refs(n)]
     tile_a, tile_b = model.dsp_operand_bits
     tiles = if n isa Union{IR.Mul, IR.FMA}
         a, b = widths[1:2]
@@ -388,14 +434,15 @@ function _resource_signature(p, i, model)
         format = family,
         formats = Tuple(data),
         operand_widths = Tuple(Int.(widths)),
-        operand_constants = Tuple(
-            p.nodes[j] isa IR.Const ? _ir_hex(p.nodes[j].bits) : "variable" for
-            j in IR.refs(n)
-        ),
+        operand_constants = Tuple(map(IR.refs(n)) do j
+            bits = _resource_constant_bits(p, j)
+            bits === nothing ? "variable" : _ir_hex(bits)
+        end),
         integer_bits = output isa FixedFormat ? output.integer_bits : nothing,
         overflow = output isa FixedFormat ? output.overflow : nothing,
         rounding = hasproperty(n, :rounding) ? n.rounding : nothing,
         result_bits = BigInt(_resource_width(output)),
+        output_bits = i == p.output ? BigInt(_resource_width(output)) : BigInt(0),
         operand_bits = sum(widths; init = BigInt(0)),
         max_operand_bits = isempty(widths) ? BigInt(0) : maximum(widths),
         operand_product = n isa Union{IR.Mul, IR.FMA} ? widths[1] * widths[2] : BigInt(0),
@@ -487,10 +534,12 @@ function _resource_table_cost(p, model, memory_model)
         table = p.tables[t.table]
         storage = _resource_table_storage(table, model)
         word_bits = _resource_storage_width(table, model)
+        allocated_word_bits =
+            model.toolchain == :vitis ? nextpow(2, word_bits) : word_bits
         blocks =
             BigInt(t.banks) *
             cld(t.rows, memory_model.depth) *
-            cld(word_bits, memory_model.word_bits)
+            cld(allocated_word_bits, memory_model.word_bits)
         distributed = storage == :distributed
         # Distributed depth tiles use power of two padding for each bank and column.
         depth = nextpow(big(2), cld(BigInt(t.rows), model.distributed_depth))
@@ -498,7 +547,7 @@ function _resource_table_cost(p, model, memory_model)
             distributed ?
             BigInt(t.banks) *
             depth *
-            cld(word_bits, model.distributed_word_bits) *
+            cld(allocated_word_bits, model.distributed_word_bits) *
             model.distributed_luts : BigInt(0)
         mlabs =
             distributed && model.toolchain == :oneapi ?
@@ -506,14 +555,15 @@ function _resource_table_cost(p, model, memory_model)
             BigInt(0)
         model.toolchain == :oneapi && (luts = BigInt(0))
         ffs =
-            distributed && model.toolchain == :vitis ? BigInt(t.banks) * t.word_bits :
-            BigInt(0)
+            distributed && model.toolchain == :vitis ?
+            BigInt(t.banks) * allocated_word_bits : BigInt(0)
         merge(
             t,
             (;
                 storage,
                 storage_bits = word_bits,
-                width_blocks = cld(word_bits, memory_model.word_bits),
+                allocated_word_bits,
+                width_blocks = cld(allocated_word_bits, memory_model.word_bits),
                 blocks,
                 allocated_bits = blocks * memory_model.depth * memory_model.word_bits,
                 luts,

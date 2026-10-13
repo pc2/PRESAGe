@@ -132,6 +132,224 @@ end
     )
 end
 
+@testset "Vitis ROM allocation pads widths and preserves independent banks" begin
+    model = resource_profile("vitis")
+    for (width, banks, blocks) in ((33, 2, 4), (65, 4, 16))
+        format = FixedFormat(width, 4)
+        values = [
+            isodd(index) ? (big(1) << (width - 1)) - 1 : big(1) << (width - 1) for
+            index = 1:512
+        ]
+        table = IR.Table(format, values; banks, unroll = true)
+        input = FixedFormat(9, 9; signed = false)
+        program = IR.Program(
+            IR.Node[IR.Input(input), IR.BitCast(1, IR.UIntFormat(9)), IR.TableLoad(1, 2)];
+            tables = [table],
+        )
+        estimate = estimate_resources(program; model)
+        @test estimate.totals.rams == blocks
+        @test only(estimate.tables).storage_bits == width
+        @test only(estimate.tables).allocated_word_bits == nextpow(2, width)
+    end
+    format = FixedFormat(32, 4)
+    input = FixedFormat(32, 32; signed = false)
+    table = IR.Table(format, [0, (big(1) << 21) - 1])
+    program = IR.Program(
+        IR.Node[
+            IR.Input(input),
+            IR.BitCast(1, IR.UIntFormat(32)),
+            IR.ExtractBits(2, 0, 1),
+            IR.TableLoad(1, 3),
+            IR.BitCast(2, format),
+            IR.Mul(4, 5, format),
+        ];
+        tables = [table],
+    )
+    signature = last(estimate_resources(program; model).nodes).signature
+    @test signature.operand_widths == (22, 32)
+    @test signature.dsp_tiles == 2
+end
+
+@testset "Fixed coefficient conversions retain constant resource signatures" begin
+    source, output = FixedFormat(28, 4), FixedFormat(24, 4)
+    coefficient = IR.constant(4 // 13, source)
+    program = IR.Program(
+        IR.Node[
+            IR.Input(output),
+            coefficient,
+            IR.Quantize(2, output),
+            IR.constant(-3 // 11, output),
+            IR.FMA(3, 1, 4, output),
+        ],
+    )
+    signature =
+        last(estimate_resources(program; model = resource_profile("vitis")).nodes).signature
+    @test signature.operand_constants == (
+        PRESAGe._ir_hex(round_fixed(decode_fixed(coefficient.bits, source), output)),
+        "variable",
+        PRESAGe._ir_hex(round_fixed(-3 // 11, output)),
+    )
+    rejecting = IR.Program(
+        IR.Node[
+            IR.Input(FixedFormat(8, 2)),
+            IR.constant(7, FixedFormat(8, 4)),
+            IR.Quantize(2, FixedFormat(8, 2)),
+        ],
+    )
+    @test PRESAGe._resource_constant_bits(rejecting, 3) === nothing
+end
+
+@testset "Fixed extensions retain effective widths through exact requantization" begin
+    model = resource_profile("vitis")
+    program = IR.Program(
+        IR.Node[
+            IR.Input(FixedFormat(10, 3)),
+            IR.Quantize(1, FixedFormat(24, 4)),
+            IR.Quantize(2, FixedFormat(20, 4)),
+        ],
+    )
+    @test PRESAGe._resource_fixed_extent(program, 2, model) == (23, 13)
+    @test PRESAGe._resource_fixed_extent(program, 3, model) == (19, 9)
+    @test PRESAGe._resource_fixed_extent(program, 3, resource_profile("generic")) == (20, 0)
+    rounding = IR.Program(
+        IR.Node[IR.Input(FixedFormat(20, 3)), IR.Quantize(1, FixedFormat(20, 4))],
+    )
+    @test PRESAGe._resource_fixed_extent(rounding, 2, model) == (20, 0)
+    table = IR.Table(FixedFormat(9, 1), [0, 1])
+    loaded = IR.Program(
+        IR.Node[
+            IR.Input(FixedFormat(1, 1; signed = false)),
+            IR.BitCast(1, IR.UIntFormat(1)),
+            IR.TableLoad(1, 2),
+            IR.Quantize(3, FixedFormat(32, 4)),
+        ];
+        tables = [table],
+    )
+    @test PRESAGe._resource_fixed_extent(loaded, 3, model) == (2, 0)
+    @test PRESAGe._resource_fixed_extent(loaded, 4, model) == (29, 20)
+end
+
+@testset "Output logic costs apply only to the evaluator result" begin
+    baseline = resource_profile("generic")
+    model = ResourceModel(
+        rules = (
+            ResourceRule(
+                :table_load;
+                luts = ResourceFormula(output_bits = 3),
+                ffs = 0,
+                dsps = 0,
+                rams = 0,
+            ),
+            baseline.rules...,
+        ),
+    )
+    program = resource_table_program(32, 16)
+    @test last(estimate_resources(program; model).nodes).costs.luts == 48
+    nodes = IR.Node[
+        program.nodes...,
+        IR.constant(1, IR.format(program)),
+        IR.Add(3, 4, IR.format(program)),
+    ]
+    consumed = IR.Program(nodes; tables = program.tables)
+    @test only(
+        filter(node -> node.node == 3, estimate_resources(consumed; model).nodes),
+    ).costs.luts == 0
+    replay = read_resource_model(IOBuffer(sprint(io -> write_resource_model(io, model))))
+    @test estimate_resources(program; model = replay).totals ==
+          estimate_resources(program; model).totals
+end
+
+@testset "Comparison profiles preserve synthesis inputs and memory inference" begin
+    mktempdir() do root
+        model = resource_profile("vitis")
+        plan =
+            only(
+                resource_probe_plans(;
+                    formats = [FixedFormat(16, 4)],
+                    operations = (:fma,),
+                ),
+            ).second
+        manifest =
+            write_resource_examples(root; model, plans = ["probe" => plan], certify = false)
+        entry = only(manifest["examples"])
+        resource_path = joinpath(root, entry["resources"])
+        original_hash = PRESAGe._synthesis_hash(resource_path)
+        model_path = joinpath(root, "comparison-model.toml")
+        data = PRESAGe._resource_model_data(model)
+        pushfirst!(
+            data["rules"],
+            Dict(
+                "operation" => "fma",
+                "luts" => 100,
+                "ffs" => 10,
+                "dsps" => 1,
+                "rams" => 0,
+                "mlabs" => 0,
+            ),
+        )
+        write_resource_model(model_path, PRESAGe._read_resource_model(data))
+        measured_path = joinpath(root, "measured.toml")
+        PRESAGe._synthesis_write(
+            measured_path,
+            Dict(
+                "schema" => "presage-resource-measurements",
+                "schema_version" => 1,
+                "examples" => [
+                    Dict(
+                        "name" => "probe",
+                        "luts" => 100,
+                        "ffs" => 10,
+                        "dsps" => 1,
+                        "rams" => 0,
+                        "mlabs" => 0,
+                    ),
+                ],
+            ),
+        )
+        report = joinpath(root, "comparison.toml")
+        args =
+            [joinpath(root, "examples.toml"), measured_path, report, "--model=$model_path"]
+        @test check_resources_main(args) == 0
+        @test PRESAGe._synthesis_hash(resource_path) == original_hash
+        @test TOML.parsefile(report)["comparison_model"]["sha256"] ==
+              PRESAGe._synthesis_hash(model_path)
+        data["target"]["device"] = "different-device"
+        write_resource_model(model_path, PRESAGe._read_resource_model(data))
+        @test_throws ErrorException check_resources_main(args)
+        data["target"] = Dict()
+        data["toolchain"] = "oneapi"
+        write_resource_model(model_path, PRESAGe._read_resource_model(data))
+        @test_throws ErrorException check_resources_main(args)
+
+        program = resource_table_program(128, 17)
+        table_plan = PlanArtifact(
+            FunctionSpec(
+                "0";
+                input_format = IR.format(program, 1),
+                output_format = IR.format(program),
+                domain = (0, 1),
+            );
+            program,
+        )
+        table_root = joinpath(root, "rom")
+        write_resource_examples(
+            table_root;
+            model,
+            plans = ["probe" => table_plan],
+            certify = false,
+        )
+        data = PRESAGe._resource_model_data(model)
+        data["memory"]["policy"] = "block"
+        write_resource_model(model_path, PRESAGe._read_resource_model(data))
+        @test_throws ErrorException check_resources_main([
+            joinpath(table_root, "examples.toml"),
+            measured_path,
+            report,
+            "--model=$model_path",
+        ])
+    end
+end
+
 @testset "ROM policy, independent banking and matching kernel hints" begin
     baseline = resource_profile("generic")
     block = ResourceModel(rules = baseline.rules)

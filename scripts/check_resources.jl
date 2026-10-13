@@ -3,9 +3,19 @@ using PRESAGe
 using TOML
 
 function check_resources_main(args)
-    length(args) in (3, 4) || error(
-        "Usage: scripts/check_resources.jl EXAMPLES.toml MEASURED.toml REPORT.toml [--tolerances=FILE.toml]",
+    length(args) in (3, 4, 5) || error(
+        "Usage: scripts/check_resources.jl EXAMPLES.toml MEASURED.toml REPORT.toml [--tolerances=FILE.toml] [--model=FILE.toml]",
     )
+    options = Dict{String, String}()
+    for argument in args[4:end]
+        pair = split(argument, '='; limit = 2)
+        length(pair) == 2 && pair[1] in ("--tolerances", "--model") ||
+            error("unknown comparison option")
+        haskey(options, pair[1]) && error("duplicate comparison option")
+        options[pair[1]] = pair[2]
+    end
+    model_path = get(options, "--model", nothing)
+    model = model_path === nothing ? nothing : read_resource_model(model_path)
     manifest, actual = TOML.parsefile(args[1]), TOML.parsefile(args[2])
     get(manifest, "schema", nothing) == "presage-resource-examples" &&
         get(manifest, "schema_version", nothing) isa Integer &&
@@ -25,13 +35,11 @@ function check_resources_main(args)
             actual[name] != manifest[name] &&
             error("measurement $name does not match examples")
     end
-    tolerance_path =
-        length(args) == 3 ?
-        joinpath(@__DIR__, "..", "config", "resources", "tolerances.toml") :
-        begin
-            startswith(args[4], "--tolerances=") || error("expected --tolerances")
-            split(args[4], '='; limit = 2)[2]
-        end
+    tolerance_path = get(
+        options,
+        "--tolerances",
+        joinpath(@__DIR__, "..", "config", "resources", "tolerances.toml"),
+    )
     tolerances = TOML.parsefile(tolerance_path)
     PRESAGe._resource_keys(tolerances, string.(PRESAGe._RESOURCE_NAMES), "tolerances")
     absolute, relative =
@@ -98,6 +106,30 @@ function check_resources_main(args)
         get(estimate, "schema", nothing) == "presage-resource-estimate" &&
             get(estimate, "schema_version", nothing) === 1 ||
             error("invalid estimate schema")
+        if model !== nothing
+            model.toolchain == Symbol(manifest["toolchain"]) ||
+                error("comparison model toolchain does not match synthesis")
+            for key in ("device", "compiler")
+                expected = getfield(model, Symbol(key))
+                measured_key = key == "compiler" ? "tool_version" : key
+                expected === nothing ||
+                    get(row, measured_key, nothing) == expected ||
+                    error("comparison model $key does not match synthesis")
+            end
+            plan = read_plan(joinpath(dirname(args[1]), example["plan"]))
+            header = sprint(
+                io -> emit_kernel(
+                    io,
+                    plan;
+                    toolchain = model.toolchain,
+                    backend = Symbol(manifest["backend"]),
+                    resource_model = model,
+                ),
+            )
+            header == read(joinpath(dirname(args[1]), example["header"]), String) ||
+                error("comparison model changes the synthesized kernel")
+            estimate = PRESAGe._resource_estimate_data(estimate_resources(plan; model))
+        end
         report = compare_resources(
             estimate,
             measured;
@@ -177,6 +209,12 @@ function check_resources_main(args)
         "schema_version" => 1,
         "status" => status,
         "examples" => reports,
+    )
+    model_path === nothing || (
+        output["comparison_model"] = Dict(
+            "path" => abspath(model_path),
+            "sha256" => PRESAGe._synthesis_hash(model_path),
+        )
     )
     mkpath(dirname(abspath(args[3])))
     open(io -> TOML.print(io, output; sorted = true), args[3], "w")

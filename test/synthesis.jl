@@ -398,7 +398,28 @@ end
             joinpath(@__DIR__, "..", "config", "resources", "vitis.toml"),
         )
         format = FixedFormat(16, 4)
-        manifest = write_resource_probes(root; model, formats = [format])
+        plans = resource_probe_plans(; formats = [format])
+        mixed = only(
+            resource_probe_plans(;
+                formats = [FixedFormat(16, 5)],
+                operations = (:fma,),
+                operand_formats = [
+                    FixedFormat(8, 3),
+                    FixedFormat(12, 4),
+                    FixedFormat(10, 5),
+                ],
+            ),
+        )
+        push!(plans, mixed)
+        extended = only(
+            resource_probe_plans(;
+                formats = [format],
+                operations = (:fma,),
+                input_formats = [format, FixedFormat(10, 3), format],
+            ),
+        )
+        push!(plans, extended)
+        manifest = write_resource_examples(root; model, plans, certify = false)
         project = prepare_synthesis(joinpath(root, "examples.toml"); flow = :hls)
         for example in manifest["examples"]
             directory = joinpath(root, example["name"])
@@ -442,6 +463,10 @@ end
             @test estimate_resources(plan; model = calibrated).totals ==
                   (luts = 101, ffs = 202, dsps = 3, rams = 0, mlabs = 0)
         end
+        @test estimate_resources(mixed.second; model = calibrated).totals ==
+              (luts = 101, ffs = 202, dsps = 3, rams = 0, mlabs = 0)
+        @test estimate_resources(extended.second; model = calibrated).totals ==
+              (luts = 101, ffs = 202, dsps = 3, rams = 0, mlabs = 0)
         constant =
             only(
                 resource_probe_plans(;
@@ -478,6 +503,69 @@ end
             joinpath(root, "failed.toml"),
         )
     end
+end
+
+@testset "Mixed fixed probes preserve each operand format and boundary encoding" begin
+    output = FixedFormat(16, 5)
+    shapes = [FixedFormat(8, 3), FixedFormat(12, 4), FixedFormat(10, 5)]
+    plan =
+        only(
+            resource_probe_plans(;
+                formats = [output],
+                operations = (:fma,),
+                operand_formats = shapes,
+            ),
+        ).second
+    @test plan.spec.input_format.width == 30
+    references = IR.refs(last(plan.program.nodes))
+    @test IR.format.(Ref(plan.program), references) == Tuple(shapes)
+    a, b, c = (
+        round_fixed(value, shape) for
+        (value, shape) in zip((1 // 2, -3 // 4, 1 // 8), shapes)
+    )
+    word = BigInt(a) | BigInt(b) << 8 | BigInt(c) << 20
+    @test interpret_trace(plan.program, word).bits == round_fixed(-1 // 4, output)
+    words = PRESAGe._emulation_words(plan)
+    @test (big(0x80) | big(0xfff) << 8 | big(0x1ff) << 20) in words
+    @test all(word -> 0 <= word < big(1) << 30, words)
+    @test words == PRESAGe._emulation_words(plan)
+    cpu_check(plan, BigInt[word])
+    for backend in (:ap_fixed, :ac_fixed)
+        kernel_trace_check([(; program = plan.program, words)], backend)
+    end
+    @test_throws ArgumentError resource_probe_plans(;
+        formats = [output],
+        operations = (:fma,),
+        operand_formats = shapes[1:2],
+    )
+    @test_throws ArgumentError resource_probe_plans(;
+        formats = [IEEE32],
+        operations = (:mul,),
+        operand_formats = [IEEE32, IEEE64],
+    )
+    extended =
+        only(
+            resource_probe_plans(;
+                formats = [FixedFormat(20, 4)],
+                operations = (:fma,),
+                input_formats = [
+                    FixedFormat(20, 4),
+                    FixedFormat(10, 3),
+                    FixedFormat(20, 4),
+                ],
+            ),
+        ).second
+    @test extended.spec.input_format.width == 50
+    words = PRESAGe._emulation_words(extended)
+    @test all(word -> 0 <= word < big(1) << 50, words)
+    for backend in (:ap_fixed, :ac_fixed)
+        kernel_trace_check([(; program = extended.program, words)], backend)
+    end
+    @test_throws ArgumentError resource_probe_plans(;
+        formats = [FixedFormat(20, 4)],
+        operations = (:fma,),
+        input_formats = [FixedFormat(20, 4), FixedFormat(20, 3), FixedFormat(20, 4)],
+    )
 end
 
 @testset "Intel arithmetic calibration does not duplicate shared pipeline storage" begin
